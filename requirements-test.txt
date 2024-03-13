@@ -1,0 +1,6 @@
+psycopg-binary
+pytest-astropy
+pytest-mock
+pytest-mpl
+pytest-postgresql
+threadpoolctl

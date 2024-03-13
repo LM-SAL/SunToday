@@ -1,0 +1,34 @@
+services:
+  suntoday:
+    env_file:
+      - .env
+    build:
+      context: ./
+      dockerfile: Dockerfile
+      args:
+        - SUNTODAY_SAVE_DIRECTORY=${SUNTODAY_SAVE_DIRECTORY}
+    volumes:
+      # This should be changed to point towards the final location for the images on the VM
+      # The left side is the host path, the right side is the container path
+      - ./images:${SUNTODAY_SAVE_DIRECTORY}
+
+  db:
+    image: postgres:17.5
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: suntoday_user
+      POSTGRES_DB: suntoday
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - 5432:5432
+
+  adminer:
+    image: adminer
+    restart: always
+    ports:
+      - 1234:8080
+
+volumes:
+  pgdata:
+    external: true
