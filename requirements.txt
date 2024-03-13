@@ -1,0 +1,17 @@
+aiapy==0.10.1
+astropy==7.1.0
+fsspec==2025.5.1
+loguru==0.7.3
+matplotlib==3.10.3
+numpy==2.2.6
+pandas==2.3.1
+pillow==11.3.0
+psycopg2-binary==2.9.10
+pydantic-settings==2.10.1
+pydantic==2.11.7
+requests==2.32.4
+schedule==1.2.2
+sentry-sdk==2.32.0
+sqlalchemy-utils==0.41.2
+sqlalchemy==2.0.41
+sunpy[map]==7.0.0

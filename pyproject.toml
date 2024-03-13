@@ -1,0 +1,28 @@
+[build-system]
+requires = [
+  "setuptools",
+  "wheel",
+]
+build-backend = 'setuptools.build_meta'
+
+[project]
+name = "suntoday"
+dynamic = ["dependencies", "optional-dependencies"]
+version = "1.0.0" # It don't matter
+
+[tool.setuptools]
+zip-safe = false
+include-package-data = true
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"*" = ["*.txt", "*.png", "*.jpg"]
+
+[tool.setuptools.dynamic]
+dependencies = {file = ["requirements.txt"]}
+optional-dependencies = {test = { file = ["requirements-test.txt"] }}
+
+[tool.codespell]
+ignore-words-list = "contaminaton"
