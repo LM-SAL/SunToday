@@ -25,17 +25,21 @@ This includes:
 
 In future if we want to add movie support it will need to produce the following:
 
-24HR movies: 
- - 304‑211‑171 | 94‑335‑193 | 211‑193‑171 | 171‑B(los)
+24HR movies:
+
+- 304‑211‑171 | 94‑335‑193 | 211‑193‑171 | 171‑B(los)
 
 304-171 movies:
- - 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
- 
- 211-193-171 movies:
- - 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
+
+- 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
+
+211-193-171 movies:
+
+- 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
 
 211-193-171 running-ratio movies:
- - 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
+
+- 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
 
 This is set up to run on a docker container.
 Mount points are configured by the docker-compose.yml file.
