@@ -30,6 +30,7 @@ lint.extend-ignore = [
     "PLC0415", # `import` should be at the top-level of a file"
     "PLR2004", # Magic value used in comparison
     "PLR0913", # Too many arguments in function definition
+    "RUF067", # `__init__` module should only contain docstrings and re-exports
 ]
 
 [lint.per-file-ignores]

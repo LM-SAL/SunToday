@@ -31,12 +31,12 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         Wavelengths to plot.
         Defaults to `~suntoday.constants.AIA_WAVELENGTHS`.
     """
-    grouped_wavelength = timeseries.groupby(["WAVELNTH"])
+    grouped_wavelength = timeseries.groupby(by="WAVELNTH")
     for wavelength in wavelengths:
         if wavelength not in grouped_wavelength.groups:
             logger.warning(f"No data for AIA-{wavelength} in the last 24 hours.")
             continue
-        data = grouped_wavelength.get_group((wavelength,))
+        data = grouped_wavelength.get_group(wavelength)
         values = (data["DATAMEAN"] / data["EXPTIME"]).ewm(span=5).mean()
         ax.plot(
             values[values.between(values.quantile(0.005), values.quantile(0.999))],
@@ -67,15 +67,15 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
         `~pandas.DataFrame` containing the GOES data.
     """
     sat_number = timeseries["satellite"].iloc[0]
-    grouped_energy = timeseries.groupby(["energy"])
+    grouped_energy = timeseries.groupby(by="energy")
     ax.plot(
-        grouped_energy.get_group(("0.1-0.8nm",))["flux"],
+        grouped_energy.get_group("0.1-0.8nm")["flux"],
         color="red",
         label=f"GOES-{sat_number} 1.0-8.0" + r"$\AA$",
         linewidth=2,
     )
     ax.plot(
-        grouped_energy.get_group(("0.05-0.4nm",))["flux"],
+        grouped_energy.get_group("0.05-0.4nm")["flux"],
         color="blue",
         label=f"GOES-{sat_number} 0.5-4.0" + r"$\AA$",
         linewidth=2,

@@ -7,29 +7,12 @@ from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sunpy.io import read_file
+from sunpy.io._file_tools import read_file  # NOQA: PLC2701
 
 from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 test_db = factories.postgresql_proc(port=None, dbname="test_db")
-
-
-def pytest_configure(config) -> None:  # NOQA: ARG001
-    # Limit the number of threads used by each worker when pytest-xdist is in
-    # use.  Lifted from https://github.com/scipy/scipy/pull/14441
-    # and https://github.com/scikit-learn/scikit-learn/pull/25918
-    try:
-        from threadpoolctl import threadpool_limits
-    except ImportError:
-        pass
-    else:
-        xdist_worker_count = os.environ.get("PYTEST_XDIST_WORKER_COUNT")
-        if xdist_worker_count is not None:
-            # use number of physical cores, assume hyperthreading
-            max_threads = os.cpu_count() // 2
-            threads_per_worker = max(max_threads // int(xdist_worker_count), 1)
-            threadpool_limits(threads_per_worker)
 
 
 @pytest.fixture(scope="session", autouse=True)
