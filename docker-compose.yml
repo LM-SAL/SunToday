@@ -13,7 +13,7 @@ services:
       - ./images:${SUNTODAY_SAVE_DIRECTORY}
 
   db:
-    image: postgres:17.5
+    image: postgres:18.1
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
       POSTGRES_USER: suntoday_user
