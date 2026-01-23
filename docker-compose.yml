@@ -19,7 +19,7 @@ services:
       POSTGRES_USER: suntoday_user
       POSTGRES_DB: suntoday
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql
     ports:
       - 5432:5432
 
@@ -28,7 +28,3 @@ services:
     restart: always
     ports:
       - 1234:8080
-
-volumes:
-  pgdata:
-    external: true

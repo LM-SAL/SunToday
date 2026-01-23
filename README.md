@@ -50,10 +50,10 @@ The images are updated on a 10-minute cadence.
 - Copy the relevant environment file to .env and update any values as required.
 - Add the correct path to the mounted drive where to store the outputs in docker-compose.yml.
 - Install docker and docker-compose
-- Create database volume
+- Create local database folder
 
 ```bash
-docker volume create pgdata
+mkdir -p pgdata
 ```
 
 - Build images
