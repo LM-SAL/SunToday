@@ -1,4 +1,4 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 RUN mkdir /wheels
 WORKDIR /wheels
@@ -7,7 +7,7 @@ COPY requirements_full.txt .
 RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org wheel --wheel-dir /wheels -r requirements_full.txt
 RUN rm requirements_full.txt
 
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 RUN mkdir /app
 RUN mkdir /app/wheels
