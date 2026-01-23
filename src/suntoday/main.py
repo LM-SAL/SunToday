@@ -7,6 +7,7 @@ as the scheduled jobs for creating JPEG images and timeseries data.
 
 import datetime
 import functools
+import os
 import time
 from pathlib import Path
 
@@ -21,9 +22,10 @@ from suntoday.db import create_db, get_record, write_or_update_record
 from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 
-sentry_sdk.init(
-    dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
-)
+if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
+    sentry_sdk.init(
+        dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
+    )
 
 
 def catch_exceptions(*, cancel_on_failure=False):
