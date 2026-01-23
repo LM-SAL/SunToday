@@ -23,7 +23,7 @@ def test_get_aia_urls() -> None:
         "1600",
         "1700",
     ])
-    assert aia_urls["WAVELNTH"].dtype == "object"
+    assert str(aia_urls["WAVELNTH"].dtype) == "str"
     assert aia_urls["EXPTIME"].dtype == "float64"
 
 
@@ -34,7 +34,7 @@ def test_get_hmi_urls() -> None:
     assert len(hmi_urls.columns) == 2
     assert sorted(hmi_urls.columns) == sorted(["WAVELNTH", "URL"])
     assert sorted(hmi_urls["WAVELNTH"].tolist()) == sorted(["continuum", "magnetogram"])
-    assert hmi_urls["WAVELNTH"].dtype == type(object)
+    assert str(hmi_urls["WAVELNTH"].dtype) == "str"
 
 
 def test_fetch_aia_fits(tmp_path) -> None:
@@ -71,9 +71,9 @@ def test_fetch_aia_timeseries() -> None:
         "1700",
         "4500",
     ])
-    assert aia_ts["WAVELNTH"].dtype == "object"
+    assert str(aia_ts["WAVELNTH"].dtype) == "str"
     assert aia_ts["DATAMEAN"].dtype == "float64"
     # Check that bad quality data has been replaced with NaNs
     assert aia_ts.loc[aia_ts["QUALITY"] != "0x40000000", "DATAMEAN"].isna().all()
     assert aia_ts["EXPTIME"].dtype == "float64"
-    assert aia_ts.index.dtype == "datetime64[ns, UTC]"
+    assert str(aia_ts.index.dtype) == "datetime64[us, UTC]"

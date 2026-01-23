@@ -25,7 +25,7 @@ def _reformat_goes_df(goes_df: pd.DataFrame) -> pd.DataFrame:
     goes_df = goes_df.set_index("time_tag")
     goes_df.index = pd.to_datetime(goes_df.index)
     goes_df = goes_df.drop(columns=["observed_flux", "electron_correction", "electron_contaminaton"])
-    return goes_df.astype({"satellite": int, "flux": float, "energy": str}, copy=False)
+    return goes_df.astype({"satellite": int, "flux": float, "energy": str})
 
 
 def fetch_goes_timeseries() -> tuple[pd.DataFrame, pd.DataFrame]:

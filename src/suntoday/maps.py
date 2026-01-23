@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sunpy.map as smap
 from aiapy.calibrate import correct_degradation
-from aiapy.calibrate.util import get_correction_table
+from aiapy.calibrate.utils import get_correction_table
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
 from suntoday.data import RESPONSE_TABLE_V10
