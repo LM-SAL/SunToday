@@ -10,7 +10,7 @@ services:
     volumes:
       # This should be changed to point towards the final location for the images on the VM
       # The left side is the host path, the right side is the container path
-      - ./images:${SUNTODAY_SAVE_DIRECTORY}
+      - ./images:${SUNTODAY_SAVE_DIRECTORY}:Z
 
   db:
     image: postgres:18.1
@@ -19,7 +19,7 @@ services:
       POSTGRES_USER: suntoday_user
       POSTGRES_DB: suntoday
     volumes:
-      - ./pgdata:/var/lib/postgresql
+      - ./pgdata:/var/lib/postgresql/18/docker:Z
     ports:
       - 5432:5432
 
