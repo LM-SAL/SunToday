@@ -1,5 +1,7 @@
 from datetime import UTC, datetime
 from pathlib import Path
+import matplotlib
+matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
 
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -13,33 +15,33 @@ from suntoday.lightcurve import (
 )
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "png"}, style="default")
+@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_plot_goes_secondary_timeseries(goes_secondary_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_goes_lightcurve(ax, goes_secondary_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "png"}, style="default")
+@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_plot_goes_primary_timeseries(goes_primary_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_goes_lightcurve(ax, goes_primary_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "png"}, style="default")
+@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_add_aia_lightcurve(aia_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_aia_lightcurve(ax, aia_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "png"}, style="default")
+@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries):
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "png"}, style="default")
+@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_lightcurve_figure_latest():
     from suntoday.downloaders.goes import fetch_goes_timeseries
     from suntoday.downloaders.jsoc import fetch_aia_timeseries

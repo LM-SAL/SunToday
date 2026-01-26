@@ -1,6 +1,8 @@
 """
 Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
 """
+import matplotlib
+matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
 
 from datetime import datetime
 from pathlib import Path

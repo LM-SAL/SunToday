@@ -1,13 +1,13 @@
-FROM python:3.14-slim AS builder
+FROM python:3.13-slim AS builder
 
 RUN mkdir /wheels
 WORKDIR /wheels
 
-COPY requirements_full.txt .
-RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org wheel --wheel-dir /wheels -r requirements_full.txt
-RUN rm requirements_full.txt
+COPY requirements-full.txt .
+RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org wheel --wheel-dir /wheels -r requirements-full.txt
+RUN rm requirements-full.txt
 
-FROM python:3.14-slim
+FROM python:3.13-slim
 
 RUN mkdir /app
 RUN mkdir /app/wheels
@@ -22,6 +22,7 @@ COPY . /app
 WORKDIR /app
 RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install /app/.
 
+ENV MPLBACKEND=module://mplcairo.base
 # This is set to avoid any potential issues with downloading files
 ENV PARFIVE_TOTAL_TIMEOUT=100
 

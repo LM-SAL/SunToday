@@ -50,10 +50,18 @@ The images are updated on a 10-minute cadence.
 - Copy the relevant environment file to .env and update any values as required.
 - Add the correct path to the mounted drive where to store the outputs in docker-compose.yml.
 - Install docker and docker-compose
-- Create local database folder
+- Create local database folder and output folder for the images.
+- If you are on an SELinux-enabled system (e.g., Fedora/RHEL), the bind mounts need relabeling so containers can write to them.
+  The compose file already uses `:Z`, but the host directories must still exist:
 
 ```bash
-mkdir -p pgdata
+mkdir -p pgdata images
+```
+
+- If you see permission errors for the bind mounts, make the directories writable for local dev
+
+```bash
+chmod 777 pgdata images
 ```
 
 - Build images

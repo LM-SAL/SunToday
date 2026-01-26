@@ -1,6 +1,8 @@
 """
 Provides all the functions needed to create SDO/AIA JPEGS.
 """
+import matplotlib
+matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
 
 import datetime
 import tempfile
@@ -17,7 +19,7 @@ from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make
 from matplotlib import colors
 from PIL import Image
 from sunpy.coordinates import SphericalScreen
-
+from mplcairo import operator_t
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
@@ -27,7 +29,6 @@ from suntoday.maps import (
     create_aia_map,
     create_hmi_map,
 )
-
 __all__ = [
     "create_blended_figure_from_maps",
     "create_figure_from_map",
@@ -61,6 +62,34 @@ def _add_lmsal_logo(ax: plt.Axes) -> None:
     ax_logo = ax.inset_axes([0.72, 0, 0.28, 0.08])
     ax_logo.imshow(plt.imread(PNG_IMAGE))
     ax_logo.set_axis_off()
+
+
+def _black_out_cmap_mid(
+    cmap: colors.Colormap,
+    norm: colors.Normalize,
+    mid_low: float,
+    mid_high: float,
+    n: int = 256,
+) -> colors.Colormap:
+    """
+    Return a copy of the colormap with a middle value range set to black.
+
+    The mid range is specified in data units and converted through the norm.
+    """
+    samples = np.linspace(0, 1, n)
+    rgba = cmap(samples)
+    low = float(norm(mid_low))
+    high = float(norm(mid_high))
+    if np.isnan(low) or np.isnan(high):
+        return cmap
+    low, high = sorted((low, high))
+    low = float(np.clip(low, 0.0, 1.0))
+    high = float(np.clip(high, 0.0, 1.0))
+    mask = (samples >= low) & (samples <= high)
+    rgba[mask] = (0.0, 0.0, 0.0, 1.0)
+    new_cmap = colors.ListedColormap(rgba, name=f"{cmap.name}_midblack")
+    new_cmap.set_bad(color="black")
+    return new_cmap
 
 
 def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
@@ -141,9 +170,9 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         msg = "RGB figure needs exactly three maps."
         raise ValueError(msg)
     settings = Settings()
+    logger.debug(f"Creating RGB figure from wavelengths: {[amap.wavelength for amap in maps]}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
-
     # Use the maximum value of the 99.8% percentile over all three filters
     # as the maximum value:
     pctl = 99.8
@@ -151,35 +180,32 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     for img in [maps[0].data, maps[1].data, maps[2].data]:
         val = np.percentile(img, pctl)
         maximum = max(maximum, val)
-    # Even though the RGB maps I created are correct, the existing JPEGS were not
-    # blended correctly and as such have less red than green or blue.
     # Since this is combo specific, I just hardcode it here.
     # This is not a good solution, but it works for now.
-
     # This looks nice for RGB 1 (94, 335, 193)
     if maps[0].wavelength.value == 94:
         intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.0055),
-            ManualInterval(vmin=0, vmax=maximum * 0.03),
-            ManualInterval(vmin=0, vmax=maximum * 0.4),
+            ManualInterval(vmin=0, vmax=maximum * 0.02),
+            ManualInterval(vmin=0, vmax=maximum * 0.05),
+            ManualInterval(vmin=0, vmax=maximum),
         ]
-        stretch = AsinhStretch(0.099)
+        stretch = LogStretch(100)
     # This looks nice for RGB 2 (211, 193, 171)
     if maps[0].wavelength.value == 211:
         intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.5),
-            ManualInterval(vmin=0, vmax=maximum),
-            ManualInterval(vmin=0, vmax=maximum),
+            ManualInterval(vmin=0, vmax=maximum * 0.3),
+            ManualInterval(vmin=0, vmax=maximum * 0.9),
+            ManualInterval(vmin=0, vmax=maximum * 0.8),
         ]
         stretch = LogStretch(75)
     # This looks nice for RGB 3 (304, 211, 171)
     if maps[0].wavelength.value == 304:
         intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.5),
-            ManualInterval(vmin=0, vmax=maximum),
-            ManualInterval(vmin=0, vmax=maximum),
+            ManualInterval(vmin=500, vmax=maximum*1),
+            ManualInterval(vmin=0, vmax=maximum*0.8),
+            ManualInterval(vmin=0, vmax=maximum*0.8),
         ]
-        stretch = LogStretch(75)
+        stretch = AsinhStretch(0.009)#LogStretch(75)
     rgb = make_rgb(maps[0].data, maps[1].data, maps[2].data, stretch=stretch, interval=intervals)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
@@ -236,8 +262,10 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111, projection=maps[0].wcs)
-    clip_interval = (1, 99.9) * u.percent if maps[0].instrument == "AIA" else None
-    maps[0].plot(axes=ax, clip_interval=clip_interval)
+    modified_hmi_cmap = plt.get_cmap(maps[0].plot_settings["cmap"]).copy()
+    norm = maps[0].plot_settings.get("norm")
+    modified_hmi_cmap = _black_out_cmap_mid(modified_hmi_cmap, norm, -50, 50)
+    maps[0].plot(axes=ax, cmap=modified_hmi_cmap)
     wavelength_names = []
     for i, amap in enumerate(maps):
         wavelength = (
@@ -269,7 +297,8 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
             continue
         with SphericalScreen(maps[0].observer_coordinate):
             reprojected_map = amap.reproject_to(maps[0].wcs)
-        reprojected_map.plot(axes=ax, alpha=0.7, norm=colors.PowerNorm(gamma=0.4, vmin=0, vmax=2000))
+        im_aia = reprojected_map.plot(axes=ax)
+    operator_t.SCREEN.patch_artist(im_aia)
     ax.set_axis_off()
     ax.set_title("")
     _add_lmsal_logo(ax)

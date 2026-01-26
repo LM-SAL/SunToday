@@ -1,6 +1,8 @@
 """
 Functions to create sunpy maps from FITS files.
 """
+import matplotlib
+matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
 
 from pathlib import Path
 
