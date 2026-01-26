@@ -201,11 +201,11 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     # This looks nice for RGB 3 (304, 211, 171)
     if maps[0].wavelength.value == 304:
         intervals = [
-            ManualInterval(vmin=500, vmax=maximum*1),
-            ManualInterval(vmin=0, vmax=maximum*0.8),
-            ManualInterval(vmin=0, vmax=maximum*0.8),
+            ManualInterval(vmin=0, vmax=maximum),
+            ManualInterval(vmin=0, vmax=maximum * 0.5),
+            ManualInterval(vmin=0, vmax=maximum * 0.5),
         ]
-        stretch = AsinhStretch(0.009)#LogStretch(75)
+        stretch = AsinhStretch(0.009)
     rgb = make_rgb(maps[0].data, maps[1].data, maps[2].data, stretch=stretch, interval=intervals)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
