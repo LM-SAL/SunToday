@@ -1,7 +1,9 @@
 from datetime import UTC, datetime
 from pathlib import Path
-import matplotlib
-matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
+
+import matplotlib as mpl
+
+mpl.use("module://mplcairo.base")  # Or other mplcairo backend
 
 import matplotlib.pyplot as plt
 import pandas as pd

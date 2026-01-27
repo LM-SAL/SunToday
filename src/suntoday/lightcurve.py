@@ -1,13 +1,15 @@
 """
 Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
 """
-import matplotlib
-matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
+
+import matplotlib as mpl
+
+mpl.use("module://mplcairo.base")  # Or other mplcairo backend
 
 from datetime import datetime
 from pathlib import Path
 
-import matplotlib.figure
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import dates, ticker
@@ -110,7 +112,7 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
 def plot_lightcurve_from_timeseries(
     goes_timeseries: pd.DataFrame,
     aia_timeseries: pd.DataFrame,
-) -> matplotlib.figure.Figure:
+) -> mpl.figure.Figure:
     """
     Creates the actual figure from the AIA and GOES dataframes.
 

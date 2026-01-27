@@ -1,8 +1,10 @@
 """
 Provides all the functions needed to create SDO/AIA JPEGS.
 """
-import matplotlib
-matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
+
+import matplotlib as mpl
+
+mpl.use("module://mplcairo.base")
 
 import datetime
 import tempfile
@@ -17,9 +19,10 @@ import sunpy.map as smap
 from astropy.io.fits.verify import VerifyWarning
 from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make_rgb
 from matplotlib import colors
+from mplcairo import operator_t
 from PIL import Image
 from sunpy.coordinates import SphericalScreen
-from mplcairo import operator_t
+
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
@@ -29,6 +32,7 @@ from suntoday.maps import (
     create_aia_map,
     create_hmi_map,
 )
+
 __all__ = [
     "create_blended_figure_from_maps",
     "create_figure_from_map",
@@ -74,7 +78,26 @@ def _black_out_cmap_mid(
     """
     Return a copy of the colormap with a middle value range set to black.
 
-    The mid range is specified in data units and converted through the norm.
+    The mid range is specified in data units and converted through the
+    norm.
+
+    Parameters
+    ----------
+    cmap : matplotlib.colors.Colormap
+        Colormap to copy and modify.
+    norm : matplotlib.colors.Normalize
+        Normalization used to convert data values into the [0, 1] range.
+    mid_low : float
+        Lower bound of the middle range in data units.
+    mid_high : float
+        Upper bound of the middle range in data units.
+    n : int, optional
+        Number of samples to use when generating the modified colormap.
+
+    Returns
+    -------
+    matplotlib.colors.Colormap
+        A new colormap with the specified middle range set to black.
     """
     samples = np.linspace(0, 1, n)
     rgba = cmap(samples)
@@ -90,6 +113,37 @@ def _black_out_cmap_mid(
     new_cmap = colors.ListedColormap(rgba, name=f"{cmap.name}_midblack")
     new_cmap.set_bad(color="black")
     return new_cmap
+
+
+def _adjust_rgb_contrast(rgb: np.ndarray, contrast: float) -> np.ndarray:
+    """
+    Adjust contrast for an RGB image assumed to be in the [0, 1] range.
+
+    Parameters
+    ----------
+    rgb : np.ndarray
+        RGB image data.
+    contrast : float
+        Contrast multiplier where 1.0 is no change.
+
+    Returns
+    -------
+    np.ndarray
+        RGB image data with adjusted contrast, clipped to [0, 1].
+    """
+    if contrast == 1.0:
+        return rgb
+    rgb = np.asarray(rgb, dtype=np.float32)
+    # Be defensive if upstream values drift slightly outside [0, 1].
+    rgb_min = float(np.nanmin(rgb))
+    rgb_max = float(np.nanmax(rgb))
+    if rgb_min < 0.0 or rgb_max > 1.0:
+        denom = rgb_max - rgb_min
+        if denom > 0:
+            rgb = (rgb - rgb_min) / denom
+    midpoint = 0.5
+    adjusted = (rgb - midpoint) * contrast + midpoint
+    return np.clip(adjusted, 0.0, 1.0)
 
 
 def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
@@ -173,10 +227,10 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     logger.debug(f"Creating RGB figure from wavelengths: {[amap.wavelength for amap in maps]}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
-    # Use the maximum value of the 99.8% percentile over all three filters
-    # as the maximum value:
-    pctl = 99.8
-    maximum = 0.0
+    # Use the maximum value of the 99% percentile over all three filters
+    # as the maximum value
+    pctl = 99
+    maximum = 0
     for img in [maps[0].data, maps[1].data, maps[2].data]:
         val = np.percentile(img, pctl)
         maximum = max(maximum, val)
@@ -185,9 +239,9 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     # This looks nice for RGB 1 (94, 335, 193)
     if maps[0].wavelength.value == 94:
         intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.02),
-            ManualInterval(vmin=0, vmax=maximum * 0.05),
-            ManualInterval(vmin=0, vmax=maximum),
+            ManualInterval(vmin=0, vmax=maximum * 0.04),
+            ManualInterval(vmin=0, vmax=maximum * 0.15),
+            ManualInterval(vmin=0, vmax=maximum * 1.5),
         ]
         stretch = LogStretch(100)
     # This looks nice for RGB 2 (211, 193, 171)
@@ -197,16 +251,17 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
             ManualInterval(vmin=0, vmax=maximum * 0.9),
             ManualInterval(vmin=0, vmax=maximum * 0.8),
         ]
-        stretch = LogStretch(75)
+        stretch = AsinhStretch(0.04)
     # This looks nice for RGB 3 (304, 211, 171)
     if maps[0].wavelength.value == 304:
         intervals = [
             ManualInterval(vmin=0, vmax=maximum),
-            ManualInterval(vmin=0, vmax=maximum * 0.5),
-            ManualInterval(vmin=0, vmax=maximum * 0.5),
+            ManualInterval(vmin=0, vmax=maximum),
+            ManualInterval(vmin=0, vmax=maximum),
         ]
-        stretch = AsinhStretch(0.009)
+        stretch = AsinhStretch(0.04)
     rgb = make_rgb(maps[0].data, maps[1].data, maps[2].data, stretch=stretch, interval=intervals)
+    rgb = _adjust_rgb_contrast(rgb, settings.rgb_contrast)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):
@@ -331,7 +386,7 @@ def save_figures(list_of_figs: list[tuple[str, plt.figure]], save_directory: Pat
         )
 
 
-def create_sdo_images(requested_time: datetime, save_directory: Path) -> None:
+def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
     """
     Creates the full set of SDO images for the given datetime and saves it to
     the given directory.

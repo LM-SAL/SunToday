@@ -38,6 +38,7 @@ class Settings(BaseSettings):
     jsoc_user: str = "hmiteam"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
+    rgb_contrast: float = 1.2
     save_directory: Path = Path("./")
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"
