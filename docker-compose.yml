@@ -11,6 +11,9 @@ services:
       # This should be changed to point towards the final location for the images on the VM
       # The left side is the host path, the right side is the container path
       - ./images:${SUNTODAY_SAVE_DIRECTORY}:Z
+    depends_on:
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:18.1
@@ -18,6 +21,12 @@ services:
       POSTGRES_HOST_AUTH_METHOD: trust
       POSTGRES_USER: suntoday_user
       POSTGRES_DB: suntoday
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U suntoday_user -d suntoday"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
     volumes:
       - ./pgdata:/var/lib/postgresql/18/docker:Z
     ports:
