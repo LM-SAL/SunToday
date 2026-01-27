@@ -31,7 +31,7 @@ class Settings(BaseSettings):
     db_url: str = f"postgresql+psycopg2://{db_user}@{db_host}:{db_port}/{db_name}"
     fig_dpi: int = 300
     jsoc_base_url: str = "http://jsoc.stanford.edu"
-    jsoc_delay: int = 30  # minutes
+    jsoc_delay: int = 120  # minutes
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
     jsoc_password: str = "hmiteam"  # NOQA: S105
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
