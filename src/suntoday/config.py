@@ -36,6 +36,7 @@ class Settings(BaseSettings):
     jsoc_password: str = "hmiteam"  # NOQA: S105
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
     jsoc_user: str = "hmiteam"
+    log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
     rgb_contrast: float = 1.2
