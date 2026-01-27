@@ -65,58 +65,58 @@ def goes_primary_timeseries():
 
 # These are in order of the files stored on my local disk
 @pytest.fixture
-def aia_1700_test_file():
-    return get_test_filepath("20250803_235940_1700.fits")
-
-
-@pytest.fixture
-def aia_1600_test_file():
-    return get_test_filepath("20250803_235950_1600.fits")
-
-
-@pytest.fixture
-def aia_131_test_file():
-    return get_test_filepath("20250803_235954_131.fits")
-
-
-@pytest.fixture
-def aia_171_test_file():
-    return get_test_filepath("20250803_235957_171.fits")
-
-
-@pytest.fixture
-def aia_211_test_file():
-    return get_test_filepath("20250803_235957_211.fits")
-
-
-@pytest.fixture
-def aia_94_test_file():
-    return get_test_filepath("20250803_235959_94.fits")
-
-
-@pytest.fixture
-def aia_335_test_file():
-    return get_test_filepath("20250804_000000_335.fits")
-
-
-@pytest.fixture
 def hmi_cont_test_file():
-    return get_test_filepath("20250804_000000_continuum.fits")
+    return get_test_filepath("20260127_161845_continuum.fits")
 
 
 @pytest.fixture
 def hmi_blos_test_file():
-    return get_test_filepath("20250804_000000_magnetogram.fits")
+    return get_test_filepath("20260127_161845_magnetogram.fits")
+
+
+@pytest.fixture
+def aia_1700_test_file():
+    return get_test_filepath("20260127_171852_1700.fits")
+
+
+@pytest.fixture
+def aia_131_test_file():
+    return get_test_filepath("20260127_171854_131.fits")
+
+
+@pytest.fixture
+def aia_171_test_file():
+    return get_test_filepath("20260127_171857_171.fits")
+
+
+@pytest.fixture
+def aia_211_test_file():
+    return get_test_filepath("20260127_171857_211.fits")
+
+
+@pytest.fixture
+def aia_94_test_file():
+    return get_test_filepath("20260127_171859_94.fits")
+
+
+@pytest.fixture
+def aia_335_test_file():
+    return get_test_filepath("20260127_171900_335.fits")
+
+
+@pytest.fixture
+def aia_1600_test_file():
+    return get_test_filepath("20260127_171902_1600.fits")
 
 
 @pytest.fixture
 def aia_193_test_file():
-    return get_test_filepath("20250804_000004_193.fits")
+    return get_test_filepath("20260127_171904_193.fits")
 
 
 @pytest.fixture
 def aia_304_test_file():
-    return get_test_filepath("20250804_000005_304.fits")
+    return get_test_filepath("20260127_171905_304.fits")
 
 
 @pytest.fixture

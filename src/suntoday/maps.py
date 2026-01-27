@@ -1,12 +1,13 @@
 """
 Functions to create sunpy maps from FITS files.
 """
-import matplotlib
-matplotlib.use("module://mplcairo.base") # Or other mplcairo backend
+
+import matplotlib as mpl
+
+mpl.use("module://mplcairo.base")
 
 from pathlib import Path
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import sunpy.map as smap
