@@ -53,6 +53,18 @@ HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_c
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos"}
 
 
+def _full_bleed(ax: plt.Axes) -> None:
+    """
+    Expand the axes to fill the full figure canvas.
+
+    This avoids default subplot padding so the map scales to the
+    intended pixel size instead of being surrounded by margins.
+    """
+    fig = ax.figure
+    fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
+    ax.set_position([0, 0, 1, 1])
+
+
 def _add_lmsal_logo(ax: plt.Axes) -> None:
     """
     Add LMSAL logo to the given Axes object.
@@ -167,6 +179,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = plt.subplot(projection=amap)
+    _full_bleed(ax)
     clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
     amap.plot(axes=ax, clip_interval=clip_interval)
     wavelength = (
@@ -227,6 +240,7 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     logger.debug(f"Creating RGB figure from wavelengths: {[amap.wavelength for amap in maps]}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
+    _full_bleed(ax)
     # Use the maximum value of the 99% percentile over all three filters
     # as the maximum value
     pctl = 99
@@ -317,6 +331,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111, projection=maps[0].wcs)
+    _full_bleed(ax)
     modified_hmi_cmap = plt.get_cmap(maps[0].plot_settings["cmap"]).copy()
     norm = maps[0].plot_settings.get("norm")
     modified_hmi_cmap = _black_out_cmap_mid(modified_hmi_cmap, norm, -50, 50)
