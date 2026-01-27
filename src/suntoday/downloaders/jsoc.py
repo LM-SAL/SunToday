@@ -158,6 +158,9 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
         if response.status_code != 200:
             msg = f"JSOC request failed with {response.status_code} and {response.text}."
             raise OSError(msg)
+        if "keywords" not in response.json() or "segments" not in response.json():
+            msg = f"JSOC request returned with no data but with {response.json()}."
+            raise ValueError(msg)
         keywords = response.json()["keywords"]
         segments = response.json()["segments"]
         if len(keywords[0]["values"]) == 0:

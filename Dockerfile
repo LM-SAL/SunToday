@@ -32,7 +32,6 @@ COPY . /app
 WORKDIR /app
 RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install /app/.
 
-ENV MPLBACKEND=module://mplcairo.base
 # This is set to avoid any potential issues with downloading files
 ENV PARFIVE_TOTAL_TIMEOUT=100
 
