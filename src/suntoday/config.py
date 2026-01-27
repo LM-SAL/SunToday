@@ -23,11 +23,11 @@ class Settings(BaseSettings):
         env_prefix="suntoday_",
     )
     cron_frequency: int = 30  # minutes
-    db_user: str = "suntoday_user"
-    db_password: str = "suntoday_user_password"  # NOQA: S105
-    db_host: str = "db"  # Container name from docker-compose
-    db_port: int = 5432
+    db_host: str = "db"
     db_name: str = "suntoday"
+    db_password: str = "suntoday_user_password"  # NOQA: S105
+    db_port: int = 5432
+    db_user: str = "suntoday_user"
     db_url: str = f"postgresql+psycopg2://{db_user}@{db_host}:{db_port}/{db_name}"
     fig_dpi: int = 300
     jsoc_base_url: str = "http://jsoc.stanford.edu"

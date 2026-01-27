@@ -21,7 +21,6 @@ from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make
 from matplotlib import colors
 from mplcairo import operator_t
 from PIL import Image
-from sunpy.coordinates import SphericalScreen
 
 from suntoday import logger
 from suntoday.config import Settings
@@ -59,6 +58,9 @@ def _full_bleed(ax: plt.Axes) -> None:
 
     This avoids default subplot padding so the map scales to the
     intended pixel size instead of being surrounded by margins.
+
+    This was not required but all of a sudden I did and I cba to track
+    down why.
     """
     fig = ax.figure
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -321,16 +323,10 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         The wavelength of the map(s). This is used as part of the filename.
     `plt.Figure`
         The figure object.
-
-    Notes
-    -----
-    This function creates a blended figure by overlaying multiple maps onto a single figure.
-    The first map in the list is used as the base map, and the remaining maps are blended on top of it.
-    The blending is done using a specified colormap and transparency.
     """
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
-    ax = fig.add_subplot(111, projection=maps[0].wcs)
+    ax = fig.add_subplot(111, projection=maps[1].wcs)
     _full_bleed(ax)
     modified_hmi_cmap = plt.get_cmap(maps[0].plot_settings["cmap"]).copy()
     norm = maps[0].plot_settings.get("norm")
@@ -365,9 +361,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         )
         if i == 0:
             continue
-        with SphericalScreen(maps[0].observer_coordinate):
-            reprojected_map = amap.reproject_to(maps[0].wcs)
-        im_aia = reprojected_map.plot(axes=ax)
+    im_aia = maps[1].plot(axes=ax)
     operator_t.SCREEN.patch_artist(im_aia)
     ax.set_axis_off()
     ax.set_title("")
@@ -421,13 +415,12 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         If the incorrect number of AIA or HMI files are downloaded.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        aia_files = fetch_aia_fits(requested_time, save_directory=temp_dir)
+        aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         if len(aia_files) != len(AIA_WAVELENGTHS):
             msg = f"Mismatch of AIA files downloaded, expected {len(AIA_WAVELENGTHS)}, got {len(aia_files)}, missing: {set(AIA_WAVELENGTHS) - {f.split('_')[-1].split('.')[0] for f in aia_files}}"
             raise OSError(msg)
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(x.split("_")[-1].split(".")[0]))
-        # HMI files are not always available at the same time as AIA files
-        hmi_files = fetch_hmi_fits(requested_time - datetime.timedelta(hours=2), save_directory=temp_dir)
+        hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
         if len(hmi_files) != 2:
             msg = "Mismatch of HMI files downloaded"
             raise OSError(msg)
@@ -445,7 +438,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
             warnings.simplefilter("ignore", category=VerifyWarning)
             [
-                amap.save(save_directory / ("f" + filenames[i] + ".fits"), overwrite=True)
+                amap.save(save_directory / (f"f{filenames[i]}.fits"), overwrite=True)
                 for i, amap in enumerate(aia_maps + hmi_maps)
                 if filenames[i] is not None
             ]
