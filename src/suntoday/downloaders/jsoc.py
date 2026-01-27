@@ -68,7 +68,7 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
     return json_response
 
 
-def get_aia_urls(requested_time: datetime, time_span: str = "36s") -> pd.DataFrame:
+def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFrame:
     """
     Gets the NRT AIA FITS URLS for the given time.
 
@@ -82,8 +82,8 @@ def get_aia_urls(requested_time: datetime, time_span: str = "36s") -> pd.DataFra
     requested_time : datetime.datetime
         Time wanted for the data.
     time_span : str
-        Time span for the data. Default is "36s".
-        We go back 36 seconds to capture 1600 and 1700, but we get repeats of the other wavelengths.
+        Time span for the data. Default is "60s".
+        We go back 60 seconds to capture 1600 and 1700, but we get repeats of the other wavelengths.
 
     Returns
     -------
@@ -232,7 +232,7 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     return aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
 
 
-def fetch_aia_fits(requested_time: datetime, time_span: str = "36s", save_directory: Path = Path("./")) -> Results:
+def fetch_aia_fits(requested_time: datetime, time_span: str = "60s", save_directory: Path = Path("./")) -> Results:
     """
     Download AIA fits files for a given time.
 

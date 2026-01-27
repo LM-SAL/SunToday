@@ -13,6 +13,7 @@ import numpy as np
 import sunpy.map as smap
 from aiapy.calibrate import correct_degradation
 from aiapy.calibrate.utils import get_correction_table
+from astropy.io import fits
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
 from suntoday.data import RESPONSE_TABLE_V10
@@ -36,16 +37,17 @@ def create_aia_map(file: Path) -> smap.GenericMap:
     `sunpy.map.GenericMap`
         Degradation corrected and exposure normalized AIA Map.
     """
-    aia_map = smap.Map(file)
-    aia_map = correct_degradation(aia_map, correction_table=get_correction_table(str(RESPONSE_TABLE_V10)))
-    aia_map /= aia_map.exposure_time
-    aia_map.meta["exptime"] = 1.0
-    aia_map.meta["BUNIT"] = "ct / s"
-    cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"])
-    cmap.set_bad(color="black")
-    aia_map.plot_settings["cmap"] = cmap
-    aia_map.data[aia_map.data <= 1] = 0
-    return aia_map
+    with fits.open(file, memmap=True) as hdul:
+        aia_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        aia_map = correct_degradation(aia_map, correction_table=get_correction_table(str(RESPONSE_TABLE_V10)))
+        aia_map /= aia_map.exposure_time
+        aia_map.meta["exptime"] = 1.0
+        aia_map.meta["BUNIT"] = "ct / s"
+        cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"])
+        cmap.set_bad(color="black")
+        aia_map.plot_settings["cmap"] = cmap
+        aia_map.data[aia_map.data <= 1] = 0
+        return aia_map
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:
@@ -62,13 +64,14 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
     `sunpy.map.GenericMap`
         HMI Map.
     """
-    map_hmi = smap.Map(file).rotate()
-    fill_value = np.nan if map_hmi.measurement == "magnetogram" else 0
-    map_hmi.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(map_hmi))] = fill_value
-    if map_hmi.measurement == "magnetogram":
-        map_hmi.plot_settings["norm"] = plt.Normalize(-1000, 1000)
-        map_hmi.plot_settings["cmap"] = "hmimag"
-        cmap = mpl.colormaps.get_cmap(map_hmi.plot_settings["cmap"])
-        cmap.set_bad(color="black")
-        map_hmi.plot_settings["cmap"] = cmap
-    return map_hmi
+    with fits.open(file, memmap=True) as hdul:
+        map_hmi = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        fill_value = np.nan if map_hmi.measurement == "magnetogram" else 0
+        map_hmi.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(map_hmi))] = fill_value
+        if map_hmi.measurement == "magnetogram":
+            map_hmi.plot_settings["norm"] = plt.Normalize(-1000, 1000)
+            map_hmi.plot_settings["cmap"] = "hmimag"
+            cmap = mpl.colormaps.get_cmap(map_hmi.plot_settings["cmap"])
+            cmap.set_bad(color="black")
+            map_hmi.plot_settings["cmap"] = cmap
+        return map_hmi
