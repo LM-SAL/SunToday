@@ -100,8 +100,8 @@ def create_images(
     write_or_update_record(
         database_session,
         image_type,
-        requested_time.date(),
-        updated_at=requested_time,
+        str(requested_time.date()),
+        updated_at=str(requested_time),
     )
     logger.info(f"{image_type} creation and record update completed")
 

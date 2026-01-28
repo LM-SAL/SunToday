@@ -9,6 +9,7 @@ mpl.use("module://mplcairo.base")
 import datetime
 import tempfile
 import warnings
+from collections.abc import Iterable
 from pathlib import Path
 
 import astropy.units as u
@@ -21,6 +22,7 @@ from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make
 from matplotlib import colors
 from mplcairo import operator_t
 from PIL import Image
+from sunpy.coordinates import SphericalScreen
 
 from suntoday import logger
 from suntoday.config import Settings
@@ -183,7 +185,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     ax = plt.subplot(projection=amap)
     _full_bleed(ax)
     clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
-    amap.plot(axes=ax, clip_interval=clip_interval)
+    amap.plot(axes=ax, clip_interval=clip_interval, autoalign=False, interpolation="nearest")
     wavelength = (
         WAVELENGTH_FORMAT.format(amap.wavelength.value)
         if "AIA" in amap.instrument
@@ -326,12 +328,17 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     """
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
-    ax = fig.add_subplot(111, projection=maps[1].wcs)
+    ax = fig.add_subplot(111, projection=maps[0].wcs)
     _full_bleed(ax)
     modified_hmi_cmap = plt.get_cmap(maps[0].plot_settings["cmap"]).copy()
     norm = maps[0].plot_settings.get("norm")
     modified_hmi_cmap = _black_out_cmap_mid(modified_hmi_cmap, norm, -50, 50)
-    maps[0].plot(axes=ax, cmap=modified_hmi_cmap)
+    maps[0].plot(
+        axes=ax,
+        cmap=modified_hmi_cmap,
+        autoalign=False,
+        interpolation="nearest",
+    )
     wavelength_names = []
     for i, amap in enumerate(maps):
         wavelength = (
@@ -361,7 +368,9 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         )
         if i == 0:
             continue
-    im_aia = maps[1].plot(axes=ax)
+        with SphericalScreen(maps[0].observer_coordinate):
+            reprojected_map = amap.reproject_to(maps[0].wcs)
+    im_aia = reprojected_map.plot(axes=ax, interpolation="nearest", autoalign=False)
     operator_t.SCREEN.patch_artist(im_aia)
     ax.set_axis_off()
     ax.set_title("")
@@ -369,30 +378,35 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     return "_".join(wavelength_names), fig
 
 
-def save_figures(list_of_figs: list[tuple[str, plt.figure]], save_directory: Path) -> None:
+def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory: Path) -> None:
     """
-    Save a list of figures as JPEG images.
+    Save figures as JPEG images.
 
     Parameters
     ----------
-    list_of_figs : (List[Tuple[str, plt.figure]])
-        A list of tuples containing the wavelength and the corresponding figure.
+    list_of_figs : (Iterable[Tuple[str, plt.Figure]])
+        An iterable of tuples containing the wavelength and the corresponding figure.
+        Figures are closed after saving to free memory.
     save_directory : pathlib.Path
         The directory where the JPEG images will be saved.
     """
     settings = Settings()
     for wavelength, fig in list_of_figs:
-        fig.savefig(save_directory / settings.sdo_fig_name_large.format(wavelength), dpi=settings.fig_dpi)
-        logger.debug(
-            f"Wavelength: {wavelength} figure saved to {save_directory / settings.sdo_fig_name_large.format(wavelength)}"
-        )
-        # Resize to 1024 - We avoid using MPL to resize the image to font issues
-        full_jpeg = Image.open(str(save_directory / settings.sdo_fig_name_large.format(wavelength)))
-        resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
-        resized_image.save(str(save_directory / settings.sdo_fig_name_small.format(wavelength)))
-        logger.debug(
-            f"Resized wavelength: {wavelength} figure saved to {save_directory / settings.sdo_fig_name_small.format(wavelength)}"
-        )
+        full_path = save_directory / settings.sdo_fig_name_large.format(wavelength)
+        small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
+        try:
+            fig.savefig(full_path, dpi=settings.fig_dpi)
+            logger.debug(f"Wavelength: {wavelength} figure saved to {full_path}")
+            # Resize to 1024 - We avoid using MPL to resize the image to font issues
+            with Image.open(str(full_path)) as full_jpeg:
+                resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
+                try:
+                    resized_image.save(str(small_path))
+                finally:
+                    resized_image.close()
+            logger.debug(f"Resized wavelength: {wavelength} figure saved to {small_path}")
+        finally:
+            plt.close(fig)
 
 
 def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
@@ -419,36 +433,56 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         if len(aia_files) != len(AIA_WAVELENGTHS):
             msg = f"Mismatch of AIA files downloaded, expected {len(AIA_WAVELENGTHS)}, got {len(aia_files)}, missing: {set(AIA_WAVELENGTHS) - {f.split('_')[-1].split('.')[0] for f in aia_files}}"
             raise OSError(msg)
-        aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(x.split("_")[-1].split(".")[0]))
+        aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
         hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
         if len(hmi_files) != 2:
             msg = "Mismatch of HMI files downloaded"
             raise OSError(msg)
-        aia_maps = [create_aia_map(aia_file) for aia_file in aia_files]
-        hmi_maps = [create_hmi_map(hmi_file) for hmi_file in hmi_files]
-        filenames = [
-            WAVELENGTH_FORMAT.format(amap.wavelength.value)
-            if "AIA" in amap.instrument
-            else HMI_MEASUREMENT_FITS.get(amap.measurement)
-            for amap in (aia_maps + hmi_maps)
-        ]
-        with warnings.catch_warnings():
-            # Need to bypass
-            # VerifyWarning: Invalid 'BLANK' keyword in header.
-            # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
-            warnings.simplefilter("ignore", category=VerifyWarning)
-            [
-                amap.save(save_directory / (f"f{filenames[i]}.fits"), overwrite=True)
-                for i, amap in enumerate(aia_maps + hmi_maps)
-                if filenames[i] is not None
-            ]
-        figures = [create_figure_from_map(aia_map) for aia_map in aia_maps]
-        figures.extend(create_figure_from_map(hmi_map) for hmi_map in hmi_maps)
+        aia_files_by_wavelength = {}
+        hmi_files_by_measurement = {}
+
+        def save_fits(amap: smap.GenericMap, filename: str | None) -> None:
+            if filename is None:
+                return
+            with warnings.catch_warnings():
+                # Need to bypass
+                # VerifyWarning: Invalid 'BLANK' keyword in header.
+                # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
+                warnings.simplefilter("ignore", category=VerifyWarning)
+                # Empty keyword somehow and it raises a warning we want to remove.
+                amap.meta.pop("")
+                amap.save(save_directory / filename, overwrite=True)
+
+        # Stream single-channel outputs to keep memory bounded.
+        for aia_file in aia_files:
+            aia_path = Path(aia_file)
+            wavelength_key = aia_path.stem.split("_")[-1]
+            aia_files_by_wavelength[wavelength_key] = aia_path
+            aia_map = create_aia_map(aia_path)
+            save_fits(aia_map, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
+            save_figures([create_figure_from_map(aia_map)], save_directory)
+            del aia_map
+
+        for hmi_file in hmi_files:
+            hmi_path = Path(hmi_file)
+            hmi_map = create_hmi_map(hmi_path)
+            hmi_files_by_measurement[hmi_map.measurement] = hmi_path
+            hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
+            save_fits(hmi_map, None if hmi_fits_name is None else f"f{hmi_fits_name}.fits")
+            save_figures([create_figure_from_map(hmi_map)], save_directory)
+            del hmi_map
+
+        # RGB combinations
         for rgb_comb in RGB_COMBINATIONS:
-            maps = [aia_maps[AIA_WAVELENGTHS.index(wavelength)] for wavelength in rgb_comb]
-            figures.append(create_rgb_figure_from_maps(maps))
-        # Blend combinations is only HMI B_LOS and AIA 171
-        maps = [hmi_maps[0], aia_maps[AIA_WAVELENGTHS.index("171")]]
-        figures.append(create_blended_figure_from_maps(maps))
-        save_figures(figures, save_directory)
-        plt.close("all")
+            maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
+            save_figures([create_rgb_figure_from_maps(maps)], save_directory)
+            del maps
+
+        # Blend combination is only HMI B_LOS and AIA 171
+        hmi_blos = hmi_files_by_measurement.get("magnetogram")
+        if hmi_blos is None:
+            msg = "Missing HMI magnetogram file for blend output."
+            raise OSError(msg)
+        maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
+        save_figures([create_blended_figure_from_maps(maps)], save_directory)
+        del maps
