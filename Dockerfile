@@ -1,4 +1,4 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -13,7 +13,7 @@ COPY requirements-full.txt .
 RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org wheel --wheel-dir /wheels -r requirements-full.txt
 RUN rm requirements-full.txt
 
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
