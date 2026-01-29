@@ -100,7 +100,7 @@ mpl-animators==1.2.4
     # via sunpy
 mplcairo==0.6.1
     # via -r requirements.txt
-multidict==6.7.0
+multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
