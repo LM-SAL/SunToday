@@ -142,7 +142,7 @@ pandas==3.0.0
     #   dask
     #   dask-image
     #   drms
-parfive[ftp]==2.2.0
+parfive[ftp]==2.3.1
     # via sunpy
 partd==1.4.2
     # via dask
