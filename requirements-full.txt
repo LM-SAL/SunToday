@@ -235,7 +235,7 @@ sunpy[image,map,net]==7.1.0
     # via
     #   -r requirements.txt
     #   aiapy
-tifffile==2026.1.14
+tifffile==2026.1.28
     # via
     #   dask-image
     #   pims
