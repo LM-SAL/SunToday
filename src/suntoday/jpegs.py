@@ -51,7 +51,7 @@ WAVELENGTH_FORMAT = "{:04.0f}"
 WAVELENGTH_FORMAT_BLEND = "{:03.0f}"
 HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
-HMI_MEASUREMENT_FITS = {"magnetogram": "blos"}
+HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 
 
 def _full_bleed(ax: plt.Axes) -> None:

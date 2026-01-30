@@ -259,6 +259,7 @@ def test_create_sdo_images_offline(  # NOQA: PLR0917
         "f1600.fits",
         "f1700.fits",
         "fblos.fits",
+        "fcontinuum.fits",
     ]
     assert len(tmpdir.listdir()) == len(canonical_filelist)
     for file in tmpdir.listdir():
@@ -316,6 +317,7 @@ def test_create_sdo_images_online(tmpdir) -> None:
         "f1600.fits",
         "f1700.fits",
         "fblos.fits",
+        "fcontinuum.fits",
     ]
     assert len(tmpdir.listdir()) == len(canonical_filelist)
     for file in tmpdir.listdir():
