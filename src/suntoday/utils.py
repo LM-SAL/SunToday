@@ -2,14 +2,20 @@
 Utility functions for image processing and visualization.
 """
 
-import numpy as np
+import warnings
+from pathlib import Path
 
-__all__ = ["apply_gamma_correction", "clip_image_percentiles", "normalize_image_percentiles"]
+import numpy as np
+import sunpy.map as smap
+from astropy.io.fits import CompImageHDU
+from astropy.io.fits.verify import VerifyWarning
+
+__all__ = ["apply_gamma_correction", "clip_image_percentiles", "normalize_image_percentiles", "save_fits"]
 
 
 def clip_image_percentiles(
-    image: np.array, lower_percentile: float = 0.01, upper_percentile: float = 99.99
-) -> np.array:
+    image: np.ndarray, lower_percentile: float = 0.01, upper_percentile: float = 99.99
+) -> np.ndarray:
     """
     Clip the dynamic range of an image based on percentiles.
 
@@ -36,7 +42,7 @@ def clip_image_percentiles(
     return np.clip(image, p_low, p_high)
 
 
-def apply_gamma_correction(image: np.array, gamma: float = 0.5):
+def apply_gamma_correction(image: np.ndarray, gamma: float = 0.5):
     """
     Apply gamma correction to an image.
 
@@ -62,8 +68,8 @@ def apply_gamma_correction(image: np.array, gamma: float = 0.5):
 
 
 def normalize_image_percentiles(
-    image: np.array, lower_percentile: float = 0.001, upper_percentile: float = 99.8
-) -> np.array:
+    image: np.ndarray, lower_percentile: float = 0.001, upper_percentile: float = 99.8
+) -> np.ndarray:
     """
     Normalize the dynamic range of an image to 0-255 based on percentiles.
 
@@ -90,3 +96,25 @@ def normalize_image_percentiles(
     image_clipped = np.clip(image, p_low, p_high)
     norm_image = 255 * (image_clipped - p_low) / (p_high - p_low)
     return norm_image.astype(np.uint8)
+
+
+def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> None:
+    """
+    Save a SunPy map as a compressed FITS file.
+
+    Parameters
+    ----------
+    amap : sunpy.map.GenericMap
+        The map to write to disk.
+    save_directory : pathlib.Path
+        Directory to write the FITS file into.
+    filename : str
+        Name of the FITS file to create.
+    """
+    with warnings.catch_warnings():
+        # VerifyWarning: Invalid 'BLANK' keyword in header.
+        # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
+        warnings.simplefilter("ignore", category=VerifyWarning)
+        # Empty keyword somehow and it raises a warning we want to remove.
+        amap.meta.pop("")
+        amap.save(save_directory / filename, overwrite=True, hdu_type=CompImageHDU)
