@@ -164,11 +164,11 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> None:
     fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
     plot_path = save_directory / f"lightcurve_{end_time:%Y%m%d}.png"
     fig.savefig(str(plot_path), dpi=fig.dpi)
-    logger.debug(f"Timeseries figure saved to {plot_path}")
+    logger.info(f"Timeseries figure saved to {plot_path}")
     plt.close(fig)
     aia_path = save_directory / "aia_light_curves.txt"
     aia_timeseries.to_csv(aia_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
-    logger.debug(f"AIA timeseries txt saved to {aia_path}")
+    logger.info(f"AIA timeseries txt saved to {aia_path}")
     goes_path = save_directory / "goes_light_curves.txt"
     goes_primary_timeseries.to_csv(goes_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
-    logger.debug(f"GOES timeseries txt saved to {goes_path}")
+    logger.info(f"GOES timeseries txt saved to {goes_path}")
