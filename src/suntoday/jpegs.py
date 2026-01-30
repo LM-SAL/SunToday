@@ -369,7 +369,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         if i == 0:
             continue
         with SphericalScreen(maps[0].observer_coordinate):
-            reprojected_map = amap.reproject_to(maps[0].wcs)
+            reprojected_map = amap.reproject_to(maps[0].wcs, parallel=True)
     im_aia = reprojected_map.plot(axes=ax, interpolation="nearest", autoalign=False)
     operator_t.SCREEN.patch_artist(im_aia)
     ax.set_axis_off()
