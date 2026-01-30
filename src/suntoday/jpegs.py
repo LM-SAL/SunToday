@@ -181,6 +181,8 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
         The figure object.
     """
     settings = Settings()
+    log_label = f"AIA {amap.wavelength.value:.0f}A" if "AIA" in amap.instrument else f"HMI {amap.measurement}"
+    logger.info(f"Rendering {log_label} figure for {amap.date.isot}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = plt.subplot(projection=amap)
     _full_bleed(ax)
@@ -241,7 +243,8 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         msg = "RGB figure needs exactly three maps."
         raise ValueError(msg)
     settings = Settings()
-    logger.debug(f"Creating RGB figure from wavelengths: {[amap.wavelength for amap in maps]}")
+    wavelength_values = [int(amap.wavelength.value) for amap in maps]
+    logger.info(f"Creating RGB figure from wavelengths: {wavelength_values} with contrast {settings.rgb_contrast}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
     _full_bleed(ax)
@@ -327,6 +330,13 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         The figure object.
     """
     settings = Settings()
+    blend_labels = []
+    for amap in maps:
+        if "AIA" in amap.instrument:
+            blend_labels.append(f"AIA {amap.wavelength.value:.0f}A")
+        else:
+            blend_labels.append(f"HMI {amap.measurement}")
+    logger.info(f"Creating blended figure from {', '.join(blend_labels)}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111, projection=maps[0].wcs)
     _full_bleed(ax)
@@ -368,9 +378,13 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         )
         if i == 0:
             continue
+        logger.info(f"Reprojecting {wavelength} map onto HMI WCS for blend")
         with SphericalScreen(maps[0].observer_coordinate):
-            reprojected_map = amap.reproject_to(maps[0].wcs, parallel=True)
+            reprojected_map = amap.reproject_to(
+                maps[0].wcs, parallel=True, return_footprint=False, block_size=(256, 256)
+            )
     im_aia = reprojected_map.plot(axes=ax, interpolation="nearest", autoalign=False)
+    del reprojected_map
     operator_t.SCREEN.patch_artist(im_aia)
     ax.set_axis_off()
     ax.set_title("")
@@ -396,7 +410,7 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
         small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
         try:
             fig.savefig(full_path, dpi=settings.fig_dpi)
-            logger.debug(f"Wavelength: {wavelength} figure saved to {full_path}")
+            logger.info(f"Saved full-size wavelength: {wavelength} figure to {full_path} (dpi={settings.fig_dpi})")
             # Resize to 1024 - We avoid using MPL to resize the image to font issues
             with Image.open(str(full_path)) as full_jpeg:
                 resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
@@ -404,12 +418,12 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
                     resized_image.save(str(small_path))
                 finally:
                     resized_image.close()
-            logger.debug(f"Resized wavelength: {wavelength} figure saved to {small_path}")
+            logger.info(f"Saved resized wavelength: {wavelength} figure to {small_path} ({settings.resize_fig_size}px)")
         finally:
             plt.close(fig)
 
 
-def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
+def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:  # NOQA: PLR0915
     """
     Creates the full set of SDO images for the given datetime and saves it to
     the given directory.
@@ -429,21 +443,27 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         If the incorrect number of AIA or HMI files are downloaded.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
+        logger.info(f"Starting SDO image creation for {requested_time:%Y-%m-%d %H:%M:%S} in {save_directory}")
+        logger.info(f"Using temporary directory for FITS downloads: {temp_dir}")
+        logger.info("Downloading AIA FITS files")
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         if len(aia_files) != len(AIA_WAVELENGTHS):
             msg = f"Mismatch of AIA files downloaded, expected {len(AIA_WAVELENGTHS)}, got {len(aia_files)}, missing: {set(AIA_WAVELENGTHS) - {f.split('_')[-1].split('.')[0] for f in aia_files}}"
             raise OSError(msg)
+        logger.info(f"Downloaded {len(aia_files)} AIA FITS files")
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
+        logger.debug(f"Ordered AIA FITS files: {[Path(x).name for x in aia_files]}")
+        logger.info("Downloading HMI FITS files")
         hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
         if len(hmi_files) != 2:
             msg = "Mismatch of HMI files downloaded"
             raise OSError(msg)
+        logger.info(f"Downloaded {len(hmi_files)} HMI FITS files")
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
-        def save_fits(amap: smap.GenericMap, filename: str | None) -> None:
-            if filename is None:
-                return
+        def save_fits(amap: smap.GenericMap, filename: str) -> None:
+            logger.info(f"Saving FITS output to {save_directory / filename}")
             with warnings.catch_warnings():
                 # Need to bypass
                 # VerifyWarning: Invalid 'BLANK' keyword in header.
@@ -457,6 +477,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         for aia_file in aia_files:
             aia_path = Path(aia_file)
             wavelength_key = aia_path.stem.split("_")[-1]
+            logger.info(f"Processing AIA {wavelength_key} from {aia_path.name}")
             aia_files_by_wavelength[wavelength_key] = aia_path
             aia_map = create_aia_map(aia_path)
             save_fits(aia_map, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
@@ -466,23 +487,25 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         for hmi_file in hmi_files:
             hmi_path = Path(hmi_file)
             hmi_map = create_hmi_map(hmi_path)
+            logger.info(f"Processing HMI {hmi_map.measurement} from {hmi_path.name}")
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
-            save_fits(hmi_map, None if hmi_fits_name is None else f"f{hmi_fits_name}.fits")
+            save_fits(hmi_map, f"f{hmi_fits_name}.fits")
             save_figures([create_figure_from_map(hmi_map)], save_directory)
             del hmi_map
 
         # RGB combinations
+        logger.info(f"Creating {len(RGB_COMBINATIONS)} RGB combinations")
         for rgb_comb in RGB_COMBINATIONS:
+            logger.info(f"Creating RGB combination {rgb_comb}")
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
             save_figures([create_rgb_figure_from_maps(maps)], save_directory)
             del maps
 
         # Blend combination is only HMI B_LOS and AIA 171
-        hmi_blos = hmi_files_by_measurement.get("magnetogram")
-        if hmi_blos is None:
-            msg = "Missing HMI magnetogram file for blend output."
-            raise OSError(msg)
+        hmi_blos = hmi_files_by_measurement["magnetogram"]
+        logger.info("Creating blended HMI/AIA combination (magnetogram + 171)")
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
         save_figures([create_blended_figure_from_maps(maps)], save_directory)
         del maps
+        logger.info("Finished SDO image creation")
