@@ -8,7 +8,6 @@ mpl.use("module://mplcairo.base")
 
 import datetime
 import tempfile
-import warnings
 from collections.abc import Iterable
 from pathlib import Path
 
@@ -17,7 +16,6 @@ import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 import sunpy.map as smap
-from astropy.io.fits.verify import VerifyWarning
 from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make_rgb
 from matplotlib import colors
 from mplcairo import operator_t
@@ -33,6 +31,7 @@ from suntoday.maps import (
     create_aia_map,
     create_hmi_map,
 )
+from suntoday.utils import save_fits
 
 __all__ = [
     "create_blended_figure_from_maps",
@@ -450,17 +449,6 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
-        def save_fits(amap: smap.GenericMap, filename: str) -> None:
-            logger.info(f"Saving FITS output to {save_directory / filename}")
-            with warnings.catch_warnings():
-                # Need to bypass
-                # VerifyWarning: Invalid 'BLANK' keyword in header.
-                # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
-                warnings.simplefilter("ignore", category=VerifyWarning)
-                # Empty keyword somehow and it raises a warning we want to remove.
-                amap.meta.pop("")
-                amap.save(save_directory / filename, overwrite=True)
-
         # Stream single-channel outputs to keep memory bounded.
         for aia_file in aia_files:
             aia_path = Path(aia_file)
@@ -468,7 +456,10 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             logger.info(f"Processing AIA {wavelength_key} from {aia_path.name}")
             aia_files_by_wavelength[wavelength_key] = aia_path
             aia_map = create_aia_map(aia_path)
-            save_fits(aia_map, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
+            save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
+            logger.info(
+                f"Saved FITS output to {save_directory / WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits"
+            )
             save_figures([create_figure_from_map(aia_map)], save_directory)
             del aia_map
 
@@ -478,7 +469,8 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             logger.info(f"Processing HMI {hmi_map.measurement} from {hmi_path.name}")
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
-            save_fits(hmi_map, f"f{hmi_fits_name}.fits")
+            save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits")
+            logger.info(f"Saved FITS output to {save_directory / f'f{hmi_fits_name}.fits'}")
             save_figures([create_figure_from_map(hmi_map)], save_directory)
             del hmi_map
 

@@ -46,7 +46,9 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"])
         cmap.set_bad(color="black")
         aia_map.plot_settings["cmap"] = cmap
-        aia_map.data[aia_map.data <= 1] = 0
+        aia_map._data[aia_map._data <= 1] = 0
+        aia_map._data[np.isnan(aia_map._data)] = 0
+        aia_map._data = aia_map._data.astype(int)
         return aia_map
 
 
@@ -65,13 +67,17 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
         HMI Map.
     """
     with fits.open(file, memmap=True) as hdul:
-        map_hmi = smap.Map(hdul[1].data, hdul[1].header).rotate()
-        fill_value = np.nan if map_hmi.measurement == "magnetogram" else 0
-        map_hmi.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(map_hmi))] = fill_value
-        if map_hmi.measurement == "magnetogram":
-            map_hmi.plot_settings["norm"] = plt.Normalize(-1000, 1000)
-            map_hmi.plot_settings["cmap"] = "hmimag"
-            cmap = mpl.colormaps.get_cmap(map_hmi.plot_settings["cmap"])
+        hmi_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
+        hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
+        if hmi_map.measurement == "magnetogram":
+            hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
+            hmi_map.plot_settings["cmap"] = "hmimag"
+            cmap = mpl.colormaps.get_cmap(hmi_map.plot_settings["cmap"])
             cmap.set_bad(color="black")
-            map_hmi.plot_settings["cmap"] = cmap
-        return map_hmi
+            hmi_map.plot_settings["cmap"] = cmap
+        if hmi_map.measurement == "continuum":
+            hmi_map._data[np.isnan(hmi_map._data)] = 0
+            with np.errstate(all="ignore"):
+                hmi_map._data = hmi_map.data.astype(int)
+        return hmi_map
