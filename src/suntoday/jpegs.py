@@ -423,7 +423,7 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
             plt.close(fig)
 
 
-def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:  # NOQA: PLR0915
+def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
     """
     Creates the full set of SDO images for the given datetime and saves it to
     the given directory.
@@ -436,28 +436,16 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         Datetime to create the plot.
     save_directory : pathlib.Path
         Save directory for the plot.
-
-    Raises
-    ------
-    OSError
-        If the incorrect number of AIA or HMI files are downloaded.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Starting SDO image creation for {requested_time:%Y-%m-%d %H:%M:%S} in {save_directory}")
         logger.info(f"Using temporary directory for FITS downloads: {temp_dir}")
         logger.info("Downloading AIA FITS files")
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
-        if len(aia_files) != len(AIA_WAVELENGTHS):
-            msg = f"Mismatch of AIA files downloaded, expected {len(AIA_WAVELENGTHS)}, got {len(aia_files)}, missing: {set(AIA_WAVELENGTHS) - {f.split('_')[-1].split('.')[0] for f in aia_files}}"
-            raise OSError(msg)
         logger.info(f"Downloaded {len(aia_files)} AIA FITS files")
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
-        logger.debug(f"Ordered AIA FITS files: {[Path(x).name for x in aia_files]}")
         logger.info("Downloading HMI FITS files")
         hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
-        if len(hmi_files) != 2:
-            msg = "Mismatch of HMI files downloaded"
-            raise OSError(msg)
         logger.info(f"Downloaded {len(hmi_files)} HMI FITS files")
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
