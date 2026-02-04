@@ -76,6 +76,27 @@ docker-compose build
 docker-compose up
 ```
 
+## One off
+
+You can run a single job for a specific date/time.
+
+- Run a one-off container:
+
+```bash
+docker compose run --rm suntoday --date 2026-02-04
+```
+
+- Exec into the running container:
+
+```bash
+docker exec -it <container_name> python /app/src/suntoday/main.py --date 2026-02-04
+```
+
+Accepted formats:
+
+- Date only: `YYYY-MM-DD` (interpreted as midnight UTC)
+- Datetime: ISO-8601, e.g. `2026-02-04T12:30:00Z`
+
 ## Tests
 
 Runs are run via tox which you will need to install into your Python environment.

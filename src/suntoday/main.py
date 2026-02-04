@@ -5,6 +5,7 @@ This module contains the main entry point for the application, as well
 as the scheduled jobs for creating JPEG images and timeseries data.
 """
 
+import argparse
 import datetime
 import functools
 import os
@@ -15,6 +16,7 @@ import schedule
 import sentry_sdk
 from sentry_sdk.integrations.serverless import serverless_function
 from sqlalchemy.orm import Session, sessionmaker
+from sunpy.time import parse_time
 
 from suntoday import logger
 from suntoday.config import Settings
@@ -56,6 +58,36 @@ def catch_exceptions(*, cancel_on_failure=False):
         return wrapper
 
     return catch_exceptions_decorator
+
+
+def _build_args() -> argparse.ArgumentParser:
+    parser = argparse.ArgumentParser(description="Run SunToday scheduler or one-off job.")
+    parser.add_argument(
+        "--date",
+        "--requested-time",
+        dest="requested_time",
+        help="Date or datetime (YYYY-MM-DD or ISO-8601). Required with --once.",
+    )
+    parser.add_argument(
+        "--root-save-directory",
+        dest="root_save_directory",
+        help="Override the root save directory for output.",
+    )
+    return parser
+
+
+def cli() -> None:
+    """
+    Allows one to call the code once if required.
+    """
+    args = _build_args().parse_args()
+    root_save_directory = Path(args.root_save_directory) if args.root_save_directory else None
+    if not args.requested_time:
+        scheduled(root_save_directory=root_save_directory)
+        return
+    requested_time = parse_time(args.requested_time)
+    main_job(requested_time=requested_time, root_save_directory=root_save_directory)
+    return
 
 
 @serverless_function
@@ -150,7 +182,7 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
 
 
 @serverless_function
-def main() -> None:
+def scheduled() -> None:
     """
     Main function to start the scheduled job.
     """
@@ -167,4 +199,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     logger.info("Starting main job")
-    main()
+    cli()
