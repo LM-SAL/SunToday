@@ -1,5 +1,6 @@
 services:
   suntoday:
+    restart: always
     env_file:
       - .env
     build:
@@ -17,6 +18,7 @@ services:
 
   db:
     image: postgres:18.1
+    restart: always
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
       POSTGRES_USER: suntoday_user
