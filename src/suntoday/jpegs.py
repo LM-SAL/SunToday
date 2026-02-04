@@ -11,6 +11,8 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
+import resource
+
 import astropy.units as u
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
@@ -51,6 +53,68 @@ WAVELENGTH_FORMAT_BLEND = "{:03.0f}"
 HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
+
+
+def _format_bytes(value: int | None) -> str:
+    """
+    Format a byte count into a human-readable string.
+    """
+    if value is None:
+        return "unknown"
+    size = float(value)
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
+        if size < 1024.0 or unit == "TB":
+            return f"{size:.1f} {unit}"
+        size /= 1024.0
+    return f"{size:.1f} TB"
+
+
+def _get_rss_bytes() -> int | None:
+    """
+    Return current RSS in bytes when available.
+    """
+    try:
+        with open("/proc/self/status", encoding="utf-8") as status:
+            for line in status:
+                if line.startswith("VmRSS:"):
+                    parts = line.split()
+                    try:
+                        return int(parts[1]) * 1024
+                    except (IndexError, ValueError):
+                        return None
+    except OSError:
+        return None
+    return None
+
+
+def _get_max_rss_bytes() -> int | None:
+    """
+    Return max RSS in bytes when available.
+    """
+    try:
+        max_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    except OSError:
+        return None
+    if max_rss <= 0:
+        return None
+    return int(max_rss) * 1024
+
+
+def _log_memory_usage(stage: str) -> None:
+    """
+    Log current and max RSS for observability.
+    """
+    rss = _get_rss_bytes()
+    max_rss = _get_max_rss_bytes()
+    parts = []
+    if rss is not None:
+        parts.append(f"rss={_format_bytes(rss)}")
+    if max_rss is not None:
+        parts.append(f"max_rss={_format_bytes(max_rss)}")
+    if parts:
+        logger.info(f"Memory usage ({stage}): {', '.join(parts)}")
+    else:
+        logger.info(f"Memory usage ({stage}): unavailable")
 
 
 def _full_bleed(ax: plt.Axes) -> None:
@@ -186,6 +250,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     ax = plt.subplot(projection=amap)
     _full_bleed(ax)
     clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
+    logger.info(f"Plotting map")
     amap.plot(axes=ax, clip_interval=clip_interval, autoalign=False, interpolation="nearest")
     wavelength = (
         WAVELENGTH_FORMAT.format(amap.wavelength.value)
@@ -439,13 +504,16 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
     with tempfile.TemporaryDirectory() as temp_dir:
         logger.info(f"Starting SDO image creation for {requested_time:%Y-%m-%d %H:%M:%S} in {save_directory}")
         logger.info(f"Using temporary directory for FITS downloads: {temp_dir}")
+        _log_memory_usage("start")
         logger.info("Downloading AIA FITS files")
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         logger.info(f"Downloaded {len(aia_files)} AIA FITS files")
+        _log_memory_usage("after AIA download")
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
         logger.info("Downloading HMI FITS files")
         hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
         logger.info(f"Downloaded {len(hmi_files)} HMI FITS files")
+        _log_memory_usage("after HMI download")
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
@@ -462,6 +530,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             )
             save_figures([create_figure_from_map(aia_map)], save_directory)
             del aia_map
+        _log_memory_usage("after AIA processing")
 
         for hmi_file in hmi_files:
             hmi_path = Path(hmi_file)
@@ -473,6 +542,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             logger.info(f"Saved FITS output to {save_directory / f'f{hmi_fits_name}.fits'}")
             save_figures([create_figure_from_map(hmi_map)], save_directory)
             del hmi_map
+        _log_memory_usage("after HMI processing")
 
         # RGB combinations
         logger.info(f"Creating {len(RGB_COMBINATIONS)} RGB combinations")
@@ -481,6 +551,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
             save_figures([create_rgb_figure_from_maps(maps)], save_directory)
             del maps
+        _log_memory_usage("after RGB combinations")
 
         # Blend combination is only HMI B_LOS and AIA 171
         hmi_blos = hmi_files_by_measurement["magnetogram"]
@@ -488,4 +559,5 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
         save_figures([create_blended_figure_from_maps(maps)], save_directory)
         del maps
+        _log_memory_usage("after blended combination")
         logger.info("Finished SDO image creation")
