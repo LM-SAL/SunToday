@@ -102,7 +102,7 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
         ax_rhs.axhline(band, color="grey", ls="-", lw=0.4)
     ax_rhs.set_yticklabels(["A", "B", "C", "M", "X"], fontsize=10)
     ax_rhs.tick_params(which="major", direction="in", size=8, labelsize=10)
-    ax_rhs.tick_params(which="minor", direction="in", size=0, labelsize=0)
+    ax_rhs.tick_params(which="minor", direction="in", size=0, labelright=False, labelleft=False)
     locator = ax.xaxis.get_major_locator()
     ax.xaxis.set_major_formatter(dates.ConciseDateFormatter(locator))
     ax.xaxis.grid(visible=True, which="major", color="black")

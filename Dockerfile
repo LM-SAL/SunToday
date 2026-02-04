@@ -35,4 +35,4 @@ RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install /a
 # This is set to avoid any potential issues with downloading files
 ENV PARFIVE_TOTAL_TIMEOUT=100
 
-CMD ["python", "/app/src/suntoday/main.py"]
+ENTRYPOINT ["python", "/app/src/suntoday/main.py"]
