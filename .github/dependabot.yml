@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: "monthly"
     exclude-paths:
-      - "requirements-full.txt"
+      - "requirements-*"
     open-pull-requests-limit: 10
   - package-ecosystem: "github-actions"
     directory: "/"
