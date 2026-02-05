@@ -123,12 +123,10 @@ def create_images(
     if nearest_record is not None and nearest_record.updated_at > requested_time - datetime.timedelta(minutes=10):
         logger.info(f"{image_type} for {requested_time} are too new, skipping creation.")
         return
-    logger.info(f"Creating {image_type} for {requested_time} in {save_directory}")
     if image_type == "images":
         create_sdo_images(requested_time, save_directory)
     if image_type == "timeseries":
         create_lightcurve_figure(requested_time, save_directory)
-    logger.info(f"Updating {image_type} record for {requested_time} in the database.")
     write_or_update_record(
         database_session,
         image_type,
@@ -156,7 +154,6 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
         requested_time = requested_time.astimezone(datetime.UTC)
     root_save_directory = root_save_directory or settings.save_directory
     root_save_directory = Path(root_save_directory).expanduser().resolve()
-    logger.info(f"Root save directory: {root_save_directory}")
     save_directory = (
         root_save_directory
         / requested_time.strftime("%Y")

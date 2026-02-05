@@ -11,8 +11,6 @@ import tempfile
 from collections.abc import Iterable
 from pathlib import Path
 
-import resource
-
 import astropy.units as u
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
@@ -24,7 +22,6 @@ from mplcairo import operator_t
 from PIL import Image
 from sunpy.coordinates import SphericalScreen
 
-from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
@@ -53,68 +50,6 @@ WAVELENGTH_FORMAT_BLEND = "{:03.0f}"
 HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
-
-
-def _format_bytes(value: int | None) -> str:
-    """
-    Format a byte count into a human-readable string.
-    """
-    if value is None:
-        return "unknown"
-    size = float(value)
-    for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if size < 1024.0 or unit == "TB":
-            return f"{size:.1f} {unit}"
-        size /= 1024.0
-    return f"{size:.1f} TB"
-
-
-def _get_rss_bytes() -> int | None:
-    """
-    Return current RSS in bytes when available.
-    """
-    try:
-        with open("/proc/self/status", encoding="utf-8") as status:
-            for line in status:
-                if line.startswith("VmRSS:"):
-                    parts = line.split()
-                    try:
-                        return int(parts[1]) * 1024
-                    except (IndexError, ValueError):
-                        return None
-    except OSError:
-        return None
-    return None
-
-
-def _get_max_rss_bytes() -> int | None:
-    """
-    Return max RSS in bytes when available.
-    """
-    try:
-        max_rss = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    except OSError:
-        return None
-    if max_rss <= 0:
-        return None
-    return int(max_rss) * 1024
-
-
-def _log_memory_usage(stage: str) -> None:
-    """
-    Log current and max RSS for observability.
-    """
-    rss = _get_rss_bytes()
-    max_rss = _get_max_rss_bytes()
-    parts = []
-    if rss is not None:
-        parts.append(f"rss={_format_bytes(rss)}")
-    if max_rss is not None:
-        parts.append(f"max_rss={_format_bytes(max_rss)}")
-    if parts:
-        logger.info(f"Memory usage ({stage}): {', '.join(parts)}")
-    else:
-        logger.info(f"Memory usage ({stage}): unavailable")
 
 
 def _full_bleed(ax: plt.Axes) -> None:
@@ -244,13 +179,10 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
         The figure object.
     """
     settings = Settings()
-    log_label = f"AIA {amap.wavelength.value:.0f}A" if "AIA" in amap.instrument else f"HMI {amap.measurement}"
-    logger.info(f"Rendering {log_label} figure for {amap.date.isot}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = plt.subplot(projection=amap)
     _full_bleed(ax)
     clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
-    logger.info(f"Plotting map")
     amap.plot(axes=ax, clip_interval=clip_interval, autoalign=False, interpolation="nearest")
     wavelength = (
         WAVELENGTH_FORMAT.format(amap.wavelength.value)
@@ -307,8 +239,6 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         msg = "RGB figure needs exactly three maps."
         raise ValueError(msg)
     settings = Settings()
-    wavelength_values = [int(amap.wavelength.value) for amap in maps]
-    logger.info(f"Creating RGB figure from wavelengths: {wavelength_values} with contrast {settings.rgb_contrast}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
     _full_bleed(ax)
@@ -394,13 +324,6 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         The figure object.
     """
     settings = Settings()
-    blend_labels = []
-    for amap in maps:
-        if "AIA" in amap.instrument:
-            blend_labels.append(f"AIA {amap.wavelength.value:.0f}A")
-        else:
-            blend_labels.append(f"HMI {amap.measurement}")
-    logger.info(f"Creating blended figure from {', '.join(blend_labels)}")
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111, projection=maps[0].wcs)
     _full_bleed(ax)
@@ -442,7 +365,6 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         )
         if i == 0:
             continue
-        logger.info(f"Reprojecting {wavelength} map onto HMI WCS for blend")
         with SphericalScreen(maps[0].observer_coordinate):
             reprojected_map = amap.reproject_to(
                 maps[0].wcs, parallel=True, return_footprint=False, block_size=(256, 256)
@@ -474,7 +396,6 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
         small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
         try:
             fig.savefig(full_path, dpi=settings.fig_dpi)
-            logger.info(f"Saved full-size wavelength: {wavelength} figure to {full_path} (dpi={settings.fig_dpi})")
             # Resize to 1024 - We avoid using MPL to resize the image to font issues
             with Image.open(str(full_path)) as full_jpeg:
                 resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
@@ -482,7 +403,6 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
                     resized_image.save(str(small_path))
                 finally:
                     resized_image.close()
-            logger.info(f"Saved resized wavelength: {wavelength} figure to {small_path} ({settings.resize_fig_size}px)")
         finally:
             plt.close(fig)
 
@@ -502,18 +422,9 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         Save directory for the plot.
     """
     with tempfile.TemporaryDirectory() as temp_dir:
-        logger.info(f"Starting SDO image creation for {requested_time:%Y-%m-%d %H:%M:%S} in {save_directory}")
-        logger.info(f"Using temporary directory for FITS downloads: {temp_dir}")
-        _log_memory_usage("start")
-        logger.info("Downloading AIA FITS files")
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
-        logger.info(f"Downloaded {len(aia_files)} AIA FITS files")
-        _log_memory_usage("after AIA download")
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
-        logger.info("Downloading HMI FITS files")
         hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
-        logger.info(f"Downloaded {len(hmi_files)} HMI FITS files")
-        _log_memory_usage("after HMI download")
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
@@ -521,43 +432,29 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         for aia_file in aia_files:
             aia_path = Path(aia_file)
             wavelength_key = aia_path.stem.split("_")[-1]
-            logger.info(f"Processing AIA {wavelength_key} from {aia_path.name}")
             aia_files_by_wavelength[wavelength_key] = aia_path
             aia_map = create_aia_map(aia_path)
             save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
-            logger.info(
-                f"Saved FITS output to {save_directory / WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits"
-            )
             save_figures([create_figure_from_map(aia_map)], save_directory)
             del aia_map
-        _log_memory_usage("after AIA processing")
 
         for hmi_file in hmi_files:
             hmi_path = Path(hmi_file)
             hmi_map = create_hmi_map(hmi_path)
-            logger.info(f"Processing HMI {hmi_map.measurement} from {hmi_path.name}")
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
             save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits")
-            logger.info(f"Saved FITS output to {save_directory / f'f{hmi_fits_name}.fits'}")
             save_figures([create_figure_from_map(hmi_map)], save_directory)
             del hmi_map
-        _log_memory_usage("after HMI processing")
 
         # RGB combinations
-        logger.info(f"Creating {len(RGB_COMBINATIONS)} RGB combinations")
         for rgb_comb in RGB_COMBINATIONS:
-            logger.info(f"Creating RGB combination {rgb_comb}")
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
             save_figures([create_rgb_figure_from_maps(maps)], save_directory)
             del maps
-        _log_memory_usage("after RGB combinations")
 
         # Blend combination is only HMI B_LOS and AIA 171
         hmi_blos = hmi_files_by_measurement["magnetogram"]
-        logger.info("Creating blended HMI/AIA combination (magnetogram + 171)")
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
         save_figures([create_blended_figure_from_maps(maps)], save_directory)
         del maps
-        _log_memory_usage("after blended combination")
-        logger.info("Finished SDO image creation")
