@@ -10,6 +10,8 @@ build-backend = 'setuptools.build_meta'
 name = "suntoday"
 dynamic = ["dependencies", "optional-dependencies", "version"]
 
+[tool.setuptools_scm]
+
 [tool.setuptools]
 zip-safe = false
 include-package-data = true
