@@ -1,14 +1,14 @@
 [build-system]
 requires = [
   "setuptools",
+  "setuptools_scm[toml]",
   "wheel",
 ]
 build-backend = 'setuptools.build_meta'
 
 [project]
 name = "suntoday"
-dynamic = ["dependencies", "optional-dependencies"]
-version = "1.0.0" # It don't matter
+dynamic = ["dependencies", "optional-dependencies", "version"]
 
 [tool.setuptools]
 zip-safe = false
