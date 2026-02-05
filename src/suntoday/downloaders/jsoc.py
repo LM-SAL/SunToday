@@ -56,8 +56,6 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
         "seg": segment,
     }
     response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60, verify=False)  # NOQA: S501
-    logger.info(f"JSOC request for {query} with params {params} returned {response.status_code}.")
-    logger.info(f"URL: {response.url}")
     if response.status_code != 200:
         msg = f"JSOC request failed with {response.status_code} and {response.text}."
         raise OSError(msg)
@@ -153,8 +151,6 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
             "seg": segment,
         }
         response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
-        logger.info(f"JSOC request for {query} with params {params} returned {response.status_code}.")
-        logger.info(f"URL: {response.url}")
         if response.status_code != 200:
             msg = f"JSOC request failed with {response.status_code} and {response.text}."
             raise OSError(msg)
@@ -217,8 +213,6 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
         "key": "DATE-OBS,WAVELNTH,DATAMEAN,QUALITY,EXPTIME",
     }
     response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60, verify=False)  # NOQA: S501
-    logger.info(f"JSOC request for {settings.jsoc_info_url} with params {params} returned {response.status_code}.")
-    logger.info(f"URL: {response.url}")
     if response.status_code != 200:
         msg = f"JSOC request failed with {response.status_code} and {response.text}."
         raise OSError(msg)

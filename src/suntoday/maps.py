@@ -46,9 +46,9 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"])
         cmap.set_bad(color="black")
         aia_map.plot_settings["cmap"] = cmap
-        aia_map._data[aia_map._data <= 1] = 0
-        aia_map._data[np.isnan(aia_map._data)] = 0
-        aia_map._data = aia_map._data.astype(int)
+        aia_map._data[aia_map._data <= 1] = 0  # NOQA: SLF001
+        aia_map._data[np.isnan(aia_map._data)] = 0  # NOQA: SLF001
+        aia_map._data = aia_map._data.astype(int)  # NOQA: SLF001
         return aia_map
 
 
@@ -77,7 +77,7 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
             cmap.set_bad(color="black")
             hmi_map.plot_settings["cmap"] = cmap
         if hmi_map.measurement == "continuum":
-            hmi_map._data[np.isnan(hmi_map._data)] = 0
+            hmi_map._data[np.isnan(hmi_map._data)] = 0  # NOQA: SLF001
             with np.errstate(all="ignore"):
-                hmi_map._data = hmi_map.data.astype(int)
+                hmi_map._data = hmi_map.data.astype(int)  # NOQA: SLF001
         return hmi_map
