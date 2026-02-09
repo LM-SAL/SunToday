@@ -7,6 +7,7 @@ import matplotlib as mpl
 mpl.use("module://mplcairo.base")
 
 import datetime
+import gc
 import tempfile
 from collections.abc import Iterable
 from pathlib import Path
@@ -405,6 +406,7 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
                     resized_image.close()
         finally:
             plt.close(fig)
+            gc.collect()
 
 
 def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
@@ -421,6 +423,8 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
     save_directory : pathlib.Path
         Save directory for the plot.
     """
+    # The reason the files are for looped is an attempt to keep memory use <4GB for the
+    # cheap VM on AWS.
     with tempfile.TemporaryDirectory() as temp_dir:
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
@@ -428,7 +432,6 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
-        # Stream single-channel outputs to keep memory bounded.
         for aia_file in aia_files:
             aia_path = Path(aia_file)
             wavelength_key = aia_path.stem.split("_")[-1]
@@ -437,6 +440,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
             save_figures([create_figure_from_map(aia_map)], save_directory)
             del aia_map
+            gc.collect()
 
         for hmi_file in hmi_files:
             hmi_path = Path(hmi_file)
@@ -446,15 +450,17 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits")
             save_figures([create_figure_from_map(hmi_map)], save_directory)
             del hmi_map
+            gc.collect()
 
-        # RGB combinations
         for rgb_comb in RGB_COMBINATIONS:
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
             save_figures([create_rgb_figure_from_maps(maps)], save_directory)
             del maps
+            gc.collect()
 
-        # Blend combination is only HMI B_LOS and AIA 171
+        # Blend combination is only HMI B_LOS and AIA 171 currently
         hmi_blos = hmi_files_by_measurement["magnetogram"]
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
         save_figures([create_blended_figure_from_maps(maps)], save_directory)
         del maps
+        gc.collect()
