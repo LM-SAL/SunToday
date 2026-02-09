@@ -83,7 +83,7 @@ def cli() -> None:
     args = _build_args().parse_args()
     root_save_directory = Path(args.root_save_directory) if args.root_save_directory else None
     if not args.requested_time:
-        scheduled(root_save_directory=root_save_directory)
+        scheduled()
         return
     requested_time = parse_time(args.requested_time)
     main_job(requested_time=requested_time, root_save_directory=root_save_directory)
