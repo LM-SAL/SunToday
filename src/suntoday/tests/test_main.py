@@ -62,7 +62,7 @@ def test_images_creation(db_session, mocker, tmpdir) -> None:
 
     mocker.patch("suntoday.main.serverless_function", return_value=lambda x: x)
     # Hardcode the datetime to ensure consistent test results
-    create_images(session, "images", datetime(2025, 7, 23, 14, 0, 0, tzinfo=UTC), Path(tmpdir))
+    create_images(session, "images", datetime(2026, 6, 11, 14, 0, 0, tzinfo=UTC), Path(tmpdir))
 
     assert session.query(SDOImages).count() == 1
     model = session.query(SDOImages).first()
