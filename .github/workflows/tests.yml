@@ -5,20 +5,47 @@ on:
   workflow_dispatch:
 
 jobs:
-  tests:
-    name: Run unit tests
+  offline:
+    name: Offline unit tests
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
           lfs: true
           submodules: recursive
+      - name: Install cairo build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
-        uses: actions/setup-python@v6
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
-          python-version: "3.14"
+          # Match the Docker runtime. mplcairo has no cp314 wheel yet.
+          python-version: "3.13"
       - name: Install tox
         run: python -m pip install --upgrade pip tox
-      - name: Run unit tests
+      - name: Run offline unit tests
         run: tox -e py
+
+  online:
+    name: Online (remote-data) unit tests
+    needs: offline
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
+        with:
+          lfs: true
+          submodules: recursive
+      - name: Install cairo build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - name: Set up Python
+        uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: "3.13"
+      - name: Install tox
+        run: python -m pip install --upgrade pip tox
+      - name: Run online unit tests
+        env:
+          SUNTODAY_JSOC_USER: ${{ secrets.SUNTODAY_JSOC_USER }}
+          SUNTODAY_JSOC_PASSWORD: ${{ secrets.SUNTODAY_JSOC_PASSWORD }}
+        run: tox -e py-online

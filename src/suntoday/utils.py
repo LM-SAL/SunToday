@@ -2,7 +2,10 @@
 Utility functions for image processing and visualization.
 """
 
+import uuid
 import warnings
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
@@ -10,7 +13,44 @@ import sunpy.map as smap
 from astropy.io.fits import CompImageHDU
 from astropy.io.fits.verify import VerifyWarning
 
-__all__ = ["apply_gamma_correction", "clip_image_percentiles", "normalize_image_percentiles", "save_fits"]
+__all__ = [
+    "apply_gamma_correction",
+    "atomic_save",
+    "clip_image_percentiles",
+    "normalize_image_percentiles",
+    "save_fits",
+]
+
+
+@contextmanager
+def atomic_save(final_path: Path) -> Iterator[Path]:
+    """
+    Write to a sibling temp file and atomically move it into place on success.
+
+    Prevents readers (e.g. the webpage) from ever seeing a half-written file,
+    and avoids leaving a corrupt file behind if writing fails mid-way. The
+    temp file lives in the same directory so ``Path.replace`` is atomic.
+
+    The temp file keeps the final extension (``f171.tmp-<unique>.jpg``) so that
+    format-from-extension writers (matplotlib, PIL, sunpy) still work.
+
+    Parameters
+    ----------
+    final_path : pathlib.Path
+        The destination path. The caller writes to the yielded temp path.
+
+    Yields
+    ------
+    pathlib.Path
+        The temp path to write to.
+    """
+    final_path = Path(final_path)
+    tmp_path = final_path.with_name(f"{final_path.stem}.tmp-{uuid.uuid4().hex}{final_path.suffix}")
+    try:
+        yield tmp_path
+        tmp_path.replace(final_path)
+    finally:
+        tmp_path.unlink(missing_ok=True)
 
 
 def clip_image_percentiles(
@@ -116,5 +156,6 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Non
         # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
         warnings.simplefilter("ignore", category=VerifyWarning)
         # Empty keyword somehow and it raises a warning we want to remove.
-        amap.meta.pop("")
-        amap.save(save_directory / filename, overwrite=True, hdu_type=CompImageHDU)
+        amap.meta.pop("", None)
+        with atomic_save(save_directory / filename) as tmp_path:
+            amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)

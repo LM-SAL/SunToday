@@ -30,7 +30,9 @@ RUN rm -rf /app/wheels
 
 COPY . /app
 WORKDIR /app
-RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install /app/.
+# --no-deps: dependencies are already installed from the pinned wheels above.
+# Without it, this would re-resolve deps off PyPI and could drift from the pins.
+RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install --no-deps /app/.
 
 # This is set to avoid any potential issues with downloading files
 ENV PARFIVE_TOTAL_TIMEOUT=100

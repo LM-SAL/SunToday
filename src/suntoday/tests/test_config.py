@@ -2,16 +2,23 @@ import os
 from pathlib import Path
 
 
-def test_settings_no_env() -> None:
+def test_settings_no_env(monkeypatch) -> None:
     # This will only pass if you have removed the .env file
+    monkeypatch.delenv("SUNTODAY_DB_URL", raising=False)
+
     from suntoday.config import Settings
 
     # Test that the default settings are correct
     settings = Settings()
+    assert settings.cron_frequency == 10
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    # Should be overridden by the conftest.py fixture
+    # Should be overridden by tox.
     assert settings.test_env is True
+    expected_db_url = (
+        f"postgresql+psycopg2://{settings.db_user}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
+    )
+    assert settings.db_url == expected_db_url
 
 
 def test_settings_with_env() -> None:

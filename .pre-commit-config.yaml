@@ -11,19 +11,19 @@ repos:
             "--remove-unused-variable",
           ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.15.9"
+    rev: "v0.15.19"
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--preview"]
       - id: ruff-format
         args: ["--preview"]
   - repo: https://github.com/PyCQA/docformatter
-    rev: v1.7.7
+    rev: v1.7.8
     hooks:
       - id: docformatter
         args: ["--make-summary-multi-line", "--pre-summary-newline", "-ri"]
   - repo: https://github.com/JoC0de/pre-commit-prettier
-    rev: v3.8.1
+    rev: v3.8.4
     hooks:
       - id: prettier
         types_or: [css, scss, javascript, rst, json, yaml, toml, markdown]

@@ -81,13 +81,7 @@ def create_db(uri=None, *, echo: bool = False):
     from suntoday.config import Settings
 
     settings = Settings()
-    uri = uri or settings.db_url.format(
-        db_user=settings.db_user,
-        db_password=settings.db_password,
-        db_host=settings.db_host,
-        db_port=settings.db_port,
-        db_name=settings.db_name,
-    )
+    uri = uri or settings.db_url
     engine = create_engine(uri, echo=echo, connect_args={"options": "-c timezone=utc"})
     if not database_exists(engine.url):
         msg = f"Creating database at {engine.url}"
@@ -122,13 +116,7 @@ def get_session(uri=None, *, echo: bool = False) -> Session:
     from suntoday.config import Settings
 
     settings = Settings()
-    uri = uri or settings.db_url.format(
-        db_user=settings.db_user,
-        db_password=settings.db_password,
-        db_host=settings.db_host,
-        db_port=settings.db_port,
-        db_name=settings.db_name,
-    )
+    uri = uri or settings.db_url
     engine = create_engine(uri, echo=echo)
     session = sessionmaker(bind=engine)
     return session()
@@ -234,7 +222,7 @@ def write_or_update_record(
     if model_class is None:
         msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
         raise ValueError(msg)
-    try:
+    try:  # NOQA: PLW0717
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
             logger.info(f"Found existing {model_type} record for {obs_date}")

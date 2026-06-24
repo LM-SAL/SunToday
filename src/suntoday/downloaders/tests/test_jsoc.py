@@ -1,11 +1,13 @@
 from datetime import UTC, datetime, timedelta
 
 import pandas as pd
+import pytest
 
 from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_aia_timeseries, fetch_hmi_fits, get_aia_urls, get_hmi_urls
 
 
+@pytest.mark.remote_data
 def test_get_aia_urls() -> None:
     aia_urls = get_aia_urls(datetime.now(UTC) - timedelta(days=2))
     assert isinstance(aia_urls, pd.DataFrame)
@@ -27,6 +29,7 @@ def test_get_aia_urls() -> None:
     assert aia_urls["EXPTIME"].dtype == "float64"
 
 
+@pytest.mark.remote_data
 def test_get_hmi_urls() -> None:
     hmi_urls = get_hmi_urls(datetime.now(UTC) - timedelta(days=2))
     assert isinstance(hmi_urls, pd.DataFrame)
@@ -37,6 +40,7 @@ def test_get_hmi_urls() -> None:
     assert str(hmi_urls["WAVELNTH"].dtype) == "str"
 
 
+@pytest.mark.remote_data
 def test_fetch_aia_fits(tmp_path) -> None:
     files = fetch_aia_fits(datetime.now(UTC) - timedelta(days=2), time_span="36s", save_directory=tmp_path)
     assert len(files) == 9
@@ -45,6 +49,7 @@ def test_fetch_aia_fits(tmp_path) -> None:
     assert set(all_wavelengths) == set(AIA_WAVELENGTHS)
 
 
+@pytest.mark.remote_data
 def test_fetch_hmi_fits(tmp_path) -> None:
     files = fetch_hmi_fits(datetime.now(UTC) - timedelta(days=2), save_directory=tmp_path)
     assert len(files) == 2
@@ -53,6 +58,7 @@ def test_fetch_hmi_fits(tmp_path) -> None:
     assert set(all_wavelengths) == {"magnetogram", "continuum"}
 
 
+@pytest.mark.remote_data
 def test_fetch_aia_timeseries() -> None:
     aia_ts = fetch_aia_timeseries(datetime.now(UTC) - timedelta(days=2))
     assert isinstance(aia_ts, pd.DataFrame)

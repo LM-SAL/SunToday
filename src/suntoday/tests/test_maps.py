@@ -11,7 +11,7 @@ def test_create_aia_171_map(aia_171_test_file) -> None:
     aia_map = create_aia_map(aia_171_test_file)
     assert isinstance(aia_map, smap.GenericMap)
     assert aia_map.meta["wavelnth"] == 171
-    assert aia_map.meta["exptime"] == 1.0
+    assert aia_map.meta["exptime"] == 1.0  # NOQA: RUF069
     assert aia_map.meta["bunit"] == "ct / s"
 
 
