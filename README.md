@@ -43,7 +43,8 @@ In future if we want to add movie support it will need to produce the following:
 
 This is set up to run on a docker container.
 Mount points are configured by the docker-compose.yml file.
-The images are updated on a 10-minute cadence.
+The images are regenerated on a fixed cadence, configurable via
+`SUNTODAY_CRON_FREQUENCY` (minutes, default 30).
 
 ## Setup
 
