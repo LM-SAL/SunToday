@@ -33,9 +33,11 @@ class Settings(BaseSettings):
     jsoc_base_url: str = "http://jsoc.stanford.edu"
     jsoc_delay: int = 120  # minutes
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    jsoc_password: str = "hmiteam"  # NOQA: S105
+    # Credentials for the authenticated test data series. Not shipped in code:
+    # set SUNTODAY_JSOC_USER / SUNTODAY_JSOC_PASSWORD via .env or CI secrets.
+    jsoc_password: str = ""
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
-    jsoc_user: str = "hmiteam"
+    jsoc_user: str = ""
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels

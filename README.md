@@ -105,15 +105,20 @@ You can find them by running:
 ```bash
 $ tox -l
 py
+py-online
 py-figure
-py-figure-generate
 codestyle
 ```
 
-The first one (py) will run all of the tests with the Python version you are using.
-The second one (py-figure) will run the figure tests and check the hashes to the PNGs stored in the repository.
-The third one (py-figure-generate) will generate the test PNGs stored in the repository.
-Final one (codestyle) is a check for the automated coding tools.
+- `py` runs the offline tests only; the network (remote-data) tests are skipped.
+- `py-online` runs the network tests. These hit the JSOC test server, so you must
+  provide credentials via `SUNTODAY_JSOC_USER` and `SUNTODAY_JSOC_PASSWORD`
+  (e.g. exported in your shell or in a `.env` file).
+- `py-figure` compares only deterministic figure tests against the stored baselines.
+- `codestyle` is a check for the automated coding tools.
+
+To update stored figure baselines, run `tox -e py-figure-generate`. This also
+generates live remote-data figures when the JSOC credentials are available.
 
 ## Future Work
 
