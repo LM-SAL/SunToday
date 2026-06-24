@@ -10,7 +10,7 @@ def test_settings_no_env() -> None:
     settings = Settings()
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    # Should be overridden by the conftest.py fixture
+    # Should be overridden by tox.
     assert settings.test_env is True
 
 

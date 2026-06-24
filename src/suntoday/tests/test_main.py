@@ -7,12 +7,30 @@ from suntoday.db import SDOImages, TimeSeriesImages
 from suntoday.main import create_images
 
 
+@pytest.fixture
+def _clean_image_tables(db_session):
+    """
+    Clear the record tables so each test starts from an empty database.
+
+    The ``db_session`` fixture is session-scoped, so rows written by
+    earlier tests (e.g. in ``test_db``) would otherwise leak into these
+    tests.
+    """
+    session = db_session()
+    session.query(SDOImages).delete()
+    session.query(TimeSeriesImages).delete()
+    session.commit()
+    session.close()
+
+
 def test_create_images_invalid_type(mocker) -> None:
     mocker.patch("suntoday.main.serverless_function", return_value=lambda x: x)
     with pytest.raises(ValueError, match="Invalid image type: invalid_type"):
         create_images("", "invalid_type", datetime.now(UTC), "")
 
 
+@pytest.mark.remote_data
+@pytest.mark.usefixtures("_clean_image_tables")
 def test_timeseries_creation(db_session, mocker, tmpdir) -> None:
     session = db_session()
     assert session.query(TimeSeriesImages).count() == 0
@@ -36,6 +54,8 @@ def test_timeseries_creation(db_session, mocker, tmpdir) -> None:
     session.close()
 
 
+@pytest.mark.remote_data
+@pytest.mark.usefixtures("_clean_image_tables")
 def test_images_creation(db_session, mocker, tmpdir) -> None:
     session = db_session()
     assert session.query(SDOImages).count() == 0

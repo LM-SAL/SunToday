@@ -17,6 +17,13 @@ from suntoday.lightcurve import (
 )
 
 
+def _has_jsoc_credentials() -> bool:
+    from suntoday.config import Settings
+
+    settings = Settings()
+    return bool(settings.jsoc_user and settings.jsoc_password)
+
+
 @pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_plot_goes_secondary_timeseries(goes_secondary_timeseries):
     fig, ax = plt.subplots(1, 1)
@@ -43,6 +50,8 @@ def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
+@pytest.mark.remote_data
+@pytest.mark.skipif(not _has_jsoc_credentials(), reason="JSOC test credentials are not configured.")
 @pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
 def test_lightcurve_figure_latest():
     from suntoday.downloaders.goes import fetch_goes_timeseries
@@ -53,6 +62,7 @@ def test_lightcurve_figure_latest():
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
+@pytest.mark.remote_data
 def test_create_lightcurve_figure(tmpdir) -> None:
     datetime_now = datetime.now(UTC)
     create_lightcurve_figure(datetime_now, tmpdir)

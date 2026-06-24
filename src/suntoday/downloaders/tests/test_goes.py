@@ -1,8 +1,10 @@
 import pandas as pd
+import pytest
 
 from suntoday.downloaders.goes import fetch_goes_timeseries
 
 
+@pytest.mark.remote_data
 def test_fetch_goes_timeseries() -> None:
     goes_16, goes_18 = fetch_goes_timeseries()
     for dataframe in [goes_16, goes_18]:
