@@ -95,8 +95,9 @@ def create_images(
     database_session: Session, image_type: str, requested_time: datetime.datetime, save_directory: Path
 ) -> None:
     """
-    Create images for the requested time. It checks if the nearest record and
-    the observation date are within a reasonable range. If not, it creates SDO
+    Create images for the requested time.
+
+    It checks if the nearest record and the observation date are within a reasonable range. If not, it creates SDO
     images and updates the record in the database.
 
     Parameters
@@ -136,7 +137,7 @@ def create_images(
     logger.info(f"{image_type} creation and record update completed")
 
 
-@catch_exceptions(cancel_on_failure=True)
+@catch_exceptions(cancel_on_failure=False)
 def main_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
     """
     Main job to create SDO Images and lightcurve images.
@@ -164,6 +165,7 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     logger.info(f"Requested time: {requested_time}, Save directory: {save_directory}")
     logger.info("Checking and creating database if necessary")
     engine = create_db()
+    session = None
     try:
         session = sessionmaker(bind=engine)()
         logger.info("Creating SDO Images")
@@ -173,7 +175,8 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     except Exception as e:  # NOQA : BLE001
         logger.exception(f"Error occurred: {e}")
     finally:
-        session.close()
+        if session is not None:
+            session.close()
         engine.dispose()
     logger.info("Main job completed")
 
