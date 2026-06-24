@@ -146,7 +146,7 @@ def _adjust_rgb_contrast(rgb: np.ndarray, contrast: float) -> np.ndarray:
     np.ndarray
         RGB image data with adjusted contrast, clipped to [0, 1].
     """
-    if contrast == 1.0:
+    if contrast == 1.0:  # NOQA: RUF069
         return rgb
     rgb = np.asarray(rgb, dtype=np.float32)
     # Be defensive if upstream values drift slightly outside [0, 1].

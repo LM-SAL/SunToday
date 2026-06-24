@@ -222,7 +222,7 @@ def write_or_update_record(
     if model_class is None:
         msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
         raise ValueError(msg)
-    try:
+    try:  # NOQA: PLW0717
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
             logger.info(f"Found existing {model_type} record for {obs_date}")
