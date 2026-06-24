@@ -2,6 +2,7 @@
 Utility functions for image processing and visualization.
 """
 
+import uuid
 import warnings
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -28,9 +29,9 @@ def atomic_save(final_path: Path) -> Iterator[Path]:
 
     Prevents readers (e.g. the webpage) from ever seeing a half-written file,
     and avoids leaving a corrupt file behind if writing fails mid-way. The
-    temp file lives in the same directory so ``os.replace`` is atomic.
+    temp file lives in the same directory so ``Path.replace`` is atomic.
 
-    The temp file keeps the final extension (``f171.tmp.jpg``) so that
+    The temp file keeps the final extension (``f171.tmp-<unique>.jpg``) so that
     format-from-extension writers (matplotlib, PIL, sunpy) still work.
 
     Parameters
@@ -44,13 +45,12 @@ def atomic_save(final_path: Path) -> Iterator[Path]:
         The temp path to write to.
     """
     final_path = Path(final_path)
-    tmp_path = final_path.with_name(final_path.stem + ".tmp" + final_path.suffix)
+    tmp_path = final_path.with_name(f"{final_path.stem}.tmp-{uuid.uuid4().hex}{final_path.suffix}")
     try:
         yield tmp_path
         tmp_path.replace(final_path)
-    except BaseException:
+    finally:
         tmp_path.unlink(missing_ok=True)
-        raise
 
 
 def clip_image_percentiles(
