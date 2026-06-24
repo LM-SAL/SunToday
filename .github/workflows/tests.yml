@@ -14,6 +14,8 @@ jobs:
         with:
           lfs: true
           submodules: recursive
+      - name: Install cairo build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
@@ -26,6 +28,7 @@ jobs:
 
   online:
     name: Online (remote-data) unit tests
+    needs: offline
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -33,6 +36,8 @@ jobs:
         with:
           lfs: true
           submodules: recursive
+      - name: Install cairo build deps
+        run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
         uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
         with:
