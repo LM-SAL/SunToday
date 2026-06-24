@@ -261,7 +261,7 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         ]
         stretch = LogStretch(100)
     # This looks nice for RGB 2 (211, 193, 171)
-    if maps[0].wavelength.value == 211:
+    elif maps[0].wavelength.value == 211:
         intervals = [
             ManualInterval(vmin=0, vmax=maximum * 0.3),
             ManualInterval(vmin=0, vmax=maximum * 0.9),
@@ -269,13 +269,16 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         ]
         stretch = AsinhStretch(0.04)
     # This looks nice for RGB 3 (304, 211, 171)
-    if maps[0].wavelength.value == 304:
+    elif maps[0].wavelength.value == 304:
         intervals = [
             ManualInterval(vmin=0, vmax=maximum),
             ManualInterval(vmin=0, vmax=maximum),
             ManualInterval(vmin=0, vmax=maximum),
         ]
         stretch = AsinhStretch(0.04)
+    else:
+        msg = f"No RGB stretch/interval defined for lead wavelength {maps[0].wavelength.value}."
+        raise ValueError(msg)
     rgb = make_rgb(maps[0].data, maps[1].data, maps[2].data, stretch=stretch, interval=intervals)
     rgb = _adjust_rgb_contrast(rgb, settings.rgb_contrast)
     ax.imshow(rgb, origin="lower")
