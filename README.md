@@ -43,8 +43,7 @@ In future if we want to add movie support it will need to produce the following:
 
 This is set up to run on a docker container.
 Mount points are configured by the docker-compose.yml file.
-The images are regenerated on a fixed cadence, configurable via
-`SUNTODAY_CRON_FREQUENCY` (minutes, default 30).
+The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
 
 ## Setup
 
@@ -112,14 +111,12 @@ codestyle
 ```
 
 - `py` runs the offline tests only; the network (remote-data) tests are skipped.
-- `py-online` runs the network tests. These hit the JSOC test server, so you must
-  provide credentials via `SUNTODAY_JSOC_USER` and `SUNTODAY_JSOC_PASSWORD`
-  (e.g. exported in your shell or in a `.env` file).
+- `py-online` runs the network tests. These hit the JSOC test server, so you must provide credentials via `SUNTODAY_JSOC_USER` and `SUNTODAY_JSOC_PASSWORD` (e.g. exported in your shell or in a `.env` file).
 - `py-figure` compares only deterministic figure tests against the stored baselines.
 - `codestyle` is a check for the automated coding tools.
 
-To update stored figure baselines, run `tox -e py-figure-generate`. This also
-generates live remote-data figures when the JSOC credentials are available.
+To update stored figure baselines, run `tox -e py-figure-generate`.
+This also generates live remote-data figures when the JSOC credentials are available.
 
 ## Future Work
 

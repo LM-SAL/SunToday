@@ -23,7 +23,7 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="suntoday_",
     )
-    cron_frequency: int = 30  # minutes
+    cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_password: str = "suntoday_user_password"  # NOQA: S105
