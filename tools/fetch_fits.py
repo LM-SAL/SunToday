@@ -6,6 +6,7 @@ Useful for getting updated test data.
 Downloads into the current working directory. The files will need to be
 moved to the test data directory manually.
 """
+
 import os
 os.environ["SUNTODAY_TEST_ENV"] = "True"  # Has to be set before importing anything from SunToday
 

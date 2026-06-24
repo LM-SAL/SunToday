@@ -1,5 +1,3 @@
-import os
-
 import pandas as pd
 import pytest
 import sunpy.map as smap
@@ -13,16 +11,6 @@ from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 test_db = factories.postgresql_proc(port=None, dbname="test_db")
-
-
-@pytest.fixture(scope="session", autouse=True)
-def _setup_test_env(request):  # NOQA: ARG001
-    """
-    Globally set the test environment.
-    """
-    os.environ["SUNTODAY_TEST_ENV"] = "True"
-    yield
-    del os.environ["SUNTODAY_TEST_ENV"]
 
 
 @pytest.fixture(scope="session")

@@ -266,6 +266,7 @@ def test_create_sdo_images_offline(  # NOQA: PLR0917
         assert file.basename in canonical_filelist
 
 
+@pytest.mark.remote_data
 def test_create_sdo_images_online(tmpdir) -> None:
     assert len(tmpdir.listdir()) == 0
     create_sdo_images(datetime.now(UTC) - timedelta(hours=2), tmpdir)

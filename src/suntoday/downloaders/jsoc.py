@@ -19,6 +19,38 @@ from suntoday.downloaders.downloader import create_downloader
 __all__ = ["fetch_aia_fits", "fetch_aia_timeseries", "fetch_hmi_fits", "get_aia_urls", "get_hmi_urls"]
 
 
+def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
+    """
+    Build the JSOC basic-auth from configured credentials.
+
+    Authentication is only used for the test data series (``test_env``). The
+    credentials are not shipped in the code: set ``SUNTODAY_JSOC_USER`` and
+    ``SUNTODAY_JSOC_PASSWORD`` (e.g. in your ``.env`` or CI secrets).
+
+    Parameters
+    ----------
+    settings : Settings
+        The application settings.
+
+    Returns
+    -------
+    requests.auth.HTTPBasicAuth | None
+        The auth object when ``test_env`` is set, otherwise ``None``.
+
+    Raises
+    ------
+    ValueError
+        If ``test_env`` is set but the credentials are not configured.
+    """
+    if not settings.test_env:
+        return None
+    if not (settings.jsoc_user and settings.jsoc_password):
+        msg = "test_env is set but SUNTODAY_JSOC_USER / SUNTODAY_JSOC_PASSWORD are not configured."
+        raise ValueError(msg)
+    logger.warning("Using test environment credentials for JSOC.")
+    return HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
+
+
 def _get_urls(query: str, keywords: str, segment: str) -> dict:
     """
     For a given query, keywords and segment query the JSOC.
@@ -45,17 +77,14 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
         If the JSOC response has missing required keys.
     """
     settings = Settings()
-    auth = None
-    if settings.test_env:
-        logger.warning("Using test environment credentials for JSOC.")
-        auth = HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
+    auth = _jsoc_auth(settings)
     params = {
         "ds": query,
         "op": "rs_list",
         "key": keywords,
         "seg": segment,
     }
-    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60, verify=False)  # NOQA: S501
+    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
         msg = f"JSOC request failed with {response.status_code} and {response.text}."
         raise OSError(msg)
@@ -137,10 +166,7 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
         If no data is returned.
     """
     settings = Settings()
-    auth = None
-    if settings.test_env:
-        logger.warning("Using test environment credentials for JSOC.")
-        auth = HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
+    auth = _jsoc_auth(settings)
     keyword_store = {"T_REC": [], "WAVELNTH": []}
     segment_store = {"URL": []}
     for query, segment in [("lm_jps.m45s_nrt[{}]", "magnetogram"), ("lm_jps.Ic_45s[{}]", "continuum")]:
@@ -154,11 +180,12 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
         if response.status_code != 200:
             msg = f"JSOC request failed with {response.status_code} and {response.text}."
             raise OSError(msg)
-        if "keywords" not in response.json() or "segments" not in response.json():
-            msg = f"JSOC request returned with no data but with {response.json()}."
+        json_response = response.json()
+        if "keywords" not in json_response or "segments" not in json_response:
+            msg = f"JSOC request returned with no data but with {json_response}."
             raise ValueError(msg)
-        keywords = response.json()["keywords"]
-        segments = response.json()["segments"]
+        keywords = json_response["keywords"]
+        segments = json_response["segments"]
         if len(keywords[0]["values"]) == 0:
             msg = f"No data found for {params['ds']}."
             raise ValueError(msg)
@@ -202,17 +229,14 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     """
     settings = Settings()
     start_time = end_time - timedelta(days=1)
-    auth = None
-    if settings.test_env:
-        logger.warning("Using test environment credentials for JSOC.")
-        auth = HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
+    auth = _jsoc_auth(settings)
     params = {
         # Sampling does not work on this series.
         "ds": f"aia_test.lev1p5[{start_time.strftime(settings.jsoc_str_fmt)}-{end_time.strftime(settings.jsoc_str_fmt)}]",
         "op": "rs_list",
         "key": "DATE-OBS,WAVELNTH,DATAMEAN,QUALITY,EXPTIME",
     }
-    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60, verify=False)  # NOQA: S501
+    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
         msg = f"JSOC request failed with {response.status_code} and {response.text}."
         raise OSError(msg)

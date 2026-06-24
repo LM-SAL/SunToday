@@ -1,16 +1,12 @@
 """
-Contains SSL disabled downloaders due to the local proxy.
+Parfive downloader for the JSOC FITS files.
 
-This won't be needed in production but it doesn't matter anyway.
+All JSOC endpoints are plain HTTP, so there is no TLS to configure here.
 """
-
-import ssl
 
 from parfive import SessionConfig
 
 __all__ = ["create_downloader"]
-
-ssl._create_default_https_context = ssl._create_unverified_context  # NOQA: SLF001 S323
 
 
 def create_session(*args, **kwargs):  # NOQA: ARG001

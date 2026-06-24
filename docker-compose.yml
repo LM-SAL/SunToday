@@ -32,11 +32,17 @@ services:
       start_period: 10s
     volumes:
       - ./pgdata:/var/lib/postgresql/data:Z
-    ports:
-      - 5432:5432
+    # No host port published: the app and adminer reach the DB over the internal
+    # compose network, so the raw trust-auth Postgres port is never exposed.
 
+  # DB browser. Reaches the DB internally (System: PostgreSQL, Server: db,
+  # User: suntoday_user, Database: suntoday, no password). Only its web UI is
+  # published, not the Postgres port.
   adminer:
     image: adminer
     restart: always
+    depends_on:
+      db:
+        condition: service_healthy
     ports:
       - 1234:8080

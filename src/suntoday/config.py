@@ -4,6 +4,7 @@ Provide full config support for the entire library.
 
 from pathlib import Path
 
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 __all__ = ["Settings"]
@@ -22,20 +23,24 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         env_prefix="suntoday_",
     )
-    cron_frequency: int = 30  # minutes
+    cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_password: str = "suntoday_user_password"  # NOQA: S105
     db_port: int = 5432
     db_user: str = "suntoday_user"
-    db_url: str = f"postgresql+psycopg2://{db_user}@{db_host}:{db_port}/{db_name}"
+    # Built from the db_* components below if not set explicitly via env.
+    # Password is intentionally omitted: the container DB uses trust auth.
+    db_url: str = ""
     fig_dpi: int = 300
     jsoc_base_url: str = "http://jsoc.stanford.edu"
     jsoc_delay: int = 120  # minutes
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    jsoc_password: str = "hmiteam"  # NOQA: S105
+    # Credentials for the authenticated test data series. Not shipped in code:
+    # set SUNTODAY_JSOC_USER / SUNTODAY_JSOC_PASSWORD via .env or CI secrets.
+    jsoc_password: str = ""
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
-    jsoc_user: str = "hmiteam"
+    jsoc_user: str = ""
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
@@ -46,3 +51,9 @@ class Settings(BaseSettings):
     test_env: bool = False
     timeseries_fig_x_size: float = (1024 * 2) / fig_dpi  # pixels / dpi = inches
     timeseries_fig_y_size: float = (1024 * 6) / fig_dpi  # pixels / dpi = inches
+
+    @model_validator(mode="after")
+    def _build_db_url(self) -> "Settings":
+        if not self.db_url:
+            self.db_url = f"postgresql+psycopg2://{self.db_user}@{self.db_host}:{self.db_port}/{self.db_name}"
+        return self
