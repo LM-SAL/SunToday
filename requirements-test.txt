@@ -3,3 +3,4 @@ pytest-astropy
 pytest-mock
 pytest-mpl
 pytest-postgresql
+pytest-xdist
