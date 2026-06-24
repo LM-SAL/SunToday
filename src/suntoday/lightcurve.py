@@ -9,7 +9,6 @@ mpl.use("module://mplcairo.base")  # Or other mplcairo backend
 from datetime import datetime
 from pathlib import Path
 
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import dates, ticker
@@ -17,6 +16,7 @@ from matplotlib import dates, ticker
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_COLORS, AIA_WAVELENGTHS
+from suntoday.utils import atomic_save
 
 __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figure", "plot_lightcurve_from_timeseries"]
 
@@ -163,9 +163,12 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> None:
     goes_primary_timeseries, _goes_secondary_timeseries = fetch_goes_timeseries()
     fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
     plot_path = save_directory / f"lightcurve_{end_time:%Y%m%d}.png"
-    fig.savefig(str(plot_path), dpi=fig.dpi)
+    with atomic_save(plot_path) as tmp_path:
+        fig.savefig(str(tmp_path), dpi=fig.dpi)
     plt.close(fig)
     aia_path = save_directory / "aia_light_curves.txt"
-    aia_timeseries.to_csv(aia_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
+    with atomic_save(aia_path) as tmp_path:
+        aia_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
     goes_path = save_directory / "goes_light_curves.txt"
-    goes_primary_timeseries.to_csv(goes_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
+    with atomic_save(goes_path) as tmp_path:
+        goes_primary_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")

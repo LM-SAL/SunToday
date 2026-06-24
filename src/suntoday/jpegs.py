@@ -31,7 +31,7 @@ from suntoday.maps import (
     create_aia_map,
     create_hmi_map,
 )
-from suntoday.utils import save_fits
+from suntoday.utils import atomic_save, save_fits
 
 __all__ = [
     "create_blended_figure_from_maps",
@@ -396,14 +396,15 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
         full_path = save_directory / settings.sdo_fig_name_large.format(wavelength)
         small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
         try:
-            fig.savefig(full_path, dpi=settings.fig_dpi)
-            # Resize to 1024 - We avoid using MPL to resize the image to font issues
-            with Image.open(str(full_path)) as full_jpeg:
-                resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
-                try:
-                    resized_image.save(str(small_path))
-                finally:
-                    resized_image.close()
+            with atomic_save(full_path) as full_tmp:
+                fig.savefig(full_tmp, dpi=settings.fig_dpi)
+                # Resize to 1024 - We avoid using MPL to resize the image to font issues
+                with atomic_save(small_path) as small_tmp, Image.open(str(full_tmp)) as full_jpeg:
+                    resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
+                    try:
+                        resized_image.save(str(small_tmp))
+                    finally:
+                        resized_image.close()
         finally:
             plt.close(fig)
             gc.collect()
