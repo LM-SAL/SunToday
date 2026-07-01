@@ -4,7 +4,7 @@ Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
 
 import matplotlib as mpl
 
-mpl.use("module://mplcairo.base")  # Or other mplcairo backend
+mpl.use("module://mplcairo.base")
 
 from datetime import datetime
 from pathlib import Path

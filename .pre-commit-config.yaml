@@ -11,7 +11,7 @@ repos:
             "--remove-unused-variable",
           ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.15.19"
+    rev: "v0.15.20"
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--preview"]
@@ -23,7 +23,7 @@ repos:
       - id: docformatter
         args: ["--make-summary-multi-line", "--pre-summary-newline", "-ri"]
   - repo: https://github.com/JoC0de/pre-commit-prettier
-    rev: v3.8.4
+    rev: v3.9.4
     hooks:
       - id: prettier
         types_or: [css, scss, javascript, rst, json, yaml, toml, markdown]
@@ -40,13 +40,10 @@ repos:
       - id: mixed-line-ending
         args: ["--fix=lf"]
       - id: trailing-whitespace
-  - repo: https://github.com/codespell-project/codespell
-    rev: v2.4.2
+  - repo: https://github.com/adhtruong/mirrors-typos
+    rev: v1.48.0
     hooks:
-      - id: codespell
-        additional_dependencies:
-          - tomli
-        args: ["--write-changes"]
+      - id: typos
 ci:
   autofix_prs: false
   autoupdate_schedule: "quarterly"
