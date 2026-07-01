@@ -13,77 +13,77 @@ from suntoday.jpegs import (
 from suntoday.maps import create_aia_map, create_hmi_map
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_1700(aia_1700_test_file):
     aia_map = create_aia_map(aia_1700_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_1600(aia_1600_test_file):
     aia_map = create_aia_map(aia_1600_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_335(aia_335_test_file):
     aia_map = create_aia_map(aia_335_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_304(aia_304_test_file):
     aia_map = create_aia_map(aia_304_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_211(aia_211_test_file):
     aia_map = create_aia_map(aia_211_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_193(aia_193_test_file):
     aia_map = create_aia_map(aia_193_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_171(aia_171_test_file):
     aia_map = create_aia_map(aia_171_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_aia_94(aia_94_test_file):
     aia_map = create_aia_map(aia_94_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_hmi_blos(hmi_blos_test_file):
     hmi_map = create_hmi_map(hmi_blos_test_file)
     _, fig = create_figure_from_map(hmi_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_figure_from_map_hmi_cont(hmi_cont_test_file):
     hmi_map = create_hmi_map(hmi_cont_test_file)
     _, fig = create_figure_from_map(hmi_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
     aia_171_map = create_aia_map(aia_171_test_file)
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
@@ -91,7 +91,7 @@ def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_193_test_file):
     aia_94_map = create_aia_map(aia_94_test_file)
     aia_335_map = create_aia_map(aia_335_test_file)
@@ -100,7 +100,7 @@ def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia_171_test_file):
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_193_map = create_aia_map(aia_193_test_file)
@@ -109,7 +109,7 @@ def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia
     return fig
 
 
-@pytest.mark.mpl_image_compare(savefig_kwargs={"format": "svg"}, style="default", deterministic=True)
+@pytest.mark.mpl_image_compare
 def test_create_rgb_figure_from_maps_3(aia_304_test_file, aia_211_test_file, aia_171_test_file):
     aia_304_map = create_aia_map(aia_304_test_file)
     aia_211_map = create_aia_map(aia_211_test_file)

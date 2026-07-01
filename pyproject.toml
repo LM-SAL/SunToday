@@ -24,5 +24,7 @@ where = ["src"]
 dependencies = {file = ["requirements.txt"]}
 optional-dependencies = {test = { file = ["requirements-test.txt"] }}
 
-[tool.codespell]
-ignore-words-list = "contaminaton"
+[tool.typos.default.extend-words]
+contaminaton = "contaminaton"
+blos = "blos"
+CPY = "CPY"

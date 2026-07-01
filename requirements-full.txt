@@ -4,7 +4,7 @@
 #
 #    pip-compile --output-file=requirements-full.txt requirements.txt
 #
-aiapy==0.12.0
+aiapy==0.12.1
     # via -r requirements.txt
 aioftp==0.27.2
     # via parfive
@@ -16,7 +16,7 @@ aiosignal==1.4.0
     # via aiohttp
 annotated-types==0.7.0
     # via pydantic
-astropy==7.2.0
+astropy==8.0.0
     # via
     #   -r requirements.txt
     #   aiapy
@@ -25,7 +25,7 @@ astropy==7.2.0
     #   sunpy
 astropy-healpix==1.1.3
     # via reproject
-astropy-iers-data==0.2026.2.2.0.48.1
+astropy-iers-data==0.2026.6.22.1.23.34
     # via astropy
 attrs==25.4.0
     # via
@@ -65,7 +65,7 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec==2026.4.0
+fsspec==2026.6.0
     # via
     #   -r requirements.txt
     #   dask
@@ -73,6 +73,8 @@ fsspec==2026.4.0
     #   sunpy
 google-crc32c==1.8.0
     # via zarr
+greenlet==3.5.3
+    # via sqlalchemy
 idna==3.11
     # via
     #   requests
@@ -106,7 +108,7 @@ multidict==6.7.1
     #   yarl
 numcodecs==0.16.5
     # via zarr
-numpy==2.4.6
+numpy==2.5.0
     # via
     #   -r requirements.txt
     #   aiapy
@@ -147,7 +149,7 @@ parfive[ftp]==2.3.1
     # via sunpy
 partd==1.4.2
     # via dask
-pillow==12.2.0
+pillow==12.3.0
     # via
     #   -r requirements.txt
     #   imageio
@@ -176,7 +178,7 @@ pydantic==2.13.4
     #   pydantic-settings
 pydantic-core==2.46.4
     # via pydantic
-pydantic-settings==2.14.1
+pydantic-settings==2.14.2
     # via -r requirements.txt
 pyerfa==2.0.1.5
     # via
@@ -218,7 +220,7 @@ scipy==1.17.0
     #   dask-image
     #   reproject
     #   sunpy
-sentry-sdk==2.61.1
+sentry-sdk==2.64.0
     # via -r requirements.txt
 six==1.17.0
     # via python-dateutil
@@ -226,7 +228,7 @@ slicerator==1.1.0
     # via pims
 soupsieve==2.8.3
     # via beautifulsoup4
-sqlalchemy==2.0.50
+sqlalchemy==2.0.51
     # via
     #   -r requirements.txt
     #   sqlalchemy-utils

@@ -126,8 +126,7 @@ def _black_out_cmap_mid(
     mask = (samples >= low) & (samples <= high)
     rgba[mask] = (0.0, 0.0, 0.0, 1.0)
     new_cmap = colors.ListedColormap(rgba, name=f"{cmap.name}_midblack")
-    new_cmap.set_bad(color="black")
-    return new_cmap
+    return new_cmap.with_extremes(bad="black")
 
 
 def _adjust_rgb_contrast(rgb: np.ndarray, contrast: float) -> np.ndarray:
@@ -343,7 +342,8 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     wavelength_names = []
     for i, amap in enumerate(maps):
         wavelength = (
-            WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value)
+            # "align" 171 label
+            "     " + WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value) + "     "
             if "AIA" in amap.instrument
             else HMI_MEASUREMENT_JPEG[amap.measurement]
         )

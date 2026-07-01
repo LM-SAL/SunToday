@@ -37,14 +37,13 @@ def create_aia_map(file: Path) -> smap.GenericMap:
     `sunpy.map.GenericMap`
         Degradation corrected and exposure normalized AIA Map.
     """
-    with fits.open(file, memmap=True) as hdul:
+    with fits.open(file, memmap=False) as hdul:
         aia_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
         aia_map = correct_degradation(aia_map, correction_table=get_correction_table(str(RESPONSE_TABLE_V10)))
         aia_map /= aia_map.exposure_time
         aia_map.meta["exptime"] = 1.0
         aia_map.meta["BUNIT"] = "ct / s"
-        cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"])
-        cmap.set_bad(color="black")
+        cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"]).with_extremes(bad="black")
         aia_map.plot_settings["cmap"] = cmap
         aia_map._data[aia_map._data <= 1] = 0  # NOQA: SLF001
         aia_map._data[np.isnan(aia_map._data)] = 0  # NOQA: SLF001
@@ -66,16 +65,13 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
     `sunpy.map.GenericMap`
         HMI Map.
     """
-    with fits.open(file, memmap=True) as hdul:
+    with fits.open(file, memmap=False) as hdul:
         hmi_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
         fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
         hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
         if hmi_map.measurement == "magnetogram":
             hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
-            hmi_map.plot_settings["cmap"] = "hmimag"
-            cmap = mpl.colormaps.get_cmap(hmi_map.plot_settings["cmap"])
-            cmap.set_bad(color="black")
-            hmi_map.plot_settings["cmap"] = cmap
+            hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("hmimag").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
             hmi_map._data[np.isnan(hmi_map._data)] = 0  # NOQA: SLF001
             with np.errstate(all="ignore"):
