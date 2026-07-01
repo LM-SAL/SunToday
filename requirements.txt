@@ -2,7 +2,8 @@ aiapy==0.12.1
 astropy==8.0.0
 fsspec==2026.6.0
 loguru==0.7.3
-matplotlib==3.11.0
+# Bug with matplotlib 3.11.0 and mplcairo
+matplotlib~=3.10.9,!=3.11.0
 # This is max Python 3.13 at the moment
 mplcairo==0.6.1
 numpy==2.5.0
@@ -16,4 +17,5 @@ schedule==1.2.2
 sentry-sdk==2.64.0
 sqlalchemy-utils==0.42.1
 sqlalchemy==2.0.51
-sunpy[map]==8.0.0
+# Sunpy 8.0.0 has a bug with the SpericalScreen and mutiple threads
+sunpy[map]==7.1.2
