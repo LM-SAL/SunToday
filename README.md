@@ -4,7 +4,7 @@ This repository contains the code to generate the figures for the SunToday webpa
 
 This includes:
 
-- The AIA JPEGs in 4k and 1k resolution without magnetic field lines.
+- The AIA JPEGs in 4K and 1K resolution without magnetic field lines.
   - 131
   - 1600
   - 1700
@@ -17,15 +17,15 @@ This includes:
   - 335
   - 94
   - 94 - 335 - 193
-- The HMI JPEGS in 4k and 1k resolution without magnetic field lines.
+- The HMI JPEGs in 4K and 1K resolution without magnetic field lines.
   - 171 - B_LOS
   - B_LOS
   - Continuum
 - The combination of the AIA lightcurves with GOES.
 
-In future if we want to add movie support it will need to produce the following:
+Future movie support will need to produce the following:
 
-24HR movies:
+24-hour movies:
 
 - 304‑211‑171 | 94‑335‑193 | 211‑193‑171 | 171‑B(los)
 
@@ -41,42 +41,85 @@ In future if we want to add movie support it will need to produce the following:
 
 - 0‑6UT | 6‑12UT | 12‑18UT | 18‑24UT
 
-This is set up to run on a docker container.
-Mount points are configured by the docker-compose.yml file.
+This is set up to run in a Docker container.
+Mount points are configured by `docker-compose.yml`.
 The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
 
 ## Setup
 
-- Copy the relevant environment file to .env and update any values as required.
-- Add the correct path to the mounted drive where to store the outputs in docker-compose.yml.
-- Install docker and docker-compose
-- Create local database folder and output folder for the images.
-- If you are on an SELinux-enabled system (e.g., Fedora/RHEL), the bind mounts need relabeling so containers can write to them.
-  The compose file already uses `:Z`, but the host directories must still exist:
+- Provision the EC2 instance.
+- Install Docker, the NFS client, and the Docker Compose plugin.
 
 ```bash
-mkdir -p pgdata images
+sudo yum update -y
+sudo yum install -y docker nfs-utils
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -aG docker "$USER"
+sudo mkdir -p /usr/libexec/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+docker compose version
 ```
 
-- If you see permission errors for the bind mounts, make the directories writable for local dev
+Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
+
+- Copy the relevant environment file to `.env` and update its values.
+- Set `SUNTODAY_HOST_SAVE_DIRECTORY` to the host output directory; it defaults to `./images`. Compose mounts it at the fixed container path `/app/images`.
+- To upload generated files after each job, set `SUNTODAY_S3_BUCKET` (optionally including a key prefix, e.g. `s3://suntoday.lmsal.com/sdomedia/SunInTime`) plus `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` in `.env`. If temporary credentials are used, also set `AWS_SESSION_TOKEN`. Leave `SUNTODAY_S3_BUCKET` unset to skip uploads. Static keys are used for now; an EC2 IAM role can replace them later.
+- Configure the NFS drive to mount automatically at `/opt/SunInTime`. Add this line to `/etc/fstab`:
+
+```text
+nfs.aws.lmsal.com:/mnt/SunInTime /opt/SunInTime nfs defaults,_netdev 0 0
+```
+
+Then create and verify the mount:
 
 ```bash
-chmod 777 pgdata images
+sudo mkdir -p /opt/SunInTime
+sudo mount -a
+mountpoint /opt/SunInTime
 ```
 
-- Build images
+Ensure the NFS export permissions allow the container to write. Changing permissions before mounting only changes the hidden local mount point.
+
+On SELinux-enabled systems, Compose uses `:Z` for local bind mounts. NFS also requires the appropriate host policy:
 
 ```bash
-docker-compose build
+sudo setsebool -P virt_use_nfs 1
 ```
 
-- Up the container
+PostgreSQL uses a Docker-managed local volume; no host database directory or permission setup is required.
+
+- Build the images.
 
 ```bash
-docker-compose up
+docker compose build
 ```
 
-## One off
+- Start the containers.
+
+```bash
+docker compose up
+```
+
+### Database backup
+
+The database volume survives container recreation and `docker compose down`, but not `docker compose down -v`. Create a portable backup with:
+
+```bash
+docker compose exec -T db pg_dump -U suntoday_user -d suntoday --format=custom > suntoday-db.dump
+```
+
+Restore it with:
+
+```bash
+docker compose stop suntoday
+docker compose exec -T db pg_restore -U suntoday_user -d suntoday --clean --if-exists < suntoday-db.dump
+docker compose start suntoday
+```
+
+## One-off
 
 You can run a single job for a specific date/time.
 
@@ -99,14 +142,15 @@ Accepted formats:
 
 ## Tests
 
-Runs are run via tox which you will need to install into your Python environment.
-You can find them by running:
+Tests run via tox, which must be installed in your Python environment.
+List the environments with:
 
 ```bash
 $ tox -l
 py
 py-online
 py-figure
+py-figure-generate
 codestyle
 ```
 

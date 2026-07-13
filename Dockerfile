@@ -21,8 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN mkdir /app
 RUN mkdir /app/wheels
-ARG SUNTODAY_SAVE_DIRECTORY
-RUN mkdir -p $SUNTODAY_SAVE_DIRECTORY
+RUN mkdir -p /app/images
 
 COPY --from=builder /wheels /app/wheels
 RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install --no-cache /app/wheels/*
@@ -36,5 +35,6 @@ RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install --
 
 # This is set to avoid any potential issues with downloading files
 ENV PARFIVE_TOTAL_TIMEOUT=100
+ENV SUNTODAY_SAVE_DIRECTORY=/app/images
 
 ENTRYPOINT ["python", "/app/src/suntoday/main.py"]

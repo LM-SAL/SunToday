@@ -33,6 +33,12 @@ attrs==25.4.0
     #   zeep
 beautifulsoup4==4.14.3
     # via sunpy
+boto3==1.43.47
+    # via -r requirements.txt
+botocore==1.43.47
+    # via
+    #   boto3
+    #   s3transfer
 certifi==2026.1.4
     # via
     #   requests
@@ -83,6 +89,10 @@ imageio==2.37.2
     # via pims
 isodate==0.7.2
     # via zeep
+jmespath==1.1.0
+    # via
+    #   boto3
+    #   botocore
 kiwisolver==1.4.9
     # via matplotlib
 locket==1.0.0
@@ -188,6 +198,7 @@ pyparsing==3.3.2
     # via matplotlib
 python-dateutil==2.9.0.post0
     # via
+    #   botocore
     #   matplotlib
     #   pandas
     #   sunpy
@@ -213,6 +224,8 @@ requests-file==3.0.1
     # via zeep
 requests-toolbelt==1.0.0
     # via zeep
+s3transfer==0.19.1
+    # via boto3
 schedule==1.2.2
     # via -r requirements.txt
 scipy==1.17.0
@@ -265,6 +278,7 @@ typing-inspection==0.4.2
     #   pydantic-settings
 urllib3==2.6.3
     # via
+    #   botocore
     #   requests
     #   sentry-sdk
 yarl==1.22.0

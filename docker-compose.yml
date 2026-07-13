@@ -6,12 +6,10 @@ services:
     build:
       context: ./
       dockerfile: Dockerfile
-      args:
-        - SUNTODAY_SAVE_DIRECTORY=${SUNTODAY_SAVE_DIRECTORY}
     volumes:
       # This should be changed to point towards the final location for the images on the VM
       # The left side is the host path, the right side is the container path
-      - ./images:${SUNTODAY_SAVE_DIRECTORY}:Z
+      - ${SUNTODAY_HOST_SAVE_DIRECTORY:-./images}:/app/images:Z
     depends_on:
       db:
         condition: service_healthy
@@ -31,7 +29,7 @@ services:
       retries: 12
       start_period: 10s
     volumes:
-      - ./pgdata:/var/lib/postgresql/data:Z
+      - pgdata:/var/lib/postgresql/data
     # No host port published: the app and adminer reach the DB over the internal
     # compose network, so the raw trust-auth Postgres port is never exposed.
 
@@ -46,3 +44,6 @@ services:
         condition: service_healthy
     ports:
       - 1234:8080
+
+volumes:
+  pgdata:
