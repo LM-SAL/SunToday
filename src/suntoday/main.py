@@ -23,6 +23,7 @@ from suntoday.config import Settings
 from suntoday.db import create_db, get_record, write_or_update_record
 from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
+from suntoday.utils import sync_to_s3
 
 if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     sentry_sdk.init(
@@ -66,7 +67,7 @@ def _build_args() -> argparse.ArgumentParser:
         "--date",
         "--requested-time",
         dest="requested_time",
-        help="Date or datetime (YYYY-MM-DD or ISO-8601). Required with --once.",
+        help="Date or datetime (YYYY-MM-DD or ISO-8601). If omitted, start the scheduler.",
     )
     parser.add_argument(
         "--root-save-directory",
@@ -85,7 +86,7 @@ def cli() -> None:
     if not args.requested_time:
         scheduled()
         return
-    requested_time = parse_time(args.requested_time)
+    requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
     main_job(requested_time=requested_time, root_save_directory=root_save_directory)
     return
 
@@ -93,7 +94,7 @@ def cli() -> None:
 @serverless_function
 def create_images(
     database_session: Session, image_type: str, requested_time: datetime.datetime, save_directory: Path
-) -> None:
+) -> list[Path]:
     """
     Create images for the requested time.
 
@@ -111,6 +112,11 @@ def create_images(
     save_directory : Path
         The directory where the images will be saved.
 
+    Returns
+    -------
+    list of pathlib.Path
+        Created files, or an empty list when creation is skipped.
+
     Raises
     ------
     ValueError
@@ -123,11 +129,11 @@ def create_images(
     nearest_record = get_record(database_session, image_type, requested_time.date())
     if nearest_record is not None and nearest_record.updated_at > requested_time - datetime.timedelta(minutes=10):
         logger.info(f"{image_type} for {requested_time} are too new, skipping creation.")
-        return
+        return []
     if image_type == "images":
-        create_sdo_images(requested_time, save_directory)
-    if image_type == "timeseries":
-        create_lightcurve_figure(requested_time, save_directory)
+        created_files = create_sdo_images(requested_time, save_directory)
+    else:
+        created_files = create_lightcurve_figure(requested_time, save_directory)
     write_or_update_record(
         database_session,
         image_type,
@@ -135,9 +141,9 @@ def create_images(
         updated_at=str(requested_time),
     )
     logger.info(f"{image_type} creation and record update completed")
+    return created_files
 
 
-@catch_exceptions(cancel_on_failure=False)
 def main_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
     """
     Main job to create SDO Images and lightcurve images.
@@ -169,11 +175,12 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     try:
         session = sessionmaker(bind=engine)()
         logger.info("Creating SDO Images")
-        create_images(session, "images", requested_time, save_directory)
+        created_files = create_images(session, "images", requested_time, save_directory)
         logger.info("Creating lightcurve images")
-        create_images(session, "timeseries", requested_time, save_directory)
-    except Exception as e:  # NOQA : BLE001
-        logger.exception(f"Error occurred: {e}")
+        created_files.extend(create_images(session, "timeseries", requested_time, save_directory))
+        if settings.s3_bucket and created_files:
+            logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
+            sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
     finally:
         if session is not None:
             session.close()
@@ -187,10 +194,11 @@ def scheduled() -> None:
     Main function to start the scheduled job.
     """
     settings = Settings()
+    scheduled_job = catch_exceptions(cancel_on_failure=False)(main_job)
     logger.info(f"Starting main job with cron frequency: {settings.cron_frequency} minutes")
-    schedule.every(settings.cron_frequency).minutes.do(main_job)
+    schedule.every(settings.cron_frequency).minutes.do(scheduled_job)
     logger.info("Running first job immediately")
-    main_job()
+    scheduled_job()
     logger.info(f"Next job in {schedule.idle_seconds()} seconds")
     while True:
         schedule.run_pending()
