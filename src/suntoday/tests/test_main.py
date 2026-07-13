@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from suntoday.db import SDOImages, TimeSeriesImages
-from suntoday.main import create_images
+from suntoday.main import create_images, main_job
 
 
 @pytest.fixture
@@ -27,6 +27,23 @@ def test_create_images_invalid_type(mocker) -> None:
     mocker.patch("suntoday.main.serverless_function", return_value=lambda x: x)
     with pytest.raises(ValueError, match="Invalid image type: invalid_type"):
         create_images("", "invalid_type", datetime.now(UTC), "")
+
+
+def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mocker) -> None:
+    settings = mocker.patch("suntoday.main.Settings").return_value
+    settings.s3_bucket = "my-bucket"
+    engine = mocker.patch("suntoday.main.create_db").return_value
+    session = mocker.patch("suntoday.main.sessionmaker").return_value.return_value
+    created_file = tmp_path / "2026" / "07" / "13" / "f171.jpg"
+    mocker.patch("suntoday.main.create_images", side_effect=[[created_file], []])
+    upload = mocker.patch("suntoday.main.sync_to_s3", side_effect=RuntimeError("upload failed"))
+
+    with pytest.raises(RuntimeError, match="upload failed"):
+        main_job(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
+
+    upload.assert_called_once_with([created_file], "my-bucket", tmp_path.resolve())
+    session.close.assert_called_once()
+    engine.dispose.assert_called_once()
 
 
 @pytest.mark.remote_data

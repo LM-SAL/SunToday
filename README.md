@@ -47,21 +47,44 @@ The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_F
 
 ## Setup
 
-- Copy the relevant environment file to .env and update any values as required.
-- Add the correct path to the mounted drive where to store the outputs in docker-compose.yml.
+- Setup the correct EC2 instance
 - Install docker and docker-compose
-- Create local database folder and output folder for the images.
+
+```bash
+sudo yum update -y
+sudo yum install -y docker
+sudo systemctl start docker
+sudo systemctl enable docker
+sudo usermod -a -G docker ec2-user
+sudo mkdir -p /usr/libexec/docker/cli-plugins
+sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
+sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
+```
+
+- Copy the relevant (production or test) environment file to .env and update any values as required.
+- Set `SUNTODAY_HOST_SAVE_DIRECTORY` to the host output directory; it defaults to `./images`. Compose mounts it at the fixed container path `/app/images`.
+- To also upload the generated files to an S3 bucket at the end of each job, set `SUNTODAY_S3_BUCKET` (may include a key prefix, e.g. `s3://suntoday.lmsal.com/sdomedia/SunInTime`) plus the standard AWS credentials (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_DEFAULT_REGION`) in the .env file. Leave `SUNTODAY_S3_BUCKET` unset to skip the upload.
+- Mount the NFS drive for the output images.
+
+```shell
+sudo mkdir -p /opt/SunInTime
+sudo chmod 777 -R /opt/SunInTime/
+sudo mount -t nfs nfs.aws.lmsal.com:/mnt/SunInTime /opt/SunInTime
+```
+
 - If you are on an SELinux-enabled system (e.g., Fedora/RHEL), the bind mounts need relabeling so containers can write to them.
   The compose file already uses `:Z`, but the host directories must still exist:
 
+- Create local database folder.
+
 ```bash
-mkdir -p pgdata images
+mkdir -p pgdata
 ```
 
 - If you see permission errors for the bind mounts, make the directories writable for local dev
 
 ```bash
-chmod 777 pgdata images
+chmod 777 pgdata
 ```
 
 - Build images

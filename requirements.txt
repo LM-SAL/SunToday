@@ -1,5 +1,6 @@
 aiapy==0.12.1
 astropy==8.0.0
+boto3==1.43.47
 fsspec==2026.6.0
 loguru==0.7.3
 # Bug with matplotlib 3.11.0 and mplcairo

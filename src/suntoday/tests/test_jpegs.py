@@ -123,7 +123,8 @@ def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_17
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_171_map = create_aia_map(aia_171_test_file)
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
-    save_figures([(wavelength, fig)], tmpdir)
+    saved_paths = save_figures([(wavelength, fig)], tmpdir)
+    assert set(saved_paths) == {tmpdir / "f_304_211_171.jpg", tmpdir / "l_304_211_171.jpg"}
     assert len(tmpdir.listdir()) == 2
     assert (tmpdir / "f_304_211_171.jpg").exists()
     with Image.open(str(tmpdir / "f_304_211_171.jpg")) as img:

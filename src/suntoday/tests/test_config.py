@@ -40,3 +40,12 @@ def test_settings_with_env() -> None:
     settings = Settings()
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
+
+
+def test_settings_allows_aws_dotenv_values(tmp_path) -> None:
+    env_file = tmp_path / ".env"
+    env_file.write_text("SUNTODAY_S3_BUCKET=s3://my-bucket\nAWS_DEFAULT_REGION=us-west-1\n")
+
+    from suntoday.config import Settings
+
+    assert Settings(_env_file=env_file).s3_bucket == "s3://my-bucket"

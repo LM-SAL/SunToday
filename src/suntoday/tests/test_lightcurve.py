@@ -65,15 +65,14 @@ def test_lightcurve_figure_latest():
 @pytest.mark.remote_data
 def test_create_lightcurve_figure(tmpdir) -> None:
     datetime_now = datetime.now(UTC)
-    create_lightcurve_figure(datetime_now, tmpdir)
+    saved_files = create_lightcurve_figure(datetime_now, tmpdir)
     saved_figure = tmpdir / Path("lightcurve_" + datetime_now.strftime("%Y%m%d") + ".png")
     assert saved_figure.exists()
     assert saved_figure.isfile()
 
-    # Text files are not returned but the filenames are fixed,
-    # so it is easy to just hard code this
     aia_lightcurve_file = tmpdir / Path("aia_light_curves.txt")
     goes_lightcurve_file = tmpdir / Path("goes_light_curves.txt")
+    assert set(saved_files) == {saved_figure, aia_lightcurve_file, goes_lightcurve_file}
     assert aia_lightcurve_file.exists()
     assert aia_lightcurve_file.isfile()
     assert goes_lightcurve_file.exists()

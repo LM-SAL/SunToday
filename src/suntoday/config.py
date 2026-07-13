@@ -22,6 +22,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         env_prefix="suntoday_",
+        extra="ignore",
     )
     cron_frequency: int = 10  # minutes
     db_host: str = "db"
@@ -45,6 +46,10 @@ class Settings(BaseSettings):
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
     rgb_contrast: float = 1.2
+    # If set, generated files are uploaded to this S3 bucket at the end of each
+    # main job. Credentials come from standard AWS environment variables
+    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_DEFAULT_REGION.
+    s3_bucket: str = ""
     save_directory: Path = Path("./")
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"

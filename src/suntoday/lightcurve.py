@@ -142,7 +142,7 @@ def plot_lightcurve_from_timeseries(
     return fig
 
 
-def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> None:
+def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[Path]:
     """
     Creates the full timeseries plot for the given datetime and saves it to the
     given directory.
@@ -155,6 +155,11 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> None:
         Datetime to create the plot for and the previous 24 hours.
     save_directory : pathlib.Path
         Save directory for the plot.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Created plot and data files.
     """
     from suntoday.downloaders.goes import fetch_goes_timeseries
     from suntoday.downloaders.jsoc import fetch_aia_timeseries
@@ -172,3 +177,4 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> None:
     goes_path = save_directory / "goes_light_curves.txt"
     with atomic_save(goes_path) as tmp_path:
         goes_primary_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
+    return [plot_path, aia_path, goes_path]

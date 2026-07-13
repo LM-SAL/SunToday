@@ -382,7 +382,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     return "_".join(wavelength_names), fig
 
 
-def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory: Path) -> None:
+def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory: Path) -> list[Path]:
     """
     Save figures as JPEG images.
 
@@ -393,8 +393,14 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
         Figures are closed after saving to free memory.
     save_directory : pathlib.Path
         The directory where the JPEG images will be saved.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Saved JPEG paths.
     """
     settings = Settings()
+    saved_paths = []
     for wavelength, fig in list_of_figs:
         full_path = save_directory / settings.sdo_fig_name_large.format(wavelength)
         small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
@@ -408,12 +414,14 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
                         resized_image.save(str(small_tmp))
                     finally:
                         resized_image.close()
+            saved_paths.extend((full_path, small_path))
         finally:
             plt.close(fig)
             gc.collect()
+    return saved_paths
 
 
-def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> None:
+def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> list[Path]:
     """
     Creates the full set of SDO images for the given datetime and saves it to
     the given directory.
@@ -426,9 +434,15 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         Datetime to create the plot.
     save_directory : pathlib.Path
         Save directory for the plot.
+
+    Returns
+    -------
+    list of pathlib.Path
+        Created files.
     """
     # The reason the files are for looped is an attempt to keep memory use <4GB for the
     # cheap VM on AWS.
+    saved_paths = []
     with tempfile.TemporaryDirectory() as temp_dir:
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
@@ -441,8 +455,10 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             wavelength_key = aia_path.stem.split("_")[-1]
             aia_files_by_wavelength[wavelength_key] = aia_path
             aia_map = create_aia_map(aia_path)
-            save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
-            save_figures([create_figure_from_map(aia_map)], save_directory)
+            saved_paths.append(
+                save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
+            )
+            saved_paths.extend(save_figures([create_figure_from_map(aia_map)], save_directory))
             del aia_map
             gc.collect()
 
@@ -451,20 +467,21 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             hmi_map = create_hmi_map(hmi_path)
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
-            save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits")
-            save_figures([create_figure_from_map(hmi_map)], save_directory)
+            saved_paths.append(save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits"))
+            saved_paths.extend(save_figures([create_figure_from_map(hmi_map)], save_directory))
             del hmi_map
             gc.collect()
 
         for rgb_comb in RGB_COMBINATIONS:
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
-            save_figures([create_rgb_figure_from_maps(maps)], save_directory)
+            saved_paths.extend(save_figures([create_rgb_figure_from_maps(maps)], save_directory))
             del maps
             gc.collect()
 
         # Blend combination is only HMI B_LOS and AIA 171 currently
         hmi_blos = hmi_files_by_measurement["magnetogram"]
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
-        save_figures([create_blended_figure_from_maps(maps)], save_directory)
+        saved_paths.extend(save_figures([create_blended_figure_from_maps(maps)], save_directory))
         del maps
         gc.collect()
+    return saved_paths
