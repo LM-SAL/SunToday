@@ -67,7 +67,7 @@ def _build_args() -> argparse.ArgumentParser:
         "--date",
         "--requested-time",
         dest="requested_time",
-        help="Date or datetime (YYYY-MM-DD or ISO-8601). Required with --once.",
+        help="Date or datetime (YYYY-MM-DD or ISO-8601). If omitted, start the scheduler.",
     )
     parser.add_argument(
         "--root-save-directory",
@@ -86,7 +86,7 @@ def cli() -> None:
     if not args.requested_time:
         scheduled()
         return
-    requested_time = parse_time(args.requested_time)
+    requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
     main_job(requested_time=requested_time, root_save_directory=root_save_directory)
     return
 

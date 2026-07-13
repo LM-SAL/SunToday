@@ -1,4 +1,5 @@
 import numpy as np
+import pytest
 
 from suntoday.utils import apply_gamma_correction, normalize_image_percentiles, sync_to_s3
 
@@ -50,3 +51,31 @@ def test_sync_to_s3_with_prefix(tmp_path, mocker) -> None:
     call = s3_client.upload_file.call_args
     assert call.args[1] == "suntoday.lmsal.com"
     assert call.args[2] == "sdomedia/SunInTime/2026/07/13/f171.jpg"
+
+
+def test_sync_to_s3_url_without_prefix(tmp_path, mocker) -> None:
+    s3_client = mocker.patch("suntoday.utils.boto3.client").return_value
+    file = tmp_path / "2026" / "07" / "13" / "f171.jpg"
+    file.parent.mkdir(parents=True)
+    file.write_bytes(b"jpeg")
+
+    sync_to_s3([file], "s3://my-bucket", tmp_path)
+
+    call = s3_client.upload_file.call_args
+    assert call.args[1] == "my-bucket"
+    assert call.args[2] == "2026/07/13/f171.jpg"
+
+
+def test_sync_to_s3_rejects_files_outside_root(tmp_path, mocker) -> None:
+    s3_client = mocker.patch("suntoday.utils.boto3.client").return_value
+    root = tmp_path / "root"
+    root.mkdir()
+    inside = root / "inside.jpg"
+    outside = tmp_path / "outside.jpg"
+    inside.write_bytes(b"jpeg")
+    outside.write_bytes(b"jpeg")
+
+    with pytest.raises(ValueError, match="file is outside root directory"):
+        sync_to_s3([inside, outside], "my-bucket", root)
+
+    s3_client.upload_file.assert_not_called()

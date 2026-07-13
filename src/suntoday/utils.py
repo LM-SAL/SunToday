@@ -163,19 +163,29 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         e.g. ``s3://suntoday.lmsal.com/sdomedia/SunInTime``.
     root_save_directory : pathlib.Path
         Root directory the object keys are made relative to.
+
+    Raises
+    ------
+    ValueError
+        If a file is outside ``root_save_directory``.
     """
+    root_save_directory = root_save_directory.resolve()
+    paths = [Path(path).resolve() for path in files]
+    for path in paths:
+        if not path.is_relative_to(root_save_directory):
+            msg = f"Cannot upload {path}: file is outside root directory {root_save_directory}"
+            raise ValueError(msg)
+
     bucket_name, _, prefix = bucket.removeprefix("s3://").strip("/").partition("/")
     s3_client = boto3.client("s3")
-    count = 0
-    for path in sorted(files):
+    for path in sorted(paths):
         key = path.relative_to(root_save_directory).as_posix()
         if prefix:
             key = f"{prefix}/{key}"
         content_type = mimetypes.guess_type(path.name)[0]
         extra_args = {"ContentType": content_type} if content_type else {}
         s3_client.upload_file(str(path), bucket_name, key, ExtraArgs=extra_args)
-        count += 1
-    logger.info(f"Uploaded {count} files to s3://{bucket_name}/{prefix}")
+    logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{prefix}")
 
 
 def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Path:

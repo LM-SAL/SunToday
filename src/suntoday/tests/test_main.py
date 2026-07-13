@@ -4,7 +4,7 @@ from pathlib import Path
 import pytest
 
 from suntoday.db import SDOImages, TimeSeriesImages
-from suntoday.main import create_images, main_job
+from suntoday.main import cli, create_images, main_job
 
 
 @pytest.fixture
@@ -27,6 +27,22 @@ def test_create_images_invalid_type(mocker) -> None:
     mocker.patch("suntoday.main.serverless_function", return_value=lambda x: x)
     with pytest.raises(ValueError, match="Invalid image type: invalid_type"):
         create_images("", "invalid_type", datetime.now(UTC), "")
+
+
+@pytest.mark.parametrize(
+    ("value", "expected"),
+    [
+        ("2026-02-04", datetime(2026, 2, 4, tzinfo=UTC)),
+        ("2026-02-04T12:30:00Z", datetime(2026, 2, 4, 12, 30, tzinfo=UTC)),
+    ],
+)
+def test_cli_date_formats(value, expected, mocker) -> None:
+    mocker.patch("sys.argv", ["suntoday", "--date", value])
+    main_job_mock = mocker.patch("suntoday.main.main_job")
+
+    cli()
+
+    main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None)
 
 
 def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mocker) -> None:

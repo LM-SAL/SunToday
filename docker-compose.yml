@@ -29,7 +29,7 @@ services:
       retries: 12
       start_period: 10s
     volumes:
-      - ./pgdata:/var/lib/postgresql/data:Z
+      - pgdata:/var/lib/postgresql/data
     # No host port published: the app and adminer reach the DB over the internal
     # compose network, so the raw trust-auth Postgres port is never exposed.
 
@@ -44,3 +44,6 @@ services:
         condition: service_healthy
     ports:
       - 1234:8080
+
+volumes:
+  pgdata:
