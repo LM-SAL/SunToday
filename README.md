@@ -57,6 +57,8 @@ sudo systemctl start docker
 sudo systemctl enable docker
 sudo usermod -aG docker "$USER"
 sudo mkdir -p /usr/libexec/docker/cli-plugins
+BUILDX_VERSION=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | grep -oP '"tag_name": "\K[^"]+') sudo curl -Lo /usr/libexec/docker/cli-plugins/docker-buildx "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64"
+sudo chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
 sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
 sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
 docker compose version
