@@ -1,6 +1,9 @@
 services:
   suntoday:
     restart: always
+    # The save directory is an NFS share that squashes root; uid 500 owns the
+    # date directories written by the legacy production job.
+    user: "500:500"
     env_file:
       - .env
     build:
