@@ -405,9 +405,7 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
     for wavelength, fig in list_of_figs:
         full_path = save_directory / settings.sdo_fig_name_large.format(wavelength)
         small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
-        # Wavelength names may carry a leading underscore (e.g. "_HMImag");
-        # strip it so thumbnails are consistently "t_<name>.jpg".
-        thumb_path = save_directory / settings.sdo_fig_name_thumb.format(wavelength.lstrip("_"))
+        thumb_path = save_directory / settings.sdo_fig_name_thumb.format(wavelength)
         try:
             with atomic_save(full_path) as full_tmp:
                 fig.savefig(full_tmp, dpi=settings.fig_dpi)

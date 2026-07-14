@@ -55,7 +55,7 @@ class Settings(BaseSettings):
     save_directory: Path = Path("./")
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"
-    sdo_fig_name_thumb: str = "t_{}.jpg"
+    sdo_fig_name_thumb: str = "t{}.jpg"
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
     timeseries_fig_x_size: float = (1024 * 2) / fig_dpi  # pixels / dpi = inches
