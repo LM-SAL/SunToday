@@ -86,11 +86,11 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
     }
     response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
-        msg = f"JSOC request failed with {response.status_code} and {response.text}."
+        msg = f"JSOC request for {query!r} failed with {response.status_code} and {response.text}."
         raise OSError(msg)
     json_response = response.json()
     if not {"keywords", "segments"}.issubset(set(json_response.keys())):
-        msg = f"JSOC request returned with no data but with {json_response}."
+        msg = f"JSOC request for {query!r} returned with no data but with {json_response}."
         raise ValueError(msg)
     return json_response
 
@@ -140,7 +140,7 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
     aia_urls = aia_urls.drop_duplicates(subset="WAVELNTH", keep="last")
     missing_wavelengths = set(AIA_WAVELENGTHS) - set(aia_urls["WAVELNTH"])
     if len(missing_wavelengths) != 0:
-        msg = f"Missing AIA wavelengths {missing_wavelengths}, only have {set(aia_urls['WAVELNTH'])}"
+        msg = f"Missing AIA wavelengths {missing_wavelengths} for {query!r}, only have {set(aia_urls['WAVELNTH'])}"
         raise ValueError(msg)
     return aia_urls.astype({"WAVELNTH": str, "EXPTIME": float})
 
@@ -178,11 +178,11 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
         }
         response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
         if response.status_code != 200:
-            msg = f"JSOC request failed with {response.status_code} and {response.text}."
+            msg = f"JSOC request for {params['ds']!r} failed with {response.status_code} and {response.text}."
             raise OSError(msg)
         json_response = response.json()
         if "keywords" not in json_response or "segments" not in json_response:
-            msg = f"JSOC request returned with no data but with {json_response}."
+            msg = f"JSOC request for {params['ds']!r} returned with no data but with {json_response}."
             raise ValueError(msg)
         keywords = json_response["keywords"]
         segments = json_response["segments"]
@@ -238,7 +238,7 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     }
     response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
-        msg = f"JSOC request failed with {response.status_code} and {response.text}."
+        msg = f"JSOC request for {params['ds']!r} failed with {response.status_code} and {response.text}."
         raise OSError(msg)
     keywords = response.json()["keywords"]
     if len(keywords[0]["values"]) == 0:
