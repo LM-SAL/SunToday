@@ -164,6 +164,7 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
     from suntoday.downloaders.goes import fetch_goes_timeseries
     from suntoday.downloaders.jsoc import fetch_aia_timeseries
 
+    logger.info("Fetching AIA and GOES timeseries for the last 24 hours")
     aia_timeseries = fetch_aia_timeseries(end_time)
     goes_primary_timeseries, _goes_secondary_timeseries = fetch_goes_timeseries()
     fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)

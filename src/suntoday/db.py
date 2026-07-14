@@ -225,7 +225,6 @@ def write_or_update_record(
     try:  # NOQA: PLW0717
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
-            logger.info(f"Found existing {model_type} record for {obs_date}")
             existing_record.updated_at = updated_at
             session.commit()
             logger.info(f"Updated existing {model_type} record for {obs_date} with updated_at: {updated_at}")

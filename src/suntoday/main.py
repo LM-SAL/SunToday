@@ -169,7 +169,6 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     )
     save_directory.mkdir(parents=True, exist_ok=True)
     logger.info(f"Requested time: {requested_time}, Save directory: {save_directory}")
-    logger.info("Checking and creating database if necessary")
     engine = create_db()
     session = None
     try:
@@ -206,5 +205,4 @@ def scheduled() -> None:
 
 
 if __name__ == "__main__":
-    logger.info("Starting main job")
     cli()

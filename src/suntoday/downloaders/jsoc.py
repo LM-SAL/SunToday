@@ -279,6 +279,7 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "60s", save_direct
         If parfive fails to download any files.
     """
     aia_info = get_aia_urls(requested_time, time_span=time_span)
+    logger.info(f"Downloading {len(aia_info)} AIA FITS files for {requested_time}")
     downloader = create_downloader()
     for idx, row in aia_info.iterrows():
         downloader.enqueue_file(
@@ -314,6 +315,7 @@ def fetch_hmi_fits(requested_time: datetime, save_directory: Path = Path("./")) 
         If parfive fails to download any files.
     """
     hmi_info = get_hmi_urls(requested_time)
+    logger.info(f"Downloading {len(hmi_info)} HMI FITS files for {requested_time}")
     downloader = create_downloader()
     for idx, row in hmi_info.iterrows():
         downloader.enqueue_file(
