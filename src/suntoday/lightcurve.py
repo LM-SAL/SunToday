@@ -167,9 +167,11 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
     aia_timeseries = fetch_aia_timeseries(end_time)
     goes_primary_timeseries, _goes_secondary_timeseries = fetch_goes_timeseries()
     fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
-    plot_path = save_directory / f"lightcurve_{end_time:%Y%m%d}.png"
+    plot_path = save_directory / "aia_light_curves.gif"
     with atomic_save(plot_path) as tmp_path:
-        fig.savefig(str(tmp_path), dpi=fig.dpi)
+        # Legacy consumers expect a .gif name; the bytes are PNG (browsers
+        # sniff content, and mplcairo cannot write GIF anyway).
+        fig.savefig(str(tmp_path), format="png", dpi=fig.dpi)
     plt.close(fig)
     aia_path = save_directory / "aia_light_curves.txt"
     with atomic_save(aia_path) as tmp_path:
