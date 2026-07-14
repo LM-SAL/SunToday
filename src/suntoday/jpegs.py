@@ -44,11 +44,19 @@ __all__ = [
 
 # Aren't magic numbers great?!
 TEXT_X_POS = 0.02
-TEXT_Y_POS = 0.07
 TEXT_Y_POS_MOD = 0.02
+# Vertical center of the LMSAL logo inset ([0.72, 0, 0.28, 0.08]) so the
+# single-map label sits inline with the logo.
+TEXT_Y_POS_LOGO = 0.04
+# Above ~16 the stacked RGB/blend labels start overlapping (TEXT_Y_POS_MOD
+# spacing is 0.02 of a 4096 px axis, ~82 px per line).
+LABEL_FONTSIZE = 14
 LABEL_FORMAT = "{observatory}/{instrument} - {wavelength} - {date}"
 WAVELENGTH_FORMAT = "{:04.0f}"
 WAVELENGTH_FORMAT_BLEND = "{:03.0f}"
+# Space-padded variant for the on-image labels (monospace keeps the columns
+# aligned); the zero-padded formats above feed the filenames and must not change.
+WAVELENGTH_FORMAT_LABEL = "{:>4.0f}"
 HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
@@ -186,7 +194,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
     amap.plot(axes=ax, clip_interval=clip_interval, autoalign=False, interpolation="nearest")
     wavelength = (
-        WAVELENGTH_FORMAT.format(amap.wavelength.value)
+        WAVELENGTH_FORMAT_LABEL.format(amap.wavelength.value)
         if "AIA" in amap.instrument
         else HMI_MEASUREMENT_JPEG[amap.measurement]
     )
@@ -197,7 +205,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     )
     plt.text(
         TEXT_X_POS,
-        TEXT_Y_POS_MOD,
+        TEXT_Y_POS_LOGO,
         LABEL_FORMAT.format(
             observatory=amap.observatory,
             instrument=amap.instrument.split()[0],
@@ -206,7 +214,8 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
         ),
         color="white",
         transform=ax.transAxes,
-        fontdict={"fontsize": 10},
+        va="center",
+        fontdict={"fontsize": LABEL_FONTSIZE, "family": "monospace"},
         path_effects=[pe.withStroke(linewidth=4, foreground="black")],
     )
     ax.set_axis_off()
@@ -285,11 +294,11 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     wavelength_names = []
     for i, amap in enumerate(maps):
         color = "red" if i == 0 else "green" if i == 1 else "blue"
-        wavelength = WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value)
-        wavelength_names.append(wavelength)
+        wavelength = WAVELENGTH_FORMAT_LABEL.format(amap.wavelength.value)
+        wavelength_names.append(WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value))
         plt.text(
             TEXT_X_POS,
-            TEXT_Y_POS - i * TEXT_Y_POS_MOD,
+            TEXT_Y_POS_LOGO + (len(maps) - 1 - i) * TEXT_Y_POS_MOD,
             LABEL_FORMAT.format(
                 observatory=amap.observatory,
                 instrument=amap.instrument.split()[0],
@@ -298,7 +307,8 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
             ),
             color="white",
             transform=ax.transAxes,
-            fontdict={"fontsize": 12},
+            va="center",
+            fontdict={"fontsize": LABEL_FONTSIZE, "family": "monospace"},
             path_effects=[pe.withStroke(linewidth=4, foreground=color)],
         )
     ax.set_axis_off()
@@ -343,8 +353,11 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     wavelength_names = []
     for i, amap in enumerate(maps):
         wavelength = (
-            # "align" 171 label
-            "     " + WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value) + "     "
+            # Pad to the HMI label width so the monospace columns line up.
+            WAVELENGTH_FORMAT_LABEL
+            .format(amap.wavelength.value)
+            .strip()
+            .center(len(HMI_MEASUREMENT_JPEG[maps[0].measurement]))
             if "AIA" in amap.instrument
             else HMI_MEASUREMENT_JPEG[amap.measurement]
         )
@@ -356,7 +369,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
         wavelength_names.append(wavelength_filename)
         plt.text(
             TEXT_X_POS,
-            (TEXT_Y_POS - TEXT_Y_POS_MOD) - i * TEXT_Y_POS_MOD,
+            TEXT_Y_POS_LOGO + (len(maps) - 1 - i) * TEXT_Y_POS_MOD,
             LABEL_FORMAT.format(
                 observatory=amap.observatory,
                 instrument=amap.instrument.split()[0],
@@ -365,7 +378,8 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
             ),
             color="white",
             transform=ax.transAxes,
-            fontdict={"fontsize": 12},
+            va="center",
+            fontdict={"fontsize": LABEL_FONTSIZE, "family": "monospace"},
             path_effects=[pe.withStroke(linewidth=4, foreground="black")],
         )
         if i == 0:
