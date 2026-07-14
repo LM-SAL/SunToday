@@ -47,7 +47,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
-    rgb_contrast: float = 1.2
+    # Slope of the tone curve around mid-gray: >1 darkens shadows and brightens
+    # highlights across the whole image, 1.0 = no change.
+    rgb_contrast: float = 1.3
     # Luminance above this rolls off smoothly toward white instead of clipping.
     # Higher = rolloff starts later = brighter highlights, closer to hard clip.
     rgb_knee_shoulder: float = 0.50
