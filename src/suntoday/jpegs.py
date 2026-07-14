@@ -23,6 +23,7 @@ from mplcairo import operator_t
 from PIL import Image
 from sunpy.coordinates import SphericalScreen
 
+from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
@@ -459,6 +460,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 
+        logger.info(f"Creating figures for {len(aia_files)} AIA channels")
         for aia_file in aia_files:
             aia_path = Path(aia_file)
             wavelength_key = aia_path.stem.split("_")[-1]
@@ -471,6 +473,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             del aia_map
             gc.collect()
 
+        logger.info(f"Creating figures for {len(hmi_files)} HMI measurements")
         for hmi_file in hmi_files:
             hmi_path = Path(hmi_file)
             hmi_map = create_hmi_map(hmi_path)
@@ -481,6 +484,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             del hmi_map
             gc.collect()
 
+        logger.info(f"Creating {len(RGB_COMBINATIONS)} RGB composite figures")
         for rgb_comb in RGB_COMBINATIONS:
             maps = [create_aia_map(aia_files_by_wavelength[wavelength]) for wavelength in rgb_comb]
             saved_paths.extend(save_figures([create_rgb_figure_from_maps(maps)], save_directory))
@@ -488,6 +492,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
             gc.collect()
 
         # Blend combination is only HMI B_LOS and AIA 171 currently
+        logger.info("Creating HMI/AIA blended figure")
         hmi_blos = hmi_files_by_measurement["magnetogram"]
         maps = [create_hmi_map(hmi_blos), create_aia_map(aia_files_by_wavelength["171"])]
         saved_paths.extend(save_figures([create_blended_figure_from_maps(maps)], save_directory))
