@@ -48,6 +48,9 @@ class Settings(BaseSettings):
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
     rgb_contrast: float = 1.2
+    # Luminance above this rolls off smoothly toward white instead of clipping.
+    # Higher = rolloff starts later = brighter highlights, closer to hard clip.
+    rgb_knee_shoulder: float = 0.50
     # If set, generated files are uploaded to this S3 bucket at the end of each
     # main job. Credentials come from standard AWS environment variables
     # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_DEFAULT_REGION.

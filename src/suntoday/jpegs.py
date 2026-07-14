@@ -17,7 +17,7 @@ import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
 import sunpy.map as smap
-from astropy.visualization import AsinhStretch, LogStretch, ManualInterval, make_rgb
+from astropy.visualization import AsinhStretch, LogStretch, ManualInterval
 from matplotlib import colors
 from mplcairo import operator_t
 from PIL import Image
@@ -138,35 +138,37 @@ def _black_out_cmap_mid(
     return new_cmap.with_extremes(bad="black")
 
 
-def _adjust_rgb_contrast(rgb: np.ndarray, contrast: float) -> np.ndarray:
+def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
     """
-    Adjust contrast for an RGB image assumed to be in the [0, 1] range.
+    Roll off luminance above ``shoulder`` with a tanh curve instead of
+    clipping.
+
+    Expects unclipped stretched data (values may exceed 1). All three channels
+    are scaled by the same per-pixel ratio, so the channel balance and hue are
+    preserved; pixels below the shoulder are untouched.
 
     Parameters
     ----------
     rgb : np.ndarray
-        RGB image data.
-    contrast : float
-        Contrast multiplier where 1.0 is no change.
+        RGB image data, >= 0, highlights may exceed 1.
+    shoulder : float
+        Luminance where the rolloff starts, in (0, 1).
 
     Returns
     -------
     np.ndarray
-        RGB image data with adjusted contrast, clipped to [0, 1].
+        RGB image data compressed into the [0, 1] range.
     """
-    if contrast == 1.0:  # NOQA: RUF069
-        return rgb
-    rgb = np.asarray(rgb, dtype=np.float32)
-    # Be defensive if upstream values drift slightly outside [0, 1].
-    rgb_min = float(np.nanmin(rgb))
-    rgb_max = float(np.nanmax(rgb))
-    if rgb_min < 0.0 or rgb_max > 1.0:
-        denom = rgb_max - rgb_min
-        if denom > 0:
-            rgb = (rgb - rgb_min) / denom
-    midpoint = 0.5
-    adjusted = (rgb - midpoint) * contrast + midpoint
-    return np.clip(adjusted, 0.0, 1.0)
+    # Rec. 709 relative-luminance weights: perceived brightness of the output
+    # image, which is what should decide where the rolloff kicks in.
+    lum = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+    out_lum = np.where(
+        lum > shoulder,
+        shoulder + (1 - shoulder) * np.tanh((lum - shoulder) / (1 - shoulder)),
+        lum,
+    )
+    ratio = np.where(lum > 1e-6, out_lum / np.maximum(lum, 1e-6), 1.0)
+    return np.clip(rgb * ratio[..., None], 0.0, 1.0)
 
 
 def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
@@ -288,8 +290,16 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     else:
         msg = f"No RGB stretch/interval defined for lead wavelength {maps[0].wavelength.value}."
         raise ValueError(msg)
-    rgb = make_rgb(maps[0].data, maps[1].data, maps[2].data, stretch=stretch, interval=intervals)
-    rgb = _adjust_rgb_contrast(rgb, settings.rgb_contrast)
+    # Assembled by hand instead of astropy's make_rgb: make_rgb hard-clips to
+    # [0, 1], which flattens the bright active-region cores to white before the
+    # highlight rolloff gets a chance to compress them.
+    channels = [
+        stretch(np.clip(interval(amap.data, clip=False), 0, None), clip=False)
+        for amap, interval in zip(maps, intervals, strict=True)
+    ]
+    rgb = np.stack(channels, axis=-1).astype(np.float32)
+    rgb = (rgb - 0.5) * settings.rgb_contrast + 0.5
+    rgb = _tone_map_highlights(np.clip(rgb, 0, None), settings.rgb_knee_shoulder)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):
