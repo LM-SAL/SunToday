@@ -4,6 +4,10 @@ services:
     # The save directory is an NFS share that squashes root; uid 500 owns the
     # date directories written by the legacy production job.
     user: "500:500"
+    # uid 500 has no home in the image; sunpy/astropy need a writable
+    # config/cache dir.
+    environment:
+      HOME: /tmp
     env_file:
       - .env
     build:
