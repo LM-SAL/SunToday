@@ -66,7 +66,7 @@ def test_lightcurve_figure_latest():
 def test_create_lightcurve_figure(tmpdir) -> None:
     datetime_now = datetime.now(UTC)
     saved_files = create_lightcurve_figure(datetime_now, tmpdir)
-    saved_figure = tmpdir / Path("lightcurve_" + datetime_now.strftime("%Y%m%d") + ".png")
+    saved_figure = tmpdir / Path("aia_light_curves.gif")
     assert saved_figure.exists()
     assert saved_figure.isfile()
 

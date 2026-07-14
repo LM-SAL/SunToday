@@ -124,14 +124,21 @@ def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_17
     aia_171_map = create_aia_map(aia_171_test_file)
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     saved_paths = save_figures([(wavelength, fig)], tmpdir)
-    assert set(saved_paths) == {tmpdir / "f_304_211_171.jpg", tmpdir / "l_304_211_171.jpg"}
-    assert len(tmpdir.listdir()) == 2
+    assert set(saved_paths) == {
+        tmpdir / "f_304_211_171.jpg",
+        tmpdir / "l_304_211_171.jpg",
+        tmpdir / "t_304_211_171.jpg",
+    }
+    assert len(tmpdir.listdir()) == 3
     assert (tmpdir / "f_304_211_171.jpg").exists()
     with Image.open(str(tmpdir / "f_304_211_171.jpg")) as img:
         assert img.size == (4096, 4096)
     assert (tmpdir / "l_304_211_171.jpg").exists()
     with Image.open(str(tmpdir / "l_304_211_171.jpg")) as img:
         assert img.size == (1024, 1024)
+    assert (tmpdir / "t_304_211_171.jpg").exists()
+    with Image.open(str(tmpdir / "t_304_211_171.jpg")) as img:
+        assert img.size == (256, 256)
 
 
 def test_save_figures_from_maps_hmi_blend(aia_171_test_file, hmi_blos_test_file, tmpdir) -> None:
@@ -139,39 +146,48 @@ def test_save_figures_from_maps_hmi_blend(aia_171_test_file, hmi_blos_test_file,
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
     save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 2
+    assert len(tmpdir.listdir()) == 3
     assert (tmpdir / "f_HMImag_171.jpg").exists()
     with Image.open(str(tmpdir / "f_HMImag_171.jpg")) as img:
         assert img.size == (4096, 4096)
     assert (tmpdir / "l_HMImag_171.jpg").exists()
     with Image.open(str(tmpdir / "l_HMImag_171.jpg")) as img:
         assert img.size == (1024, 1024)
+    assert (tmpdir / "t_HMImag_171.jpg").exists()
+    with Image.open(str(tmpdir / "t_HMImag_171.jpg")) as img:
+        assert img.size == (256, 256)
 
 
 def test_save_figures_from_maps_hmi_blos(hmi_blos_test_file, tmpdir) -> None:
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_figure_from_map(hmi_blos_map)
     save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 2
+    assert len(tmpdir.listdir()) == 3
     assert (tmpdir / "f_HMImag.jpg").exists()
     with Image.open(str(tmpdir / "f_HMImag.jpg")) as img:
         assert img.size == (4096, 4096)
     assert (tmpdir / "l_HMImag.jpg").exists()
     with Image.open(str(tmpdir / "l_HMImag.jpg")) as img:
         assert img.size == (1024, 1024)
+    assert (tmpdir / "t_HMImag.jpg").exists()
+    with Image.open(str(tmpdir / "t_HMImag.jpg")) as img:
+        assert img.size == (256, 256)
 
 
 def test_save_figures_from_maps_hmi_cont(hmi_cont_test_file, tmpdir) -> None:
     hmi_cont_map = create_hmi_map(hmi_cont_test_file)
     wavelength, fig = create_figure_from_map(hmi_cont_map)
     save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 2
+    assert len(tmpdir.listdir()) == 3
     assert (tmpdir / "f_HMI_cont_aiascale.jpg").exists()
     with Image.open(str(tmpdir / "f_HMI_cont_aiascale.jpg")) as img:
         assert img.size == (4096, 4096)
     assert (tmpdir / "l_HMI_cont_aiascale.jpg").exists()
     with Image.open(str(tmpdir / "l_HMI_cont_aiascale.jpg")) as img:
         assert img.size == (1024, 1024)
+    assert (tmpdir / "t_HMI_cont_aiascale.jpg").exists()
+    with Image.open(str(tmpdir / "t_HMI_cont_aiascale.jpg")) as img:
+        assert img.size == (256, 256)
 
 
 def test_create_sdo_images_offline(  # NOQA: PLR0917
@@ -222,14 +238,20 @@ def test_create_sdo_images_offline(  # NOQA: PLR0917
         "l_094_335_193.jpg",
         "l_211_193_171.jpg",
         "l_304_211_171.jpg",
+        "t_094_335_193.jpg",
+        "t_211_193_171.jpg",
+        "t_304_211_171.jpg",
         # HMI/AIA blended images
         "f_HMImag_171.jpg",
         "l_HMImag_171.jpg",
+        "t_HMImag_171.jpg",
         # HMI images
         "f_HMI_cont_aiascale.jpg",
         "f_HMImag.jpg",
         "l_HMI_cont_aiascale.jpg",
         "l_HMImag.jpg",
+        "t_HMI_cont_aiascale.jpg",
+        "t_HMImag.jpg",
         # AIA images
         "f0094.jpg",
         "f0131.jpg",
@@ -249,6 +271,15 @@ def test_create_sdo_images_offline(  # NOQA: PLR0917
         "l0335.jpg",
         "l1600.jpg",
         "l1700.jpg",
+        "t_0094.jpg",
+        "t_0131.jpg",
+        "t_0171.jpg",
+        "t_0193.jpg",
+        "t_0211.jpg",
+        "t_0304.jpg",
+        "t_0335.jpg",
+        "t_1600.jpg",
+        "t_1700.jpg",
         # Planning FITS files
         "f0094.fits",
         "f0131.fits",
@@ -281,14 +312,20 @@ def test_create_sdo_images_online(tmpdir) -> None:
         "l_094_335_193.jpg",
         "l_211_193_171.jpg",
         "l_304_211_171.jpg",
+        "t_094_335_193.jpg",
+        "t_211_193_171.jpg",
+        "t_304_211_171.jpg",
         # HMI/AIA blended images
         "f_HMImag_171.jpg",
         "l_HMImag_171.jpg",
+        "t_HMImag_171.jpg",
         # HMI images
         "f_HMI_cont_aiascale.jpg",
         "f_HMImag.jpg",
         "l_HMI_cont_aiascale.jpg",
         "l_HMImag.jpg",
+        "t_HMI_cont_aiascale.jpg",
+        "t_HMImag.jpg",
         # AIA images
         "f0094.jpg",
         "f0131.jpg",
@@ -308,6 +345,15 @@ def test_create_sdo_images_online(tmpdir) -> None:
         "l0335.jpg",
         "l1600.jpg",
         "l1700.jpg",
+        "t_0094.jpg",
+        "t_0131.jpg",
+        "t_0171.jpg",
+        "t_0193.jpg",
+        "t_0211.jpg",
+        "t_0304.jpg",
+        "t_0335.jpg",
+        "t_1600.jpg",
+        "t_1700.jpg",
         # Planning FITS files
         "f0094.fits",
         "f0131.fits",
