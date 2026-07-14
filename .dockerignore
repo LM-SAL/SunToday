@@ -1,3 +1,5 @@
+**/.*
 pgdata/
 images/
-.env
+src/suntoday/tests/
+src/suntoday/data/test/

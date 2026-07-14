@@ -19,13 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libcairo2 \
     && rm -rf /var/lib/apt/lists/*
 
-RUN mkdir /app
-RUN mkdir /app/wheels
 RUN mkdir -p /app/images
 
-COPY --from=builder /wheels /app/wheels
-RUN pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install --no-cache /app/wheels/*
-RUN rm -rf /app/wheels
+# Bind-mount the wheels from the builder stage so they never land in a layer;
+# a COPY + rm would keep them in the image and roughly double its size.
+RUN --mount=type=bind,from=builder,source=/wheels,target=/wheels \
+    pip --trusted-host pypi.org --trusted-host files.pythonhosted.org install --no-cache /wheels/*
 
 COPY . /app
 WORKDIR /app
