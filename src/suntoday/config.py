@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         dotenv_filtering="match_prefix",
         extra="forbid",
     )
-    cron_frequency: int = 30  # minutes
+    cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_password: str = "suntoday_user_password"  # NOQA: S105
@@ -37,7 +37,6 @@ class Settings(BaseSettings):
     fig_dpi: int = 300
     host_save_directory: Path = Path("./images")  # Docker Compose bind source
     jsoc_base_url: str = "http://jsoc.stanford.edu"
-    jsoc_delay: int = 120  # minutes
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
     # Credentials for the authenticated test data series. Not shipped in code:
     # set SUNTODAY_JSOC_USER / SUNTODAY_JSOC_PASSWORD via .env or CI secrets.

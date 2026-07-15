@@ -21,6 +21,7 @@ from sunpy.time import parse_time
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.db import create_db, get_record, write_or_update_record
+from suntoday.downloaders.jsoc import find_latest_jsoc_times
 from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
@@ -93,7 +94,11 @@ def cli() -> None:
 
 @serverless_function
 def create_images(
-    database_session: Session, image_type: str, requested_time: datetime.datetime, save_directory: Path
+    database_session: Session,
+    image_type: str,
+    requested_time: datetime.datetime,
+    save_directory: Path,
+    hmi_time: datetime.datetime | None = None,
 ) -> list[Path]:
     """
     Create images for the requested time.
@@ -111,6 +116,9 @@ def create_images(
         The date for which to create images.
     save_directory : Path
         The directory where the images will be saved.
+    hmi_time : datetime.datetime, optional
+        Datetime for the HMI data, which lags AIA. Only used for "images";
+        defaults to ``requested_time``.
 
     Returns
     -------
@@ -131,7 +139,7 @@ def create_images(
         logger.info(f"{image_type} for {requested_time} are too new, skipping creation.")
         return []
     if image_type == "images":
-        created_files = create_sdo_images(requested_time, save_directory)
+        created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time)
     else:
         created_files = create_lightcurve_figure(requested_time, save_directory)
     write_or_update_record(
@@ -155,10 +163,13 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     """
     logger.info("Running main job to create SDO Images and lightcurve images")
     settings = Settings()
+    # Live scheduled runs use the freshest time each instrument has data
+    # for; explicit backfill runs use the given time as-is for both.
     if requested_time is None:
-        requested_time = datetime.datetime.now(datetime.UTC) - datetime.timedelta(minutes=settings.jsoc_delay)
+        requested_time, hmi_time = find_latest_jsoc_times()
     else:
         requested_time = requested_time.astimezone(datetime.UTC)
+        hmi_time = None
     root_save_directory = root_save_directory or settings.save_directory
     root_save_directory = Path(root_save_directory).expanduser().resolve()
     save_directory = (
@@ -174,7 +185,7 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     try:
         session = sessionmaker(bind=engine)()
         logger.info("Creating SDO Images")
-        created_files = create_images(session, "images", requested_time, save_directory)
+        created_files = create_images(session, "images", requested_time, save_directory, hmi_time=hmi_time)
         logger.info("Creating lightcurve images")
         created_files.extend(create_images(session, "timeseries", requested_time, save_directory))
         if settings.s3_bucket and created_files:

@@ -483,7 +483,11 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
     return saved_paths
 
 
-def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -> list[Path]:
+def create_sdo_images(
+    requested_time: datetime.datetime,
+    save_directory: Path,
+    hmi_time: datetime.datetime | None = None,
+) -> list[Path]:
     """
     Creates the full set of SDO images for the given datetime and saves it to
     the given directory.
@@ -496,6 +500,10 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
         Datetime to create the plot.
     save_directory : pathlib.Path
         Save directory for the plot.
+    hmi_time : datetime.datetime, optional
+        Datetime for the HMI data; the NRT series lags AIA by an hour or
+        more, so live runs pass its own freshest time. Defaults to
+        ``requested_time``.
 
     Returns
     -------
@@ -508,7 +516,7 @@ def create_sdo_images(requested_time: datetime.datetime, save_directory: Path) -
     with tempfile.TemporaryDirectory() as temp_dir:
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
         aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
-        hmi_files = fetch_hmi_fits(requested_time, save_directory=Path(temp_dir))
+        hmi_files = fetch_hmi_fits(hmi_time or requested_time, save_directory=Path(temp_dir))
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 

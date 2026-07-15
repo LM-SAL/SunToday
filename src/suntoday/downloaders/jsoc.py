@@ -2,7 +2,7 @@
 Provides a JSOC NRT downloader for the AIA level 1.5 series.
 """
 
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import numpy as np
@@ -16,7 +16,14 @@ from suntoday.config import Settings
 from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader
 
-__all__ = ["fetch_aia_fits", "fetch_aia_timeseries", "fetch_hmi_fits", "get_aia_urls", "get_hmi_urls"]
+__all__ = [
+    "fetch_aia_fits",
+    "fetch_aia_timeseries",
+    "fetch_hmi_fits",
+    "find_latest_jsoc_times",
+    "get_aia_urls",
+    "get_hmi_urls",
+]
 
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
@@ -202,6 +209,78 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
     hmi_urls = hmi_urls.set_index("T_REC")
     hmi_urls.index = pd.to_datetime(hmi_urls.index, format="mixed")
     return hmi_urls
+
+
+def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime:
+    """
+    Get the time of the newest record in a series.
+
+    Uses the DRMS ``$`` record-set specifier, which selects the last record
+    of a series, so a single cheap jsoc_info query answers "how fresh is
+    this series".
+
+    Parameters
+    ----------
+    series : str
+        Series name, e.g. ``aia_test.lev1p5``.
+    keyword : str
+        Time keyword to read, e.g. ``T_REC`` or ``DATE-OBS``.
+    segment : str
+        Segment to request (required by the jsoc_info endpoint).
+
+    Returns
+    -------
+    datetime.datetime
+        Time of the newest record, as UTC.
+
+    Raises
+    ------
+    ValueError
+        If the series returns no records.
+    """
+    settings = Settings()
+    response = _get_urls(f"{series}[$]", keyword, segment)
+    keywords = {ad["name"]: ad["values"] for ad in response["keywords"]}
+    values = keywords.get(keyword, [])
+    if not values:
+        msg = f"No records returned for {series}[$]."
+        raise ValueError(msg)
+    value = str(values[-1])
+    try:
+        parsed = datetime.strptime(value, settings.jsoc_str_fmt)
+    except ValueError:
+        parsed = pd.to_datetime(value, format="mixed").to_pydatetime()
+    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+
+
+def find_latest_jsoc_times() -> tuple[datetime, datetime]:
+    """
+    Find the most recent times the AIA and HMI NRT series have data for.
+
+    AIA typically lags real time by only a few minutes while the HMI NRT
+    series can lag by an hour or more, so the freshest usable time is found
+    per instrument instead of holding the AIA images back to the HMI lag.
+
+    Returns
+    -------
+    tuple of datetime.datetime
+        ``(aia_time, hmi_time)``: the newest available time per instrument.
+
+    Raises
+    ------
+    ValueError
+        If any series returns no records.
+    """
+    # The AIA query window runs forward from the requested time, so step
+    # back a minute to have the full set of wavelengths land inside it.
+    aia_time = _get_latest_record_time("aia_test.lev1p5", "DATE-OBS", "image_lev1p5") - timedelta(minutes=1)
+    # Both HMI series are fetched at one time, so the older one limits.
+    hmi_time = min(
+        _get_latest_record_time("lm_jps.m45s_nrt", "T_REC", "magnetogram"),
+        _get_latest_record_time("lm_jps.Ic_45s", "T_REC", "continuum"),
+    )
+    logger.info(f"Latest JSOC data: AIA at {aia_time}, HMI at {hmi_time}")
+    return aia_time, hmi_time
 
 
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
