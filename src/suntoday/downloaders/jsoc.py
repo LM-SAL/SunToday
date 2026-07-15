@@ -13,7 +13,7 @@ from requests.auth import HTTPBasicAuth
 
 from suntoday import logger
 from suntoday.config import Settings
-from suntoday.constants import AIA_WAVELENGTHS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader
 
 __all__ = [
@@ -144,6 +144,11 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
     aia_urls = pd.DataFrame.from_dict(keywords | segments)
     aia_urls = aia_urls.set_index("DATE-OBS")
     aia_urls.index = pd.to_datetime(aia_urls.index, format="mixed")
+    # Keep only channels the pipeline knows: the nine plotted wavelengths are
+    # required, the FITS-only ones (e.g. hourly 4500) are a bonus when they
+    # happen to fall inside the window.
+    known_wavelengths = AIA_WAVELENGTHS + AIA_FITS_ONLY_WAVELENGTHS
+    aia_urls = aia_urls[aia_urls["WAVELNTH"].astype(str).isin(known_wavelengths)]
     aia_urls = aia_urls.drop_duplicates(subset="WAVELNTH", keep="last")
     missing_wavelengths = set(AIA_WAVELENGTHS) - set(aia_urls["WAVELNTH"])
     if len(missing_wavelengths) != 0:

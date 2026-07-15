@@ -16,6 +16,7 @@ from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS
 from suntoday.data import RESPONSE_TABLE_V10
 
 __all__ = ["create_aia_map", "create_hmi_map"]
@@ -39,7 +40,9 @@ def create_aia_map(file: Path) -> smap.GenericMap:
     """
     with fits.open(file, memmap=False) as hdul:
         aia_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
-        aia_map = correct_degradation(aia_map, correction_table=get_correction_table(str(RESPONSE_TABLE_V10)))
+        # The visible channels (e.g. 4500) have no entry in the degradation table.
+        if f"{aia_map.wavelength.value:.0f}" not in AIA_FITS_ONLY_WAVELENGTHS:
+            aia_map = correct_degradation(aia_map, correction_table=get_correction_table(str(RESPONSE_TABLE_V10)))
         aia_map /= aia_map.exposure_time
         aia_map.meta["exptime"] = 1.0
         aia_map.meta["BUNIT"] = "ct / s"
