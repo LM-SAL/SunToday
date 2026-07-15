@@ -22,6 +22,9 @@ AIA_COLORS = {
     "94": "darkgreen",
 }
 AIA_WAVELENGTHS = list(AIA_COLORS.keys())
+# Channels saved as planning FITS only, no JPEGs. Taken roughly hourly, so
+# they are usually absent from the query window and never required.
+AIA_FITS_ONLY_WAVELENGTHS = ["4500"]
 RGB_COMBINATIONS = [
     ("211", "193", "171"),
     ("304", "211", "171"),

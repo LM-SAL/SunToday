@@ -25,7 +25,7 @@ from sunpy.coordinates import SphericalScreen
 
 from suntoday import logger
 from suntoday.config import Settings
-from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
 from suntoday.logos import PNG_IMAGE
 from suntoday.maps import (
@@ -519,7 +519,8 @@ def create_sdo_images(
     saved_paths = []
     with tempfile.TemporaryDirectory() as temp_dir:
         aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
-        aia_files = sorted(aia_files, key=lambda x: AIA_WAVELENGTHS.index(Path(x).stem.split("_")[-1]))
+        aia_order = AIA_WAVELENGTHS + AIA_FITS_ONLY_WAVELENGTHS
+        aia_files = sorted(aia_files, key=lambda x: aia_order.index(Path(x).stem.split("_")[-1]))
         hmi_files = fetch_hmi_fits(hmi_time or requested_time, save_directory=Path(temp_dir))
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
@@ -533,7 +534,8 @@ def create_sdo_images(
             saved_paths.append(
                 save_fits(aia_map, save_directory, f"f{WAVELENGTH_FORMAT.format(aia_map.wavelength.value)}.fits")
             )
-            saved_paths.extend(save_figures([create_figure_from_map(aia_map)], save_directory))
+            if wavelength_key not in AIA_FITS_ONLY_WAVELENGTHS:
+                saved_paths.extend(save_figures([create_figure_from_map(aia_map)], save_directory))
             del aia_map
             gc.collect()
 
