@@ -5,7 +5,6 @@ Provides a JSOC NRT downloader for the AIA level 1.5 series.
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
-import numpy as np
 import pandas as pd
 import requests
 from parfive import Results
@@ -327,8 +326,6 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     aia_timeseries = pd.DataFrame.from_dict(keywords)
     aia_timeseries = aia_timeseries.set_index("DATE-OBS")
     aia_timeseries.index = pd.to_datetime(aia_timeseries.index, format="mixed")
-    # Replace bad quality data with NaNs, good data is 0x40000000
-    aia_timeseries.loc[aia_timeseries["QUALITY"] != "0x40000000", ["DATAMEAN"]] = np.nan
     return aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
 
 

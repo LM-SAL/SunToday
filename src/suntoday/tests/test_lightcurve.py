@@ -10,11 +10,31 @@ import pandas as pd
 import pytest
 
 from suntoday.lightcurve import (
+    _format_aia_timeseries,
     add_aia_lightcurve,
     add_goes_lightcurve,
     create_lightcurve_figure,
     plot_lightcurve_from_timeseries,
 )
+
+
+def test_format_aia_timeseries() -> None:
+    timeseries = pd.DataFrame(
+        {
+            "WAVELNTH": [211, 335],
+            "DATAMEAN": [81.184, 1.98],
+            "QUALITY": ["0x40000004", "0x40000004"],
+            "EXPTIME": [2.0, 2.0],
+        },
+        index=pd.to_datetime(["2026-07-15T03:23:09.620Z", "2026-07-15T03:23:12.620Z"]),
+    )
+    timeseries.index.name = "DATE-OBS"
+
+    assert _format_aia_timeseries(timeseries) == (
+        "               DATE_OBS  WAVELNTH DATAMEAN    QUALITY\n"
+        "2026-07-15T03:23:09.62Z       211    81.18 1073741828\n"
+        "2026-07-15T03:23:12.62Z       335     1.98 1073741828\n"
+    )
 
 
 def _has_jsoc_credentials() -> bool:
@@ -77,8 +97,8 @@ def test_create_lightcurve_figure(tmpdir) -> None:
     assert aia_lightcurve_file.isfile()
     assert goes_lightcurve_file.exists()
     assert goes_lightcurve_file.isfile()
-    aia_lightcurve = pd.read_csv(aia_lightcurve_file, sep="\t")
-    assert list(aia_lightcurve.columns) == ["DATE-OBS", "WAVELNTH", "DATAMEAN", "QUALITY", "EXPTIME"]
+    aia_lightcurve = pd.read_fwf(aia_lightcurve_file)
+    assert list(aia_lightcurve.columns) == ["DATE_OBS", "WAVELNTH", "DATAMEAN", "QUALITY"]
     assert not aia_lightcurve.empty
-    assert datetime.strptime(aia_lightcurve["DATE-OBS"][0], "%Y-%m-%dT%H:%M:%S%z")
-    assert aia_lightcurve["QUALITY"][0] == "0x40000000"
+    assert pd.to_datetime(aia_lightcurve["DATE_OBS"][0])
+    assert pd.api.types.is_integer_dtype(aia_lightcurve["QUALITY"])
