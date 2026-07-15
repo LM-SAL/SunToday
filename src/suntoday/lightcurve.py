@@ -132,6 +132,7 @@ def plot_lightcurve_from_timeseries(
     fig, axes = plt.subplots(
         len(AIA_WAVELENGTHS) + 1,
         1,
+        sharex=True,
         figsize=(settings.timeseries_fig_x_size, settings.timeseries_fig_y_size),
         dpi=settings.fig_dpi,
     )
