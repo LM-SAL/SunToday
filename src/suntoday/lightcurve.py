@@ -20,6 +20,9 @@ from suntoday.utils import atomic_save
 
 __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figure", "plot_lightcurve_from_timeseries"]
 
+# Panel order top to bottom; GOES occupies the panel above these.
+LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "1600", "1700"]
+
 
 def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list[str] = AIA_WAVELENGTHS) -> None:
     """
@@ -48,8 +51,8 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
             label=f"AIA-{wavelength}" + r"$\AA$",
             linewidth=2,
         )
-        # Only set the hour and minute as the last axis is the GOES axis
-        # which will have the full date.
+        # Only set the hour and minute; in the stacked figure the bottom
+        # axis is overridden with the full date.
         time_formatter = dates.DateFormatter("%H:%M")
         ax.xaxis.set_major_formatter(time_formatter)
         ax.tick_params(which="major", direction="in", size=8, labelsize=10)
@@ -130,15 +133,19 @@ def plot_lightcurve_from_timeseries(
     """
     settings = Settings()
     fig, axes = plt.subplots(
-        len(AIA_WAVELENGTHS) + 1,
+        len(LIGHTCURVE_WAVELENGTH_ORDER) + 1,
         1,
         sharex=True,
         figsize=(settings.timeseries_fig_x_size, settings.timeseries_fig_y_size),
         dpi=settings.fig_dpi,
     )
-    for axis, wavelength in zip(axes[:-1], AIA_WAVELENGTHS, strict=True):
+    add_goes_lightcurve(axes[0], goes_timeseries)
+    for axis, wavelength in zip(axes[1:], LIGHTCURVE_WAVELENGTH_ORDER, strict=True):
         add_aia_lightcurve(axis, aia_timeseries, [wavelength])
-    add_goes_lightcurve(axes[-1], goes_timeseries)
+    # GOES sits on top, so the bottom (AIA) axis carries the full date and label.
+    axes[0].set_xlabel("")
+    axes[-1].xaxis.set_major_formatter(dates.ConciseDateFormatter(axes[-1].xaxis.get_major_locator()))
+    axes[-1].set_xlabel("Time (UTC)", size=10)
     fig.tight_layout()
     return fig
 
