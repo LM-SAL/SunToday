@@ -66,6 +66,10 @@ HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 # of overall brightness; quiet days are left untouched.
 EXPOSURE_PERCENTILE = 99.99
 EXPOSURE_TARGET = 0.98
+# Pillow's default JPEG quality (75) leaves visible banding in the dark
+# corona; 85 removes it for ~35% more bytes. optimize/progressive shave a few
+# percent and render incrementally on the web.
+JPEG_SAVE_OPTIONS = {"quality": 85, "optimize": True, "progressive": True}
 
 
 def _full_bleed(ax: plt.Axes) -> None:
@@ -462,18 +466,18 @@ def save_figures(list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory:
         thumb_path = save_directory / settings.sdo_fig_name_thumb.format(wavelength)
         try:
             with atomic_save(full_path) as full_tmp:
-                fig.savefig(full_tmp, dpi=settings.fig_dpi)
+                fig.savefig(full_tmp, dpi=settings.fig_dpi, pil_kwargs=JPEG_SAVE_OPTIONS)
                 # Resize to 1024 - We avoid using MPL to resize the image to font issues
                 with atomic_save(small_path) as small_tmp, Image.open(str(full_tmp)) as full_jpeg:
                     resized_image = full_jpeg.resize((settings.resize_fig_size, settings.resize_fig_size))
                     try:
-                        resized_image.save(str(small_tmp))
+                        resized_image.save(str(small_tmp), **JPEG_SAVE_OPTIONS)
                     finally:
                         resized_image.close()
                 with atomic_save(thumb_path) as thumb_tmp, Image.open(str(full_tmp)) as full_jpeg:
                     thumb_image = full_jpeg.resize((settings.thumb_fig_size, settings.thumb_fig_size))
                     try:
-                        thumb_image.save(str(thumb_tmp))
+                        thumb_image.save(str(thumb_tmp), **JPEG_SAVE_OPTIONS)
                     finally:
                         thumb_image.close()
             saved_paths.extend((full_path, small_path, thumb_path))
