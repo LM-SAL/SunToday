@@ -25,7 +25,7 @@ class Settings(BaseSettings):
         dotenv_filtering="match_prefix",
         extra="forbid",
     )
-    cron_frequency: int = 10  # minutes
+    cron_frequency: int = 30  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_password: str = "suntoday_user_password"  # NOQA: S105
