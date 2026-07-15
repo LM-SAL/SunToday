@@ -247,10 +247,10 @@ def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime
         raise ValueError(msg)
     value = str(values[-1])
     try:
-        parsed = datetime.strptime(value, settings.jsoc_str_fmt)
+        parsed = datetime.strptime(value, settings.jsoc_str_fmt).replace(tzinfo=UTC)
     except ValueError:
         parsed = pd.to_datetime(value, format="mixed").to_pydatetime()
-    return parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed.astimezone(UTC)
+    return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
 
 
 def find_latest_jsoc_times() -> tuple[datetime, datetime]:
@@ -265,11 +265,6 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
     -------
     tuple of datetime.datetime
         ``(aia_time, hmi_time)``: the newest available time per instrument.
-
-    Raises
-    ------
-    ValueError
-        If any series returns no records.
     """
     # The AIA query window runs forward from the requested time, so step
     # back a minute to have the full set of wavelengths land inside it.
