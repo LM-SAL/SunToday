@@ -23,6 +23,35 @@ __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figur
 # Panel order top to bottom; GOES occupies the panel above these.
 LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "1600", "1700"]
 
+# Font sizes (points) for all text in the lightcurve figure.
+LABEL_FONTSIZE = 8
+TICK_FONTSIZE = 8
+Y_TICK_FONTSIZE = 6
+LEGEND_FONTSIZE = 6
+
+
+def _hour_minute_with_date_at_midnight(x: float, _pos: int | None = None) -> str:
+    """
+    Tick formatter: "HH:MM", with the date underneath at midnight so day
+    crossovers are visible without an offset string.
+
+    Parameters
+    ----------
+    x : float
+        Tick value as a matplotlib date number.
+    _pos : int, optional
+        Tick position, unused.
+
+    Returns
+    -------
+    str
+        The formatted tick label.
+    """
+    when = dates.num2date(x)
+    if when.hour == 0 and when.minute == 0:
+        return when.strftime("%H:%M\n%b-%d")
+    return when.strftime("%H:%M")
+
 
 def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list[str] = AIA_WAVELENGTHS) -> None:
     """
@@ -51,15 +80,13 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
             label=f"AIA-{wavelength}" + r"$\AA$",
             linewidth=2,
         )
-        # Only set the hour and minute; in the stacked figure the bottom
-        # axis is overridden with the full date.
-        time_formatter = dates.DateFormatter("%H:%M")
-        ax.xaxis.set_major_formatter(time_formatter)
-        ax.tick_params(which="major", direction="in", size=8, labelsize=10)
-        ax.tick_params(which="minor", direction="in", size=3, labelsize=10)
+        ax.xaxis.set_major_formatter(ticker.FuncFormatter(_hour_minute_with_date_at_midnight))
+        ax.tick_params(which="major", direction="in", size=8, labelsize=TICK_FONTSIZE)
+        ax.tick_params(which="minor", direction="in", size=3, labelsize=TICK_FONTSIZE)
+        ax.tick_params(axis="y", labelsize=Y_TICK_FONTSIZE)
         ax.xaxis.grid(visible=True, which="major", color="black")
-        ax.legend(frameon=True, framealpha=1, loc="best")
-        ax.set_ylabel(r"Data Mean (DN)", size=10)
+        ax.legend(frameon=True, framealpha=1, loc="best", fontsize=LEGEND_FONTSIZE)
+        ax.set_ylabel(r"Data Mean (DN)", size=LABEL_FONTSIZE)
 
 
 def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
@@ -87,29 +114,29 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
         label=f"GOES-{sat_number} 0.5-4.0" + r"$\AA$",
         linewidth=2,
     )
-    ax.set_ylabel(r"Flux (Watts $\cdot$ m$^{-2}$)", size=10)
-    ax.set_xlabel("Time (UTC)", size=10)
+    ax.set_ylabel(r"Flux (Watts $\cdot$ m$^{-2}$)", size=LABEL_FONTSIZE)
+    ax.set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
     ax.set_yscale("log")
     ax.set_ylim([10**-9, 10**-2])
     ax.set_yticks([10**-8, 10**-7, 10**-6, 10**-5, 10**-4, 10**-3])
-    ax.tick_params(which="major", direction="in", size=8, labelsize=10)
-    ax.tick_params(which="minor", direction="in", size=3, labelsize=10)
+    ax.tick_params(which="major", direction="in", size=8, labelsize=TICK_FONTSIZE)
+    ax.tick_params(which="minor", direction="in", size=3, labelsize=TICK_FONTSIZE)
+    ax.tick_params(axis="y", labelsize=Y_TICK_FONTSIZE)
     ax.yaxis.set_minor_locator(ticker.LogLocator(numticks=999, subs="auto"))
     ax_rhs = ax.twinx()
     ax_rhs.set_yscale("log")
-    ax_rhs.set_ylabel("GOES Class", size=10)
+    ax_rhs.set_ylabel("GOES Class", size=LABEL_FONTSIZE)
     ax_rhs.set_ylim([10**-9, 10**-2])
     ax_rhs.set_yticks([3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4])
     # Other choice is [1 * 10**-8, 1 * 10**-7, 1 * 10**-6, 1 * 10**-5, 1 * 10**-4, 1 * 10**-3]p
     for band in [3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4]:
         ax_rhs.axhline(band, color="grey", ls="-", lw=0.4)
-    ax_rhs.set_yticklabels(["A", "B", "C", "M", "X"], fontsize=10)
-    ax_rhs.tick_params(which="major", direction="in", size=8, labelsize=10)
+    ax_rhs.set_yticklabels(["A", "B", "C", "M", "X"], fontsize=Y_TICK_FONTSIZE)
+    ax_rhs.tick_params(which="major", direction="in", size=8, labelsize=Y_TICK_FONTSIZE)
     ax_rhs.tick_params(which="minor", direction="in", size=0, labelright=False, labelleft=False)
-    locator = ax.xaxis.get_major_locator()
-    ax.xaxis.set_major_formatter(dates.ConciseDateFormatter(locator))
+    ax.xaxis.set_major_formatter(ticker.FuncFormatter(_hour_minute_with_date_at_midnight))
     ax.xaxis.grid(visible=True, which="major", color="black")
-    ax.legend(frameon=True, framealpha=1, loc="best", ncol=2)
+    ax.legend(frameon=True, framealpha=1, loc="best", ncol=2, fontsize=LEGEND_FONTSIZE)
 
 
 def plot_lightcurve_from_timeseries(
@@ -142,10 +169,9 @@ def plot_lightcurve_from_timeseries(
     add_goes_lightcurve(axes[0], goes_timeseries)
     for axis, wavelength in zip(axes[1:], LIGHTCURVE_WAVELENGTH_ORDER, strict=True):
         add_aia_lightcurve(axis, aia_timeseries, [wavelength])
-    # GOES sits on top, so the bottom (AIA) axis carries the full date and label.
+    # GOES sits on top, so the bottom (AIA) axis carries the time label.
     axes[0].set_xlabel("")
-    axes[-1].xaxis.set_major_formatter(dates.ConciseDateFormatter(axes[-1].xaxis.get_major_locator()))
-    axes[-1].set_xlabel("Time (UTC)", size=10)
+    axes[-1].set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
     fig.tight_layout()
     return fig
 
