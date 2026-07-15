@@ -30,6 +30,15 @@ Y_TICK_FONTSIZE = 6
 LEGEND_FONTSIZE = 6
 
 
+def _format_aia_timeseries(timeseries: pd.DataFrame) -> str:
+    data = timeseries.reset_index(names="DATE_OBS")[["DATE_OBS", "WAVELNTH", "DATAMEAN", "QUALITY"]].copy()
+    data["DATE_OBS"] = data["DATE_OBS"].map(
+        lambda value: value.strftime("%Y-%m-%dT%H:%M:%S.%f").rstrip("0").rstrip(".") + "Z"
+    )
+    data["QUALITY"] = data["QUALITY"].map(lambda value: int(str(value), 0))
+    return data.to_string(index=False, formatters={"DATAMEAN": "{:.2f}".format}) + "\n"
+
+
 def _hour_minute_with_date_at_midnight(x: float, _pos: int | None = None) -> str:
     """
     Tick formatter: "HH:MM", with the date underneath at midnight so day
@@ -210,7 +219,7 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
     plt.close(fig)
     aia_path = save_directory / "aia_light_curves.txt"
     with atomic_save(aia_path) as tmp_path:
-        aia_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
+        tmp_path.write_text(_format_aia_timeseries(aia_timeseries))
     goes_path = save_directory / "goes_light_curves.txt"
     with atomic_save(goes_path) as tmp_path:
         goes_primary_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")

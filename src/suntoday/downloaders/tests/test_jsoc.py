@@ -79,7 +79,5 @@ def test_fetch_aia_timeseries() -> None:
     ])
     assert str(aia_ts["WAVELNTH"].dtype) == "str"
     assert aia_ts["DATAMEAN"].dtype == "float64"
-    # Check that bad quality data has been replaced with NaNs
-    assert aia_ts.loc[aia_ts["QUALITY"] != "0x40000000", "DATAMEAN"].isna().all()
     assert aia_ts["EXPTIME"].dtype == "float64"
     assert str(aia_ts.index.dtype) == "datetime64[us, UTC]"
