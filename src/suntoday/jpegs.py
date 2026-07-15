@@ -60,6 +60,12 @@ WAVELENGTH_FORMAT_LABEL = "{:>4.0f}"
 HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
+# Auto-exposure for the RGB composites: if the luminance at this percentile
+# exceeds 1, the image is scaled down so it lands at the target instead. Keeps
+# the brightest active regions on the linear part of the tone curve at the cost
+# of overall brightness; quiet days are left untouched.
+EXPOSURE_PERCENTILE = 99.99
+EXPOSURE_TARGET = 0.98
 
 
 def _full_bleed(ax: plt.Axes) -> None:
@@ -138,6 +144,26 @@ def _black_out_cmap_mid(
     return new_cmap.with_extremes(bad="black")
 
 
+def _rec709_luminance(rgb: np.ndarray) -> np.ndarray:
+    """
+    Perceived brightness of the output image.
+
+    Uses the Rec. 709 relative-luminance weights, which match the sRGB
+    primaries the JPEGs are viewed with.
+
+    Parameters
+    ----------
+    rgb : np.ndarray
+        RGB image data in the last axis.
+
+    Returns
+    -------
+    np.ndarray
+        Relative luminance per pixel.
+    """
+    return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+
+
 def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
     """
     Roll off luminance above ``shoulder`` with a tanh curve instead of
@@ -159,9 +185,7 @@ def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
     np.ndarray
         RGB image data compressed into the [0, 1] range.
     """
-    # Rec. 709 relative-luminance weights: perceived brightness of the output
-    # image, which is what should decide where the rolloff kicks in.
-    lum = 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
+    lum = _rec709_luminance(rgb)
     out_lum = np.where(
         lum > shoulder,
         shoulder + (1 - shoulder) * np.tanh((lum - shoulder) / (1 - shoulder)),
@@ -299,7 +323,13 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     ]
     rgb = np.stack(channels, axis=-1).astype(np.float32)
     rgb = (rgb - 0.5) * settings.rgb_contrast + 0.5
-    rgb = _tone_map_highlights(np.clip(rgb, 0, None), settings.rgb_knee_shoulder)
+    rgb = np.clip(rgb, 0, None)
+    # Auto-exposure: keep the brightest active regions on the linear part of
+    # the curve; the knee below then only touches the outlier pixels.
+    peak = np.percentile(_rec709_luminance(rgb), EXPOSURE_PERCENTILE)
+    if peak > 1:
+        rgb *= EXPOSURE_TARGET / peak
+    rgb = _tone_map_highlights(rgb, settings.rgb_knee_shoulder)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):
