@@ -1,9 +1,11 @@
 services:
   suntoday:
     restart: always
-    # The save directory is an NFS share that squashes root; uid 500 owns the
-    # date directories written by the legacy production job.
-    user: "500:500"
+    # The save directory is an NFS share that squashes root, so the container
+    # must run as a non-root uid that can write there. Set HOST_UID/HOST_GID in
+    # .env per host (e.g. `id -u ec2-user` on the VM, `id -u` locally); the
+    # default is uid 500, which owns the legacy date directories on the share.
+    user: "${HOST_UID:-500}:${HOST_GID:-500}"
     # uid 500 has no home in the image; sunpy/astropy need a writable
     # config/cache dir.
     environment:
