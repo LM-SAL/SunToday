@@ -271,8 +271,8 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
         ``(aia_time, hmi_time)``: the newest available time per instrument.
     """
     # The AIA query window runs forward from the requested time, so step
-    # back a minute to have the full set of wavelengths land inside it.
-    aia_time = _get_latest_record_time("aia_test.lev1p5", "DATE-OBS", "image_lev1p5") - timedelta(minutes=1)
+    # back three minutes to have the full set of wavelengths land inside it.
+    aia_time = _get_latest_record_time("aia_test.lev1p5", "DATE-OBS", "image_lev1p5") - timedelta(minutes=3)
     # Both HMI series are fetched at one time, so the older one limits.
     hmi_time = min(
         _get_latest_record_time("lm_jps.m45s_nrt", "T_REC", "magnetogram"),
@@ -329,7 +329,7 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     return aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
 
 
-def fetch_aia_fits(requested_time: datetime, time_span: str = "60s", save_directory: Path = Path("./")) -> Results:
+def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", save_directory: Path = Path("./")) -> Results:
     """
     Download AIA fits files for a given time.
 
@@ -339,7 +339,7 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "60s", save_direct
         Datetime to download AIA fits files for.
     time_span : str
         Time span to download files for.
-        Defaults to "36s".
+        Defaults to "180s".
     save_directory : Path, optional
         Directory to save the files to.
         Defaults to ``Path("./")`` which saves to current directory.

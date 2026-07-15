@@ -3,7 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.downloaders.jsoc import _get_latest_record_time, find_latest_jsoc_times, get_aia_urls
+from suntoday.downloaders.jsoc import _get_latest_record_time, fetch_aia_fits, find_latest_jsoc_times, get_aia_urls
 
 
 def test_get_latest_record_time_parses_tai_format(mocker) -> None:
@@ -70,6 +70,18 @@ def test_get_aia_urls_does_not_require_fits_only_channels(mocker) -> None:
     assert set(aia_urls["WAVELNTH"]) == set(AIA_WAVELENGTHS)
 
 
+def test_fetch_aia_fits_uses_three_minute_window(mocker, tmp_path) -> None:
+    get_aia_urls = mocker.patch("suntoday.downloaders.jsoc.get_aia_urls")
+    get_aia_urls.return_value.iterrows.return_value = []
+    downloader = mocker.patch("suntoday.downloaders.jsoc.create_downloader").return_value
+    downloader.download.return_value.errors = []
+    requested_time = datetime(2026, 7, 15, 12, 0, tzinfo=UTC)
+
+    fetch_aia_fits(requested_time, save_directory=tmp_path)
+
+    get_aia_urls.assert_called_once_with(requested_time, time_span="180s")
+
+
 @pytest.mark.remote_data
 def test_find_latest_jsoc_times_online() -> None:
     now = datetime.now(UTC)
@@ -86,7 +98,7 @@ def test_find_latest_jsoc_times_online() -> None:
 
 
 def test_find_latest_jsoc_times_per_instrument(mocker) -> None:
-    # AIA carries a one minute margin so its forward query window still
+    # AIA carries a three minute margin so its forward query window still
     # covers all wavelengths; HMI is the older of its two series.
     aia_latest = datetime(2026, 7, 14, 12, 50, tzinfo=UTC)
     mag_latest = datetime(2026, 7, 14, 12, 0, tzinfo=UTC)
@@ -98,5 +110,5 @@ def test_find_latest_jsoc_times_per_instrument(mocker) -> None:
 
     aia_time, hmi_time = find_latest_jsoc_times()
 
-    assert aia_time == aia_latest - timedelta(minutes=1)
+    assert aia_time == aia_latest - timedelta(minutes=3)
     assert hmi_time == cont_latest
