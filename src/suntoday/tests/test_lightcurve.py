@@ -31,10 +31,30 @@ def test_format_aia_timeseries() -> None:
     timeseries.index.name = "DATE-OBS"
 
     assert _format_aia_timeseries(timeseries) == (
-        "               DATE_OBS  WAVELNTH DATAMEAN    QUALITY\n"
-        "2026-07-15T03:23:09.62Z       211    81.18 1073741828\n"
-        "2026-07-15T03:23:12.62Z       335     1.98 1073741828\n"
+        "               DATE_OBS  WAVELNTH DATAMEAN  EXPTIME    QUALITY\n"
+        "2026-07-15T03:23:09.62Z       211    81.18 2.000000 1073741828\n"
+        "2026-07-15T03:23:12.62Z       335     1.98 2.000000 1073741828\n"
     )
+
+
+def test_add_aia_lightcurve_drops_bad_quality_frames() -> None:
+    # Middle frame is an ISS-loop-open calibration frame (bit 17) with a
+    # near-zero DATAMEAN; it must not be plotted or drag the smoothed curve.
+    timeseries = pd.DataFrame(
+        {
+            "WAVELNTH": ["171"] * 5,
+            "DATAMEAN": [132.0, 131.0, -0.1, 130.0, 133.0],
+            "QUALITY": ["0x40000004", "0x40000004", "0x40220004", "0x40000004", "0x40000004"],
+            "EXPTIME": [2.0] * 5,
+        },
+        index=pd.date_range("2026-07-15T03:00:00Z", periods=5, freq="90s"),
+    )
+    fig, ax = plt.subplots(1, 1)
+    add_aia_lightcurve(ax, timeseries, ["171"])
+    plotted = ax.lines[0].get_ydata()
+    assert len(plotted) > 0
+    assert (plotted > 50).all()
+    plt.close(fig)
 
 
 def _has_jsoc_credentials() -> bool:
@@ -98,7 +118,7 @@ def test_create_lightcurve_figure(tmpdir) -> None:
     assert goes_lightcurve_file.exists()
     assert goes_lightcurve_file.isfile()
     aia_lightcurve = pd.read_fwf(aia_lightcurve_file)
-    assert list(aia_lightcurve.columns) == ["DATE_OBS", "WAVELNTH", "DATAMEAN", "QUALITY"]
+    assert list(aia_lightcurve.columns) == ["DATE_OBS", "WAVELNTH", "DATAMEAN", "EXPTIME", "QUALITY"]
     assert not aia_lightcurve.empty
     assert pd.to_datetime(aia_lightcurve["DATE_OBS"][0])
     assert pd.api.types.is_integer_dtype(aia_lightcurve["QUALITY"])

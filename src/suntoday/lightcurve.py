@@ -23,6 +23,13 @@ __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figur
 # Panel order top to bottom; GOES occupies the panel above these.
 LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "1600", "1700"]
 
+# AIA lev1 QUALITY bits that mark a frame as unusable for a lightcurve:
+# 10-11 (>5%/>25% pixels missing), 12 (ACS not in science mode), 13 (eclipse),
+# 14 (no sun presence), 15 (safe mode), 16 (dark frame), 17 (ISS loop open,
+# set during calibration sequences where DATAMEAN drops to ~0), 21 (filter
+# wheel not nominal — frames mid-move have partially blocked flux).
+BAD_QUALITY_BITS = 0x23FC00
+
 # Font sizes (points) for all text in the lightcurve figure.
 LABEL_FONTSIZE = 8
 TICK_FONTSIZE = 8
@@ -31,12 +38,12 @@ LEGEND_FONTSIZE = 6
 
 
 def _format_aia_timeseries(timeseries: pd.DataFrame) -> str:
-    data = timeseries.reset_index(names="DATE_OBS")[["DATE_OBS", "WAVELNTH", "DATAMEAN", "QUALITY"]].copy()
+    data = timeseries.reset_index(names="DATE_OBS")[["DATE_OBS", "WAVELNTH", "DATAMEAN", "EXPTIME", "QUALITY"]].copy()
     data["DATE_OBS"] = data["DATE_OBS"].map(
         lambda value: value.strftime("%Y-%m-%dT%H:%M:%S.%f").rstrip("0").rstrip(".") + "Z"
     )
     data["QUALITY"] = data["QUALITY"].map(lambda value: int(str(value), 0))
-    return data.to_string(index=False, formatters={"DATAMEAN": "{:.2f}".format}) + "\n"
+    return data.to_string(index=False, formatters={"DATAMEAN": "{:.2f}".format, "EXPTIME": "{:.6f}".format}) + "\n"
 
 
 def _hour_minute_with_date_at_midnight(x: float, _pos: int | None = None) -> str:
@@ -82,6 +89,10 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
             logger.warning(f"No data for AIA-{wavelength} in the last 24 hours.")
             continue
         data = grouped_wavelength.get_group(wavelength)
+        data = data[data["QUALITY"].map(lambda quality: (int(str(quality), 0) & BAD_QUALITY_BITS) == 0)]
+        if data.empty:
+            logger.warning(f"No good-quality data for AIA-{wavelength} in the last 24 hours.")
+            continue
         values = (data["DATAMEAN"] / data["EXPTIME"]).ewm(span=5).mean()
         ax.plot(
             values[values.between(values.quantile(0.005), values.quantile(0.999))],
