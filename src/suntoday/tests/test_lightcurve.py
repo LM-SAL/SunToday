@@ -16,6 +16,7 @@ from suntoday.lightcurve import (
     create_lightcurve_figure,
     plot_lightcurve_from_timeseries,
 )
+from suntoday.tests.conftest import mpl_svg_compare
 
 
 def test_format_aia_timeseries() -> None:
@@ -64,35 +65,35 @@ def _has_jsoc_credentials() -> bool:
     return bool(settings.jsoc_user and settings.jsoc_password)
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_plot_goes_secondary_timeseries(goes_secondary_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_goes_lightcurve(ax, goes_secondary_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_plot_goes_primary_timeseries(goes_primary_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_goes_lightcurve(ax, goes_primary_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_add_aia_lightcurve(aia_timeseries):
     fig, ax = plt.subplots(1, 1)
     add_aia_lightcurve(ax, aia_timeseries)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries):
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
 @pytest.mark.remote_data
 @pytest.mark.skipif(not _has_jsoc_credentials(), reason="JSOC test credentials are not configured.")
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_lightcurve_figure_latest():
     from suntoday.downloaders.goes import fetch_goes_timeseries
     from suntoday.downloaders.jsoc import fetch_aia_timeseries

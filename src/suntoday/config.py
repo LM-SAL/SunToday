@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
-    db_password: str = "suntoday_user_password"  # NOQA: S105
+    db_password: str = "suntoday_user_password"  # ruff:ignore[hardcoded-password-string]
     db_port: int = 5432
     db_user: str = "suntoday_user"
     # Built from the db_* components below if not set explicitly via env.
@@ -45,7 +45,13 @@ class Settings(BaseSettings):
     jsoc_user: str = ""
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
+    # The PFSS job is hourly: its cadence is set by the hourly HMI daily
+    # synchronic frame updates, not by the AIA data rate.
+    pfss_cron_frequency: int = 60  # minutes
     resize_fig_size: int = 1024  # pixels
+    # Overall brightness multiplier for the RGB composites, applied after
+    # auto-exposure; the highlight knee keeps the bright cores from clipping.
+    rgb_brightness: float = 1.30
     # Slope of the tone curve around mid-gray: >1 darkens shadows and brightens
     # highlights across the whole image, 1.0 = no change.
     rgb_contrast: float = 1.3

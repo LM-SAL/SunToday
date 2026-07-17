@@ -4,7 +4,15 @@ import pandas as pd
 import pytest
 
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_aia_timeseries, fetch_hmi_fits, get_aia_urls, get_hmi_urls
+from suntoday.downloaders.jsoc import (
+    fetch_aia_fits,
+    fetch_aia_timeseries,
+    fetch_hmi_fits,
+    fetch_synframe_fits,
+    get_aia_urls,
+    get_hmi_urls,
+)
+from suntoday.maps import create_synframe_map
 
 
 @pytest.mark.remote_data
@@ -56,6 +64,16 @@ def test_fetch_hmi_fits(tmp_path) -> None:
     assert all(str(tmp_path) in file for file in files)
     all_wavelengths = [f.split("_")[-1].split(".")[0] for f in files]
     assert set(all_wavelengths) == {"magnetogram", "continuum"}
+
+
+@pytest.mark.remote_data
+def test_fetch_synframe_fits(tmp_path) -> None:
+    file = fetch_synframe_fits(datetime.now(UTC) - timedelta(days=2), save_directory=tmp_path)
+    assert file.exists()
+    assert file.name.endswith("_synframe.fits")
+    synframe_map = create_synframe_map(file)
+    assert synframe_map.data.shape == (1440, 3600)
+    assert synframe_map.coordinate_frame.name == "heliographic_carrington"
 
 
 @pytest.mark.remote_data

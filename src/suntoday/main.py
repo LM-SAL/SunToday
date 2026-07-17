@@ -21,7 +21,7 @@ from sunpy.time import parse_time
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.db import create_db, get_record, write_or_update_record
-from suntoday.downloaders.jsoc import find_latest_jsoc_times
+from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
@@ -52,7 +52,7 @@ def catch_exceptions(*, cancel_on_failure=False):
         def wrapper(*args, **kwargs):
             try:
                 return job_func(*args, **kwargs)
-            except Exception as e:  # NOQA : BLE001
+            except Exception as e:  # ruff:ignore[blind-except]
                 logger.exception(f"Error occurred in job {job_func.__name__}: {e}")
                 if cancel_on_failure:
                     return schedule.CancelJob
@@ -75,6 +75,11 @@ def _build_args() -> argparse.ArgumentParser:
         dest="root_save_directory",
         help="Override the root save directory for output.",
     )
+    parser.add_argument(
+        "--pfss",
+        action="store_true",
+        help="Run the PFSS overlay job instead of the main job (needs --date).",
+    )
     return parser
 
 
@@ -88,7 +93,8 @@ def cli() -> None:
         scheduled()
         return
     requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
-    main_job(requested_time=requested_time, root_save_directory=root_save_directory)
+    job = pfss_job if args.pfss else main_job
+    job(requested_time=requested_time, root_save_directory=root_save_directory)
     return
 
 
@@ -111,7 +117,7 @@ def create_images(
     database_session : Session
         The SQLAlchemy session to use for database operations.
     image_type : str
-        The type of images to create, either "images" or "timeseries".
+        The type of images to create: "images", "timeseries" or "pfss".
     requested_time : datetime.datetime
         The date for which to create images.
     save_directory : Path
@@ -128,18 +134,18 @@ def create_images(
     Raises
     ------
     ValueError
-        If the image_type is not "images" or "timeseries".
+        If the image_type is not "images", "timeseries" or "pfss".
     """
-    if image_type not in {"images", "timeseries"}:
-        msg = f"Invalid image type: {image_type}. Must be 'images' or 'timeseries'."
+    if image_type not in {"images", "timeseries", "pfss"}:
+        msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
     nearest_record = get_record(database_session, image_type, requested_time.date())
     if nearest_record is not None and nearest_record.updated_at > requested_time - datetime.timedelta(minutes=10):
         logger.info(f"{image_type} for {requested_time} are too new, skipping creation.")
         return []
-    if image_type == "images":
-        created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time)
+    if image_type in {"images", "pfss"}:
+        created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time, pfss=image_type == "pfss")
     else:
         created_files = create_lightcurve_figure(requested_time, save_directory)
     write_or_update_record(
@@ -152,26 +158,29 @@ def create_images(
     return created_files
 
 
-def main_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
+def _run_job(
+    image_types: list[str],
+    requested_time: datetime.datetime,
+    root_save_directory: Path | None,
+    hmi_time: datetime.datetime | None = None,
+) -> None:
     """
-    Main job to create SDO Images and lightcurve images.
+    Shared job scaffolding: build the dated save directory, run the image
+    creation for each type on one database session and sync to S3.
 
-    This function is scheduled to run periodically based on the cron
-    frequency defined in the settings. It creates SDO Images and
-    lightcurve images for the requested time, or the current time if not
-    specified.
+    Parameters
+    ----------
+    image_types : list of str
+        The `create_images` types to run, in order.
+    requested_time : datetime.datetime
+        The time to create images for.
+    root_save_directory : Path | None
+        Root output directory; defaults to the configured one.
+    hmi_time : datetime.datetime, optional
+        Datetime for the HMI data, only used by the "images" type.
     """
-    logger.info("Running main job to create SDO Images and lightcurve images")
     settings = Settings()
-    # Live scheduled runs use the freshest time each instrument has data
-    # for; explicit backfill runs use the given time as-is for both.
-    if requested_time is None:
-        requested_time, hmi_time = find_latest_jsoc_times()
-    else:
-        requested_time = requested_time.astimezone(datetime.UTC)
-        hmi_time = None
-    root_save_directory = root_save_directory or settings.save_directory
-    root_save_directory = Path(root_save_directory).expanduser().resolve()
+    root_save_directory = Path(root_save_directory or settings.save_directory).expanduser().resolve()
     save_directory = (
         root_save_directory
         / requested_time.strftime("%Y")
@@ -184,10 +193,10 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     session = None
     try:
         session = sessionmaker(bind=engine)()
-        logger.info("Creating SDO Images")
-        created_files = create_images(session, "images", requested_time, save_directory, hmi_time=hmi_time)
-        logger.info("Creating lightcurve images")
-        created_files.extend(create_images(session, "timeseries", requested_time, save_directory))
+        created_files = []
+        for image_type in image_types:
+            logger.info(f"Creating {image_type}")
+            created_files.extend(create_images(session, image_type, requested_time, save_directory, hmi_time=hmi_time))
         if settings.s3_bucket and created_files:
             logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
             sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
@@ -195,7 +204,41 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
         if session is not None:
             session.close()
         engine.dispose()
+
+
+def main_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
+    """
+    Main job to create SDO Images and lightcurve images.
+
+    This function is scheduled to run periodically based on the cron
+    frequency defined in the settings. It creates SDO Images and
+    lightcurve images for the requested time, or the current time if not
+    specified.
+    """
+    logger.info("Running main job to create SDO Images and lightcurve images")
+    # Live scheduled runs use the freshest time each instrument has data
+    # for; explicit backfill runs use the given time as-is for both.
+    if requested_time is None:
+        requested_time, hmi_time = find_latest_jsoc_times()
+    else:
+        requested_time = requested_time.astimezone(datetime.UTC)
+        hmi_time = None
+    _run_job(["images", "timeseries"], requested_time, root_save_directory, hmi_time=hmi_time)
     logger.info("Main job completed")
+
+
+def pfss_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
+    """
+    Job to create the matched-time PFSS overlay images.
+
+    Runs hourly: both AIA and HMI are fetched at the newest time the
+    lagging HMI NRT series has data for, so all the timestamps in the
+    images match the field lines from the HMI synchronic frame.
+    """
+    logger.info("Running PFSS job to create field line overlay images")
+    requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
+    _run_job(["pfss"], requested_time, root_save_directory)
+    logger.info("PFSS job completed")
 
 
 @serverless_function
@@ -205,10 +248,14 @@ def scheduled() -> None:
     """
     settings = Settings()
     scheduled_job = catch_exceptions(cancel_on_failure=False)(main_job)
+    scheduled_pfss_job = catch_exceptions(cancel_on_failure=False)(pfss_job)
     logger.info(f"Starting main job with cron frequency: {settings.cron_frequency} minutes")
     schedule.every(settings.cron_frequency).minutes.do(scheduled_job)
-    logger.info("Running first job immediately")
+    logger.info(f"Starting PFSS job with cron frequency: {settings.pfss_cron_frequency} minutes")
+    schedule.every(settings.pfss_cron_frequency).minutes.do(scheduled_pfss_job)
+    logger.info("Running first jobs immediately")
     scheduled_job()
+    scheduled_pfss_job()
     logger.info(f"Next job in {schedule.idle_seconds()} seconds")
     while True:
         schedule.run_pending()

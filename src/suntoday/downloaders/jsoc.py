@@ -3,10 +3,12 @@ Provides a JSOC NRT downloader for the AIA level 1.5 series.
 """
 
 from datetime import UTC, datetime, timedelta
+from io import BytesIO
 from pathlib import Path
 
 import pandas as pd
 import requests
+from astropy.io import fits
 from parfive import Results
 from requests.auth import HTTPBasicAuth
 
@@ -19,10 +21,22 @@ __all__ = [
     "fetch_aia_fits",
     "fetch_aia_timeseries",
     "fetch_hmi_fits",
+    "fetch_synframe_fits",
     "find_latest_jsoc_times",
+    "find_latest_pfss_time",
     "get_aia_urls",
     "get_hmi_urls",
 ]
+
+# The raw SUMS segment file has a bare header (JSOC keeps metadata in the DRMS
+# database), so these keywords are fetched alongside and spliced into the saved
+# FITS. All names are <= 8 chars so they write as standard FITS cards.
+SYNFRAME_SERIES = "hmi.Mrdailysynframe_720s_nrt"
+SYNFRAME_KEYWORDS = (
+    "T_REC,T_OBS,CTYPE1,CTYPE2,CRPIX1,CRPIX2,CRVAL1,CRVAL2,CDELT1,CDELT2,"
+    "CUNIT1,CUNIT2,CROTA2,CAR_ROT,CRLN_OBS,CRLT_OBS,DSUN_OBS,RSUN_REF,"
+    "BUNIT,TELESCOP,INSTRUME,WAVELNTH,CONTENT"
+)
 
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
@@ -282,6 +296,27 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
     return aia_time, hmi_time
 
 
+def find_latest_pfss_time() -> datetime:
+    """
+    Find the anchor time for the PFSS job.
+
+    The PFSS images must all carry the same timestamp as the field lines,
+    so the anchor is the oldest available AIA, HMI, or synframe time. The
+    synframe record nearest the anchor (either side) is then at most half its
+    hourly cadence away.
+
+    Returns
+    -------
+    datetime.datetime
+        The newest time every PFSS data source has data for.
+    """
+    aia_time, hmi_time = find_latest_jsoc_times()
+    synframe_time = _get_latest_record_time(SYNFRAME_SERIES, "T_REC", "data")
+    anchor = min(aia_time, hmi_time, synframe_time)
+    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, synframe {synframe_time})")
+    return anchor
+
+
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     """
     Fetches the NRT AIA data mean for the previous 24 hours.
@@ -368,6 +403,77 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", save_direc
         msg = f"Failed to download {files.errors}."
         raise OSError(msg)
     return files
+
+
+def fetch_synframe_fits(
+    requested_time: datetime,
+    save_directory: Path = Path("./"),
+    series: str = SYNFRAME_SERIES,
+) -> Path:
+    """
+    Download the daily synchronic frame magnetogram nearest to a time.
+
+    This is the full-Sun boundary map used for the PFSS extrapolation. The
+    NRT series updates hourly; the query window runs a generous 25 hours
+    back so the daily definitive series also works (used for test data),
+    and an hour forward since the record nearest the requested time can sit
+    just after it.
+
+    Parameters
+    ----------
+    requested_time : datetime.datetime
+        Time to find the nearest record to.
+    save_directory : Path, optional
+        Directory to save the file to.
+        Defaults to ``Path("./")`` which saves to current directory.
+    series : str, optional
+        JSOC series to query. Defaults to the NRT hourly series.
+
+    Returns
+    -------
+    pathlib.Path
+        The saved FITS file, with the DRMS keywords written into the header.
+
+    Raises
+    ------
+    ValueError
+        If no record is found in the window.
+    OSError
+        If the segment download fails.
+    """
+    settings = Settings()
+    query = (
+        f"{series}[{(requested_time - timedelta(hours=25)).strftime(settings.jsoc_str_fmt)}"
+        f"-{(requested_time + timedelta(hours=1)).strftime(settings.jsoc_str_fmt)}]"
+    )
+    response = _get_urls(query, SYNFRAME_KEYWORDS, "data")
+    keywords = {ad["name"]: ad["values"] for ad in response["keywords"]}
+    segments = {ad["name"]: ad["values"] for ad in response["segments"]}
+    record_times = [
+        datetime.strptime(str(value), settings.jsoc_str_fmt).replace(tzinfo=UTC) for value in keywords.get("T_REC", [])
+    ]
+    usable = [index for index, value in enumerate(segments["data"]) if "Invalid" not in str(value)]
+    if not usable:
+        msg = f"No usable synframe record found for {query!r}."
+        raise ValueError(msg)
+    nearest = min(usable, key=lambda index: abs(record_times[index] - requested_time))
+    header = {name: values[nearest] for name, values in keywords.items()}
+    url = f"{settings.jsoc_base_url}{segments['data'][nearest]}"
+    logger.info(f"Downloading synframe FITS {header['T_REC']} from {url}")
+    download = requests.get(url, timeout=120)
+    if download.status_code != 200:
+        msg = f"Synframe download from {url!r} failed with {download.status_code}."
+        raise OSError(msg)
+    record_time = datetime.strptime(str(header["T_REC"]), settings.jsoc_str_fmt).replace(tzinfo=UTC)
+    file_path = Path(save_directory) / f"{record_time.strftime('%Y%m%d_%H%M%S')}_synframe.fits"
+    with fits.open(BytesIO(download.content)) as hdul:
+        for name, value in header.items():
+            try:
+                hdul[0].header[name] = float(value)
+            except ValueError:
+                hdul[0].header[name] = str(value)
+        hdul.writeto(file_path, overwrite=True)
+    return file_path
 
 
 def fetch_hmi_fits(requested_time: datetime, save_directory: Path = Path("./")) -> Results:

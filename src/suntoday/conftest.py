@@ -5,7 +5,7 @@ from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sunpy.io._file_tools import read_file  # NOQA: PLC2701
+from sunpy.io._file_tools import read_file  # ruff:ignore[import-private-name]
 
 from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
@@ -27,8 +27,8 @@ def db_session(test_db):
         engine = create_engine(connection_str, echo=False, connect_args={"options": "-c timezone=utc"})
         BASE.metadata.create_all(engine)
         session = get_session(connection_str)
-        assert session.query(SDOImages).count() == 0  # NOQA: S101
-        assert session.query(TimeSeriesImages).count() == 0  # NOQA: S101
+        assert session.query(SDOImages).count() == 0  # ruff:ignore[assert]
+        assert session.query(TimeSeriesImages).count() == 0  # ruff:ignore[assert]
         session.close()
         yield sessionmaker(bind=engine, expire_on_commit=False)
 
@@ -53,58 +53,63 @@ def goes_primary_timeseries():
 
 # These are in order of the files stored on my local disk
 @pytest.fixture
+def synframe_test_file():
+    return get_test_filepath("20260717_222400_synframe.fits")
+
+
+@pytest.fixture
 def hmi_cont_test_file():
-    return get_test_filepath("20260127_161845_continuum.fits")
+    return get_test_filepath("20260717_221200_continuum.fits")
 
 
 @pytest.fixture
 def hmi_blos_test_file():
-    return get_test_filepath("20260127_161845_magnetogram.fits")
+    return get_test_filepath("20260717_221200_magnetogram.fits")
 
 
 @pytest.fixture
 def aia_1700_test_file():
-    return get_test_filepath("20260127_171852_1700.fits")
+    return get_test_filepath("20260717_221204_1700.fits")
 
 
 @pytest.fixture
 def aia_131_test_file():
-    return get_test_filepath("20260127_171854_131.fits")
+    return get_test_filepath("20260717_221154_131.fits")
 
 
 @pytest.fixture
 def aia_171_test_file():
-    return get_test_filepath("20260127_171857_171.fits")
+    return get_test_filepath("20260717_221157_171.fits")
 
 
 @pytest.fixture
 def aia_211_test_file():
-    return get_test_filepath("20260127_171857_211.fits")
+    return get_test_filepath("20260717_221157_211.fits")
 
 
 @pytest.fixture
 def aia_94_test_file():
-    return get_test_filepath("20260127_171859_94.fits")
+    return get_test_filepath("20260717_221159_94.fits")
 
 
 @pytest.fixture
 def aia_335_test_file():
-    return get_test_filepath("20260127_171900_335.fits")
+    return get_test_filepath("20260717_221200_335.fits")
 
 
 @pytest.fixture
 def aia_1600_test_file():
-    return get_test_filepath("20260127_171902_1600.fits")
+    return get_test_filepath("20260717_221150_1600.fits")
 
 
 @pytest.fixture
 def aia_193_test_file():
-    return get_test_filepath("20260127_171904_193.fits")
+    return get_test_filepath("20260717_221204_193.fits")
 
 
 @pytest.fixture
 def aia_304_test_file():
-    return get_test_filepath("20260127_171905_304.fits")
+    return get_test_filepath("20260717_221205_304.fits")
 
 
 @pytest.fixture

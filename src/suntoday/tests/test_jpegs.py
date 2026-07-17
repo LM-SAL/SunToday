@@ -4,79 +4,82 @@ import pytest
 from PIL import Image
 
 from suntoday.jpegs import (
+    _draw_field_lines,
     create_blended_figure_from_maps,
     create_figure_from_map,
     create_rgb_figure_from_maps,
     create_sdo_images,
     save_figures,
 )
-from suntoday.maps import create_aia_map, create_hmi_map
+from suntoday.maps import create_aia_map, create_hmi_map, create_synframe_map
+from suntoday.pfss import trace_field_lines
+from suntoday.tests.conftest import mpl_svg_compare
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_1700(aia_1700_test_file):
     aia_map = create_aia_map(aia_1700_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_1600(aia_1600_test_file):
     aia_map = create_aia_map(aia_1600_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_335(aia_335_test_file):
     aia_map = create_aia_map(aia_335_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_304(aia_304_test_file):
     aia_map = create_aia_map(aia_304_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_211(aia_211_test_file):
     aia_map = create_aia_map(aia_211_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_193(aia_193_test_file):
     aia_map = create_aia_map(aia_193_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_171(aia_171_test_file):
     aia_map = create_aia_map(aia_171_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_aia_94(aia_94_test_file):
     aia_map = create_aia_map(aia_94_test_file)
     _, fig = create_figure_from_map(aia_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_hmi_blos(hmi_blos_test_file):
     hmi_map = create_hmi_map(hmi_blos_test_file)
     _, fig = create_figure_from_map(hmi_map)
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_figure_from_map_hmi_cont(hmi_cont_test_file):
     hmi_map = create_hmi_map(hmi_cont_test_file)
     _, fig = create_figure_from_map(hmi_map)
@@ -91,7 +94,7 @@ def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_193_test_file):
     aia_94_map = create_aia_map(aia_94_test_file)
     aia_335_map = create_aia_map(aia_335_test_file)
@@ -100,7 +103,7 @@ def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia_171_test_file):
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_193_map = create_aia_map(aia_193_test_file)
@@ -109,12 +112,42 @@ def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia
     return fig
 
 
-@pytest.mark.mpl_image_compare
+@mpl_svg_compare
 def test_create_rgb_figure_from_maps_3(aia_304_test_file, aia_211_test_file, aia_171_test_file):
     aia_304_map = create_aia_map(aia_304_test_file)
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_171_map = create_aia_map(aia_171_test_file)
     _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
+    return fig
+
+
+@mpl_svg_compare
+def test_create_pfss_figure_from_map_aia_171(aia_171_test_file, synframe_test_file):
+    aia_map = create_aia_map(aia_171_test_file)
+    _, fig = create_figure_from_map(aia_map)
+    field_lines = trace_field_lines(create_synframe_map(synframe_test_file))
+    _draw_field_lines(fig.axes[0], aia_map, field_lines)
+    assert fig.axes[0].texts[-1].get_text() == "PFSS HMI Synframe - 2026-07-17 21:59:31 UTC"
+    return fig
+
+
+@mpl_svg_compare
+def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, synframe_test_file):
+    hmi_map = create_hmi_map(hmi_blos_test_file)
+    _, fig = create_figure_from_map(hmi_map)
+    field_lines = trace_field_lines(create_synframe_map(synframe_test_file))
+    _draw_field_lines(fig.axes[0], hmi_map, field_lines)
+    return fig
+
+
+@mpl_svg_compare
+def test_create_pfss_rgb_figure_from_maps(aia_304_test_file, aia_211_test_file, aia_171_test_file, synframe_test_file):
+    aia_304_map = create_aia_map(aia_304_test_file)
+    aia_211_map = create_aia_map(aia_211_test_file)
+    aia_171_map = create_aia_map(aia_171_test_file)
+    _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
+    field_lines = trace_field_lines(create_synframe_map(synframe_test_file))
+    _draw_field_lines(fig.axes[0], aia_304_map, field_lines)
     return fig
 
 
@@ -190,7 +223,7 @@ def test_save_figures_from_maps_hmi_cont(hmi_cont_test_file, tmpdir) -> None:
         assert img.size == (256, 256)
 
 
-def test_create_sdo_images_offline(  # NOQA: PLR0917
+def test_create_sdo_images_offline(  # ruff:ignore[too-many-positional-arguments]
     mocker,
     tmpdir,
     aia_1700_test_file,
@@ -292,6 +325,83 @@ def test_create_sdo_images_offline(  # NOQA: PLR0917
         "f1700.fits",
         "fblos.fits",
         "fcontinuum.fits",
+    ]
+    assert len(tmpdir.listdir()) == len(canonical_filelist)
+    for file in tmpdir.listdir():
+        assert file.basename in canonical_filelist
+
+
+def test_create_pfss_images_offline(  # ruff:ignore[too-many-positional-arguments]
+    mocker,
+    tmpdir,
+    aia_1700_test_file,
+    aia_1600_test_file,
+    aia_171_test_file,
+    aia_193_test_file,
+    aia_211_test_file,
+    aia_304_test_file,
+    aia_131_test_file,
+    aia_335_test_file,
+    aia_94_test_file,
+    hmi_blos_test_file,
+    hmi_cont_test_file,
+    synframe_test_file,
+) -> None:
+    assert len(tmpdir.listdir()) == 0
+    mocker.patch(
+        "suntoday.jpegs.fetch_aia_fits",
+        return_value=[
+            aia_131_test_file,
+            aia_1600_test_file,
+            aia_1700_test_file,
+            aia_171_test_file,
+            aia_193_test_file,
+            aia_211_test_file,
+            aia_304_test_file,
+            aia_335_test_file,
+            aia_94_test_file,
+        ],
+    )
+    mocker.patch(
+        "suntoday.jpegs.fetch_hmi_fits",
+        return_value=[
+            hmi_blos_test_file,
+            hmi_cont_test_file,
+        ],
+    )
+    mocker.patch(
+        "suntoday.jpegs.fetch_synframe_fits",
+        return_value=synframe_test_file,
+    )
+    create_sdo_images(datetime.now(UTC) - timedelta(hours=2), tmpdir, pfss=True)
+    # Every jpeg product of the main job, twice (base + field line overlay),
+    # and no planning FITS files.
+    base_names = [
+        # RGB composites
+        "_094_335_193",
+        "_211_193_171",
+        "_304_211_171",
+        # HMI/AIA blended image
+        "_HMImag_171",
+        # HMI images
+        "_HMI_cont_aiascale",
+        "_HMImag",
+        # AIA images
+        "0094",
+        "0131",
+        "0171",
+        "0193",
+        "0211",
+        "0304",
+        "0335",
+        "1600",
+        "1700",
+    ]
+    canonical_filelist = [
+        f"{size}{name}{suffix}.jpg"
+        for size in ("f", "l", "t")
+        for name in base_names
+        for suffix in ("pfssnolines", "pfss")
     ]
     assert len(tmpdir.listdir()) == len(canonical_filelist)
     for file in tmpdir.listdir():

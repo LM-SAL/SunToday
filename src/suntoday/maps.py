@@ -15,11 +15,12 @@ from aiapy.calibrate import correct_degradation
 from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
+from sunpy.time import parse_time
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS
 from suntoday.data import RESPONSE_TABLE_V10
 
-__all__ = ["create_aia_map", "create_hmi_map"]
+__all__ = ["create_aia_map", "create_hmi_map", "create_synframe_map"]
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:
@@ -48,10 +49,41 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         aia_map.meta["BUNIT"] = "ct / s"
         cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"]).with_extremes(bad="black")
         aia_map.plot_settings["cmap"] = cmap
-        aia_map._data[aia_map._data <= 1] = 0  # NOQA: SLF001
-        aia_map._data[np.isnan(aia_map._data)] = 0  # NOQA: SLF001
-        aia_map._data = aia_map._data.astype(int)  # NOQA: SLF001
+        aia_map._data[aia_map._data <= 1] = 0  # ruff:ignore[private-member-access]
+        aia_map._data[np.isnan(aia_map._data)] = 0  # ruff:ignore[private-member-access]
+        aia_map._data = aia_map._data.astype(int)  # ruff:ignore[private-member-access]
         return aia_map
+
+
+def create_synframe_map(file: Path) -> smap.GenericMap:
+    """
+    Creates a full-Sun Carrington map from a daily synchronic frame FITS.
+
+    The DRMS header is not FITS-standard: CDELT2 is in sine-latitude units
+    (CEA projection, Thompson 2006 sec. 5.5), CUNIT2 is ``sin(deg)`` and the
+    observation date only exists as a TAI T_OBS string. Its longitude increment
+    is also negative, while the PFSS solver requires a positive increment.
+    These are fixed here so sunpy and the solver interpret the data correctly.
+
+    Parameters
+    ----------
+    file : `pathlib.Path`
+        Path to the synframe FITS file written by
+        `suntoday.downloaders.jsoc.fetch_synframe_fits`.
+
+    Returns
+    -------
+    `sunpy.map.GenericMap`
+        Full-Sun magnetogram in the heliographic Carrington frame.
+    """
+    with fits.open(file, memmap=False) as hdul:
+        header = dict(hdul[0].header)
+        header["DATE-OBS"] = parse_time(str(header["T_OBS"]).replace("_TAI", ""), scale="tai").utc.isot
+        header["CUNIT1"] = "deg"
+        header["CUNIT2"] = "deg"
+        header["CDELT2"] = float(header["CDELT2"]) * 180 / np.pi
+        header["CDELT1"] = abs(float(header["CDELT1"]))
+        return smap.Map(hdul[0].data, header)
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:
@@ -74,9 +106,9 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
         hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
         if hmi_map.measurement == "magnetogram":
             hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
-            hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("hmimag").with_extremes(bad="black")
+            hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("gray").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
-            hmi_map._data[np.isnan(hmi_map._data)] = 0  # NOQA: SLF001
+            hmi_map._data[np.isnan(hmi_map._data)] = 0  # ruff:ignore[private-member-access]
             with np.errstate(all="ignore"):
-                hmi_map._data = hmi_map.data.astype(int)  # NOQA: SLF001
+                hmi_map._data = hmi_map.data.astype(int)  # ruff:ignore[private-member-access]
         return hmi_map

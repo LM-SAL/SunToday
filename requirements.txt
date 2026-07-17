@@ -18,5 +18,7 @@ schedule==1.2.2
 sentry-sdk==2.64.0
 sqlalchemy-utils==0.42.1
 sqlalchemy==2.0.51
+streamtracer==2.6.0
+sunkit-magex==1.1.0
 # Sunpy 8.0.0 has a bug with the SpericalScreen and mutiple threads
 sunpy[map]==7.1.2

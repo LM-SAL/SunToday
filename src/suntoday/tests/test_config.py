@@ -5,13 +5,13 @@ import pytest
 
 
 def test_settings_no_env(monkeypatch) -> None:
-    # This will only pass if you have removed the .env file
     monkeypatch.delenv("SUNTODAY_DB_URL", raising=False)
 
     from suntoday.config import Settings
 
-    # Test that the default settings are correct
-    settings = Settings()
+    # Test that the default settings are correct.
+    # _env_file=None keeps a local .env file from overriding the defaults.
+    settings = Settings(_env_file=None)
     assert settings.cron_frequency == 10
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
@@ -24,14 +24,13 @@ def test_settings_no_env(monkeypatch) -> None:
 
 
 def test_settings_with_env() -> None:
-    # This will only pass if you have removed the .env file
     os.environ["SUNTODAY_SAVE_DIRECTORY"] = "./YOLO"
     os.environ["SUNTODAY_JSOC_INFO_URL"] = "./VSO"
 
     from suntoday.config import Settings
 
     # Test that the environment variables override the defaults
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert str(settings.save_directory) == str(Path("./YOLO"))
     assert settings.jsoc_info_url == "./VSO"
 
@@ -39,7 +38,7 @@ def test_settings_with_env() -> None:
     del os.environ["SUNTODAY_JSOC_INFO_URL"]
 
     # Test that the variables are back to normal
-    settings = Settings()
+    settings = Settings(_env_file=None)
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
 

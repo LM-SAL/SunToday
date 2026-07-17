@@ -58,7 +58,25 @@ class TimeSeriesImages(BASE):
     updated_at = Column(DateTime(timezone=True))
 
 
-VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages}
+class PFSSImages(BASE):
+    """
+    This class represents the database table for successful creation of the
+    matched-time PFSS overlay JPEGS.
+
+    Attributes
+    ----------
+    obs_date : datetime
+        Primary key - The observation date of the image
+    updated_at : datetime
+        Timestamp of when the record was last updated
+    """
+
+    __tablename__ = "PFSSImages"
+    obs_date = Column(Date(), primary_key=True)
+    updated_at = Column(DateTime(timezone=True))
+
+
+VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages, "pfss": PFSSImages}
 
 
 def create_db(uri=None, *, echo: bool = False):
@@ -222,7 +240,7 @@ def write_or_update_record(
     if model_class is None:
         msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
         raise ValueError(msg)
-    try:  # NOQA: PLW0717
+    try:  # ruff:ignore[too-many-statements-in-try-clause]
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
             existing_record.updated_at = updated_at

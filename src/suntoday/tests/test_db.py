@@ -9,7 +9,7 @@ from suntoday.db import SDOImages, TimeSeriesImages, get_latest_record, get_reco
 def test_db_creation(db_session) -> None:
     session = db_session()
     inspector = inspect(session.bind)
-    assert inspector.get_table_names() == ["SDOImages", "TimeSeriesImages"]
+    assert sorted(inspector.get_table_names()) == ["PFSSImages", "SDOImages", "TimeSeriesImages"]
 
     session.close()
 
