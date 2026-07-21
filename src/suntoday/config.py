@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
-    db_password: str = "suntoday_user_password"  # NOQA: S105
+    db_password: str = "suntoday_user_password"  # ruff:ignore[hardcoded-password-string]
     db_port: int = 5432
     db_user: str = "suntoday_user"
     # Built from the db_* components below if not set explicitly via env.

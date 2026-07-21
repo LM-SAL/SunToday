@@ -9,7 +9,7 @@ from parfive import SessionConfig
 __all__ = ["create_downloader"]
 
 
-def create_session(*args, **kwargs):  # NOQA: ARG001
+def create_session(*args, **kwargs):  # ruff:ignore[unused-function-argument]
     from aiohttp import ClientSession, TCPConnector
 
     return ClientSession(connector=TCPConnector(ssl=False))

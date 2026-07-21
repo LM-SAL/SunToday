@@ -11,7 +11,7 @@ repos:
             "--remove-unused-variable",
           ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.15.20"
+    rev: "v0.15.22"
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--preview"]
@@ -23,10 +23,13 @@ repos:
       - id: docformatter
         args: ["--make-summary-multi-line", "--pre-summary-newline", "-ri"]
   - repo: https://github.com/JoC0de/pre-commit-prettier
-    rev: v3.9.4
+    rev: v3.9.5
     hooks:
       - id: prettier
         types_or: [css, scss, javascript, rst, json, yaml, toml, markdown]
+        # pre-commit passes npm flags that npm >= 11 rejects, so use a
+        # pre-commit-managed node (bundled npm 10) instead of the system one.
+        language_version: "20.19.0"
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v6.0.0
     hooks:

@@ -48,9 +48,9 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         aia_map.meta["BUNIT"] = "ct / s"
         cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"]).with_extremes(bad="black")
         aia_map.plot_settings["cmap"] = cmap
-        aia_map._data[aia_map._data <= 1] = 0  # NOQA: SLF001
-        aia_map._data[np.isnan(aia_map._data)] = 0  # NOQA: SLF001
-        aia_map._data = aia_map._data.astype(int)  # NOQA: SLF001
+        aia_map._data[aia_map._data <= 1] = 0  # ruff:ignore[private-member-access]
+        aia_map._data[np.isnan(aia_map._data)] = 0  # ruff:ignore[private-member-access]
+        aia_map._data = aia_map._data.astype(int)  # ruff:ignore[private-member-access]
         return aia_map
 
 
@@ -76,7 +76,7 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
             hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
             hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("hmimag").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
-            hmi_map._data[np.isnan(hmi_map._data)] = 0  # NOQA: SLF001
+            hmi_map._data[np.isnan(hmi_map._data)] = 0  # ruff:ignore[private-member-access]
             with np.errstate(all="ignore"):
-                hmi_map._data = hmi_map.data.astype(int)  # NOQA: SLF001
+                hmi_map._data = hmi_map.data.astype(int)  # ruff:ignore[private-member-access]
         return hmi_map
