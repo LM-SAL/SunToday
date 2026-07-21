@@ -54,57 +54,57 @@ def goes_primary_timeseries():
 # These are in order of the files stored on my local disk
 @pytest.fixture
 def hmi_cont_test_file():
-    return get_test_filepath("20260127_161845_continuum.fits")
+    return get_test_filepath("20260717_221200_continuum.fits")
 
 
 @pytest.fixture
 def hmi_blos_test_file():
-    return get_test_filepath("20260127_161845_magnetogram.fits")
+    return get_test_filepath("20260717_221200_magnetogram.fits")
 
 
 @pytest.fixture
 def aia_1700_test_file():
-    return get_test_filepath("20260127_171852_1700.fits")
+    return get_test_filepath("20260717_221204_1700.fits")
 
 
 @pytest.fixture
 def aia_131_test_file():
-    return get_test_filepath("20260127_171854_131.fits")
+    return get_test_filepath("20260717_221154_131.fits")
 
 
 @pytest.fixture
 def aia_171_test_file():
-    return get_test_filepath("20260127_171857_171.fits")
+    return get_test_filepath("20260717_221157_171.fits")
 
 
 @pytest.fixture
 def aia_211_test_file():
-    return get_test_filepath("20260127_171857_211.fits")
+    return get_test_filepath("20260717_221157_211.fits")
 
 
 @pytest.fixture
 def aia_94_test_file():
-    return get_test_filepath("20260127_171859_94.fits")
+    return get_test_filepath("20260717_221159_94.fits")
 
 
 @pytest.fixture
 def aia_335_test_file():
-    return get_test_filepath("20260127_171900_335.fits")
+    return get_test_filepath("20260717_221200_335.fits")
 
 
 @pytest.fixture
 def aia_1600_test_file():
-    return get_test_filepath("20260127_171902_1600.fits")
+    return get_test_filepath("20260717_221150_1600.fits")
 
 
 @pytest.fixture
 def aia_193_test_file():
-    return get_test_filepath("20260127_171904_193.fits")
+    return get_test_filepath("20260717_221204_193.fits")
 
 
 @pytest.fixture
 def aia_304_test_file():
-    return get_test_filepath("20260127_171905_304.fits")
+    return get_test_filepath("20260717_221205_304.fits")
 
 
 @pytest.fixture

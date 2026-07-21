@@ -2,3 +2,4 @@
 *.svg binary
 *.jpg binary
 *.png binary
+src/suntoday/tests/baseline/** filter=lfs diff=lfs merge=lfs -text linguist-generated=true
