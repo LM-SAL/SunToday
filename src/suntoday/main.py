@@ -52,7 +52,7 @@ def catch_exceptions(*, cancel_on_failure=False):
         def wrapper(*args, **kwargs):
             try:
                 return job_func(*args, **kwargs)
-            except Exception as e:  # NOQA : BLE001
+            except Exception as e:  # ruff:ignore[blind-except]
                 logger.exception(f"Error occurred in job {job_func.__name__}: {e}")
                 if cancel_on_failure:
                     return schedule.CancelJob

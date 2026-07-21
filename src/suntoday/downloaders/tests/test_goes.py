@@ -14,7 +14,7 @@ def test_read_goes_json_retries_after_timeout(monkeypatch) -> None:
     monkeypatch.setattr(goes.requests, "get", get)
     monkeypatch.setattr(goes.time, "sleep", Mock())
 
-    assert goes._read_goes_json("url").to_dict("records") == [{"flux": 1.0}]  # NOQA: SLF001
+    assert goes._read_goes_json("url").to_dict("records") == [{"flux": 1.0}]  # ruff:ignore[private-member-access]
     assert get.call_args_list == [call("url", timeout=goes.GOES_TIMEOUT)] * 2
 
 
@@ -24,7 +24,7 @@ def test_read_goes_json_raises_after_all_retries(monkeypatch) -> None:
     monkeypatch.setattr(goes.time, "sleep", Mock())
 
     with pytest.raises(RuntimeError, match="Failed to fetch GOES XRS data from url"):
-        goes._read_goes_json("url")  # NOQA: SLF001
+        goes._read_goes_json("url")  # ruff:ignore[private-member-access]
     assert get.call_count == goes.GOES_RETRIES + 1
 
 

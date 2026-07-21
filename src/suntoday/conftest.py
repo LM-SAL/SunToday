@@ -5,7 +5,7 @@ from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sunpy.io._file_tools import read_file  # NOQA: PLC2701
+from sunpy.io._file_tools import read_file  # ruff:ignore[import-private-name]
 
 from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
@@ -27,8 +27,8 @@ def db_session(test_db):
         engine = create_engine(connection_str, echo=False, connect_args={"options": "-c timezone=utc"})
         BASE.metadata.create_all(engine)
         session = get_session(connection_str)
-        assert session.query(SDOImages).count() == 0  # NOQA: S101
-        assert session.query(TimeSeriesImages).count() == 0  # NOQA: S101
+        assert session.query(SDOImages).count() == 0  # ruff:ignore[assert]
+        assert session.query(TimeSeriesImages).count() == 0  # ruff:ignore[assert]
         session.close()
         yield sessionmaker(bind=engine, expire_on_commit=False)
 
