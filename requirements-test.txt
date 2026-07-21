@@ -3,4 +3,5 @@ pytest-astropy
 pytest-mock
 pytest-mpl
 pytest-postgresql
+pytest-rerunfailures
 pytest-xdist
