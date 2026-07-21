@@ -11,21 +11,25 @@ def test_read_goes_json_retries_after_timeout(monkeypatch) -> None:
     response = Mock()
     response.json.return_value = [{"flux": 1.0}]
     get = Mock(side_effect=[requests.Timeout("temporary"), response])
+    sleep = Mock()
     monkeypatch.setattr(goes.requests, "get", get)
-    monkeypatch.setattr(goes.time, "sleep", Mock())
+    monkeypatch.setattr(goes.time, "sleep", sleep)
 
-    assert goes._read_goes_json("url").to_dict("records") == [{"flux": 1.0}]  # NOQA: SLF001
+    assert goes._read_goes_json("url").to_dict("records") == [{"flux": 1.0}]  # ruff:ignore[private-member-access]
     assert get.call_args_list == [call("url", timeout=goes.GOES_TIMEOUT)] * 2
+    assert sleep.call_args_list == [call(goes.GOES_RETRY_DELAY)]
 
 
 def test_read_goes_json_raises_after_all_retries(monkeypatch) -> None:
     get = Mock(side_effect=requests.Timeout("down"))
+    sleep = Mock()
     monkeypatch.setattr(goes.requests, "get", get)
-    monkeypatch.setattr(goes.time, "sleep", Mock())
+    monkeypatch.setattr(goes.time, "sleep", sleep)
 
     with pytest.raises(RuntimeError, match="Failed to fetch GOES XRS data from url"):
-        goes._read_goes_json("url")  # NOQA: SLF001
+        goes._read_goes_json("url")  # ruff:ignore[private-member-access]
     assert get.call_count == goes.GOES_RETRIES + 1
+    assert sleep.call_args_list == [call(goes.GOES_RETRY_DELAY)] * goes.GOES_RETRIES
 
 
 @pytest.mark.remote_data

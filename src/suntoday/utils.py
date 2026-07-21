@@ -213,6 +213,6 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Pat
         # Empty keyword somehow and it raises a warning we want to remove.
         amap.meta.pop("", None)
         with atomic_save(save_directory / filename) as tmp_path:
-            amap._data = amap.data.astype(np.float32)  # NOQA: SLF001
+            amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
             amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
     return save_directory / filename
