@@ -190,7 +190,7 @@ def test_save_figures_from_maps_hmi_cont(hmi_cont_test_file, tmpdir) -> None:
         assert img.size == (256, 256)
 
 
-def test_create_sdo_images_offline(  # NOQA: PLR0917
+def test_create_sdo_images_offline(  # ruff:ignore[too-many-positional-arguments]
     mocker,
     tmpdir,
     aia_1700_test_file,
