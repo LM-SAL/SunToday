@@ -91,6 +91,8 @@ def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
+# Never compared in CI: tox's figure comparison env filters out remote_data,
+# so this only runs under figure-generate as a live rendering smoke test.
 @pytest.mark.remote_data
 @pytest.mark.skipif(not _has_jsoc_credentials(), reason="JSOC test credentials are not configured.")
 @mpl_svg_compare
