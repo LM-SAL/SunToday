@@ -52,6 +52,8 @@ def catch_exceptions(*, cancel_on_failure=False):
         def wrapper(*args, **kwargs):
             try:
                 return job_func(*args, **kwargs)
+            # Blanket catch by design: a failing scheduled job must be logged
+            # and swallowed, never kill the scheduler loop.
             except Exception as e:  # ruff:ignore[blind-except]
                 logger.exception(f"Error occurred in job {job_func.__name__}: {e}")
                 if cancel_on_failure:
