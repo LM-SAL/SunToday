@@ -215,6 +215,7 @@ docs/whatsnew/latest_changelog.txt
 *.orig
 .tmp
 figure_test_images/
+reference_jpegs/
 suntoday-*/
 images/
 pgdata/

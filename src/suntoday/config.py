@@ -46,6 +46,9 @@ class Settings(BaseSettings):
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
+    # Overall brightness multiplier for the RGB composites, applied after
+    # auto-exposure; the highlight knee keeps the bright cores from clipping.
+    rgb_brightness: float = 1.30
     # Slope of the tone curve around mid-gray: >1 darkens shadows and brightens
     # highlights across the whole image, 1.0 = no change.
     rgb_contrast: float = 1.3

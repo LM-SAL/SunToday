@@ -74,7 +74,7 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
         hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
         if hmi_map.measurement == "magnetogram":
             hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
-            hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("hmimag").with_extremes(bad="black")
+            hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("gray").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
             hmi_map._data[np.isnan(hmi_map._data)] = 0  # ruff:ignore[private-member-access]
             with np.errstate(all="ignore"):
