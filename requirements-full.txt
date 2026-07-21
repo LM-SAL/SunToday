@@ -18,6 +18,7 @@ astropy==8.0.0
     #   aiapy
     #   astropy-healpix
     #   reproject
+    #   sunkit-magex
     #   sunpy
 astropy-healpix==1.1.3
     # via reproject
@@ -82,7 +83,9 @@ idna==3.11
     #   requests
     #   yarl
 imageio==2.37.2
-    # via pims
+    # via
+    #   pims
+    #   scikit-image
 isodate==0.7.2
     # via zeep
 jmespath==1.1.0
@@ -91,6 +94,8 @@ jmespath==1.1.0
     #   botocore
 kiwisolver==1.4.9
     # via matplotlib
+lazy-loader==0.5
+    # via scikit-image
 locket==1.0.0
     # via partd
 loguru==0.7.3
@@ -103,6 +108,7 @@ matplotlib==3.10.9
     #   aiapy
     #   mpl-animators
     #   mplcairo
+    #   sunkit-magex
     #   sunpy
 mpl-animators==1.2.4
     # via sunpy
@@ -112,6 +118,8 @@ multidict==6.7.1
     # via
     #   aiohttp
     #   yarl
+networkx==3.6.1
+    # via scikit-image
 numcodecs==0.16.5
     # via zarr
 numpy==2.5.0
@@ -132,7 +140,10 @@ numpy==2.5.0
     #   pims
     #   pyerfa
     #   reproject
+    #   scikit-image
     #   scipy
+    #   streamtracer
+    #   sunkit-magex
     #   sunpy
     #   tifffile
     #   zarr
@@ -141,8 +152,11 @@ packaging==26.0
     #   astropy
     #   dask
     #   drms
+    #   lazy-loader
     #   matplotlib
     #   pims
+    #   scikit-image
+    #   streamtracer
     #   sunpy
     #   zarr
 pandas==3.0.3
@@ -162,6 +176,7 @@ pillow==12.3.0
     #   matplotlib
     #   mplcairo
     #   reproject
+    #   scikit-image
 pims==0.7
     # via dask-image
 platformdirs==4.5.1
@@ -224,10 +239,14 @@ s3transfer==0.19.1
     # via boto3
 schedule==1.2.2
     # via -r requirements.txt
+scikit-image==0.26.0
+    # via sunkit-magex
 scipy==1.17.0
     # via
     #   dask-image
     #   reproject
+    #   scikit-image
+    #   sunkit-magex
     #   sunpy
 sentry-sdk==2.64.0
     # via -r requirements.txt
@@ -243,14 +262,20 @@ sqlalchemy==2.0.51
     #   sqlalchemy-utils
 sqlalchemy-utils==0.42.1
     # via -r requirements.txt
+streamtracer==2.6.0
+    # via sunkit-magex
+sunkit-magex==1.1.0
+    # via -r requirements.txt
 sunpy==7.1.2
     # via
     #   -r requirements.txt
     #   aiapy
+    #   sunkit-magex
 tifffile==2026.1.28
     # via
     #   dask-image
     #   pims
+    #   scikit-image
 toolz==1.1.0
     # via
     #   dask

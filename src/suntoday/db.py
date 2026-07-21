@@ -58,7 +58,28 @@ class TimeSeriesImages(BASE):
     updated_at = Column(DateTime(timezone=True))
 
 
-VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages}
+class PFSSImages(BASE):
+    """
+    This class represents the database table for successful creation of the
+    matched-time PFSS overlay JPEGS.
+
+    Attributes
+    ----------
+    obs_date : datetime
+        Primary key - The observation date of the image
+    updated_at : datetime
+        Timestamp of when the record was last updated
+    adapt_epoch : datetime
+        ADAPT map timestamp used for the last successful PFSS render
+    """
+
+    __tablename__ = "PFSSImages"
+    obs_date = Column(Date(), primary_key=True)
+    updated_at = Column(DateTime(timezone=True))
+    adapt_epoch = Column(DateTime(timezone=True))
+
+
+VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages, "pfss": PFSSImages}
 
 
 def create_db(uri=None, *, echo: bool = False):
@@ -122,7 +143,7 @@ def get_session(uri=None, *, echo: bool = False) -> Session:
     return session()
 
 
-def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeriesImages:
+def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeriesImages | PFSSImages | None:
     """
     Retrieve the last updated record from the database based on the model type.
 
@@ -131,7 +152,7 @@ def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeri
     session : Session
         SQLAlchemy session object
     model_type : str
-        Type of model to query, 'images' or 'timeseries'
+        Type of model to query; one of ``VALID_MODELS``.
 
     Returns
     -------
@@ -155,7 +176,9 @@ def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeri
     return results
 
 
-def get_record(session: Session, model_type: str, obs_date: datetime.date) -> SDOImages | TimeSeriesImages | None:
+def get_record(
+    session: Session, model_type: str, obs_date: datetime.date
+) -> SDOImages | TimeSeriesImages | PFSSImages | None:
     """
     Retrieve a record from the database based on the model type and observation
     date.
@@ -165,7 +188,7 @@ def get_record(session: Session, model_type: str, obs_date: datetime.date) -> SD
     session : Session
         SQLAlchemy session object.
     model_type : str
-        Type of model to query, 'images' or 'timeseries'.
+        Type of model to query; one of ``VALID_MODELS``.
     obs_date : datetime.date
         Observation date for the record.
 
@@ -197,6 +220,7 @@ def write_or_update_record(
     obs_date: str,
     *,
     updated_at: str,
+    adapt_epoch: datetime.datetime | None = None,
 ):
     """
     Write a new record to the database or update an existing one based on the
@@ -207,11 +231,13 @@ def write_or_update_record(
     session : Session
         SQLAlchemy session object.
     model_type : str
-        Type of model to create, 'images' or 'timeseries'
+        Type of model to create; one of ``VALID_MODELS``.
     obs_date : str
         Observation date for the record.
     updated_at : str
         Timestamp for when the record was updated
+    adapt_epoch : datetime.datetime, optional
+        ADAPT map timestamp used for a PFSS render.
 
     Raises
     ------
@@ -222,14 +248,21 @@ def write_or_update_record(
     if model_class is None:
         msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
         raise ValueError(msg)
+    if adapt_epoch is not None and model_class is not PFSSImages:
+        msg = "adapt_epoch is only valid for PFSS records"
+        raise ValueError(msg)
     try:  # ruff:ignore[too-many-statements-in-try-clause]
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
             existing_record.updated_at = updated_at
+            if adapt_epoch is not None:
+                existing_record.adapt_epoch = adapt_epoch
             session.commit()
             logger.info(f"Updated existing {model_type} record for {obs_date} with updated_at: {updated_at}")
         else:
             new_record = model_class(obs_date=obs_date, updated_at=updated_at)
+            if adapt_epoch is not None:
+                new_record.adapt_epoch = adapt_epoch
             session.add(new_record)
             session.commit()
             logger.info(f"Created new {model_type} record for {obs_date}")

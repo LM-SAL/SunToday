@@ -1,4 +1,3 @@
-import os
 from pathlib import Path
 
 import pytest
@@ -6,6 +5,7 @@ import pytest
 
 def test_settings_no_env(monkeypatch) -> None:
     monkeypatch.delenv("SUNTODAY_DB_URL", raising=False)
+    monkeypatch.delenv("SUNTODAY_TEST_ENV", raising=False)
 
     from suntoday.config import Settings
 
@@ -15,17 +15,16 @@ def test_settings_no_env(monkeypatch) -> None:
     assert settings.cron_frequency == 10
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    # Should be overridden by tox.
-    assert settings.test_env is True
+    assert settings.test_env is False
     expected_db_url = (
         f"postgresql+psycopg2://{settings.db_user}@{settings.db_host}:{settings.db_port}/{settings.db_name}"
     )
     assert settings.db_url == expected_db_url
 
 
-def test_settings_with_env() -> None:
-    os.environ["SUNTODAY_SAVE_DIRECTORY"] = "./YOLO"
-    os.environ["SUNTODAY_JSOC_INFO_URL"] = "./VSO"
+def test_settings_with_env(monkeypatch) -> None:
+    monkeypatch.setenv("SUNTODAY_SAVE_DIRECTORY", "./YOLO")
+    monkeypatch.setenv("SUNTODAY_JSOC_INFO_URL", "./VSO")
 
     from suntoday.config import Settings
 
@@ -34,8 +33,8 @@ def test_settings_with_env() -> None:
     assert str(settings.save_directory) == str(Path("./YOLO"))
     assert settings.jsoc_info_url == "./VSO"
 
-    del os.environ["SUNTODAY_SAVE_DIRECTORY"]
-    del os.environ["SUNTODAY_JSOC_INFO_URL"]
+    monkeypatch.delenv("SUNTODAY_SAVE_DIRECTORY")
+    monkeypatch.delenv("SUNTODAY_JSOC_INFO_URL")
 
     # Test that the variables are back to normal
     settings = Settings(_env_file=None)

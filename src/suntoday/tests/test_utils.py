@@ -13,16 +13,9 @@ def test_normalize_image_percentiles() -> None:
 
 def test_apply_gamma_correction() -> None:
     image = np.array([[100, 150, 200], [50, 75, 100]])
-    expected_result = np.array([[159, 195, 225], [112, 138, 159]])
-    assert np.array_equal(apply_gamma_correction(image, gamma=0.5), expected_result)
-
-    image = np.array([[100, 150, 200], [50, 75, 100]])
-    expected_result = np.array([[100, 150, 200], [50, 75, 100]])
-    assert np.array_equal(apply_gamma_correction(image, gamma=1.0), expected_result)
-
-    image = np.array([[100, 150, 200], [50, 75, 100]])
-    expected_result = np.array([[39, 88, 156], [9, 22, 39]])
-    assert np.array_equal(apply_gamma_correction(image, gamma=2.0), expected_result)
+    assert np.array_equal(apply_gamma_correction(image, gamma=0.5), [[159, 195, 225], [112, 138, 159]])
+    assert np.array_equal(apply_gamma_correction(image, gamma=1.0), image)
+    assert np.array_equal(apply_gamma_correction(image, gamma=2.0), [[39, 88, 156], [9, 22, 39]])
 
 
 def test_sync_to_s3(tmp_path, mocker) -> None:
