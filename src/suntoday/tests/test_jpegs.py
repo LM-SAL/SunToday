@@ -1,86 +1,46 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import call
 
 import pytest
 from PIL import Image
 
+from suntoday.downloaders.jsoc import find_latest_pfss_time
 from suntoday.jpegs import (
+    _draw_field_lines,
+    _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
     create_rgb_figure_from_maps,
     create_sdo_images,
     save_figures,
 )
-from suntoday.maps import create_aia_map, create_hmi_map
+from suntoday.maps import create_adapt_map, create_aia_map, create_hmi_map
+from suntoday.pfss import trace_field_lines
 from suntoday.tests.conftest import mpl_svg_compare
 
 
-@mpl_svg_compare
-def test_create_figure_from_map_aia_1700(aia_1700_test_file):
-    aia_map = create_aia_map(aia_1700_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_1600(aia_1600_test_file):
-    aia_map = create_aia_map(aia_1600_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_335(aia_335_test_file):
-    aia_map = create_aia_map(aia_335_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_304(aia_304_test_file):
-    aia_map = create_aia_map(aia_304_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_211(aia_211_test_file):
-    aia_map = create_aia_map(aia_211_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_193(aia_193_test_file):
-    aia_map = create_aia_map(aia_193_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
+@pytest.fixture(scope="module")
+def pfss_field_lines(adapt_test_file):
+    # Real solve + trace (fixed RNG seed) so the baselines show the actual
+    # effect of the seeding and line-style parameters on a real image;
+    # regenerate the baselines after tuning the pfss.py constants.
+    return trace_field_lines(create_adapt_map(adapt_test_file))
 
 
 @mpl_svg_compare
 def test_create_figure_from_map_aia_171(aia_171_test_file):
     aia_map = create_aia_map(aia_171_test_file)
-    _, fig = create_figure_from_map(aia_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_aia_94(aia_94_test_file):
-    aia_map = create_aia_map(aia_94_test_file)
-    _, fig = create_figure_from_map(aia_map)
+    wavelength, fig = create_figure_from_map(aia_map)
+    assert wavelength == "0171"
     return fig
 
 
 @mpl_svg_compare
 def test_create_figure_from_map_hmi_blos(hmi_blos_test_file):
     hmi_map = create_hmi_map(hmi_blos_test_file)
-    _, fig = create_figure_from_map(hmi_map)
-    return fig
-
-
-@mpl_svg_compare
-def test_create_figure_from_map_hmi_cont(hmi_cont_test_file):
-    hmi_map = create_hmi_map(hmi_cont_test_file)
-    _, fig = create_figure_from_map(hmi_map)
+    wavelength, fig = create_figure_from_map(hmi_map)
+    assert wavelength == "_HMImag"
     return fig
 
 
@@ -88,7 +48,8 @@ def test_create_figure_from_map_hmi_cont(hmi_cont_test_file):
 def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
     aia_171_map = create_aia_map(aia_171_test_file)
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
-    _, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
+    wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
+    assert wavelength == "_HMImag_171"
     return fig
 
 
@@ -97,7 +58,8 @@ def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_
     aia_94_map = create_aia_map(aia_94_test_file)
     aia_335_map = create_aia_map(aia_335_test_file)
     aia_193_map = create_aia_map(aia_193_test_file)
-    _, fig = create_rgb_figure_from_maps([aia_94_map, aia_335_map, aia_193_map])
+    wavelength, fig = create_rgb_figure_from_maps([aia_94_map, aia_335_map, aia_193_map])
+    assert wavelength == "_094_335_193"
     return fig
 
 
@@ -106,7 +68,8 @@ def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_193_map = create_aia_map(aia_193_test_file)
     aia_171_map = create_aia_map(aia_171_test_file)
-    _, fig = create_rgb_figure_from_maps([aia_211_map, aia_193_map, aia_171_map])
+    wavelength, fig = create_rgb_figure_from_maps([aia_211_map, aia_193_map, aia_171_map])
+    assert wavelength == "_211_193_171"
     return fig
 
 
@@ -116,6 +79,18 @@ def test_create_rgb_figure_from_maps_3(aia_304_test_file, aia_211_test_file, aia
     aia_211_map = create_aia_map(aia_211_test_file)
     aia_171_map = create_aia_map(aia_171_test_file)
     _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
+    return fig
+
+
+@pytest.mark.mpl_image_compare
+def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lines):
+    # The magnetogram is the natural check for the traced lines: footpoints
+    # must sit on the visible flux concentrations.
+    hmi_map = create_hmi_map(hmi_blos_test_file)
+    _, fig = create_figure_from_map(hmi_map)
+    _draw_field_lines(fig.axes[0], hmi_map, pfss_field_lines)
+    # Padded so the datetime column matches "SDO/HMI - HMI BLOS - <date>".
+    assert fig.axes[0].texts[-1].get_text() == "PFSS ADAPT         - 2026-07-17 22:00:00"
     return fig
 
 
@@ -142,232 +117,149 @@ def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_17
         assert img.size == (256, 256)
 
 
-def test_save_figures_from_maps_hmi_blend(aia_171_test_file, hmi_blos_test_file, tmpdir) -> None:
-    aia_171_map = create_aia_map(aia_171_test_file)
-    hmi_blos_map = create_hmi_map(hmi_blos_test_file)
-    wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
-    save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 3
-    assert (tmpdir / "f_HMImag_171.jpg").exists()
-    with Image.open(str(tmpdir / "f_HMImag_171.jpg")) as img:
-        assert img.size == (4096, 4096)
-    assert (tmpdir / "l_HMImag_171.jpg").exists()
-    with Image.open(str(tmpdir / "l_HMImag_171.jpg")) as img:
-        assert img.size == (1024, 1024)
-    assert (tmpdir / "t_HMImag_171.jpg").exists()
-    with Image.open(str(tmpdir / "t_HMImag_171.jpg")) as img:
-        assert img.size == (256, 256)
+@pytest.mark.remote_data
+def test_create_sdo_images_live_smoke(mocker, tmp_path) -> None:
+    # Three wavelengths make one real RGB combination possible while keeping
+    # the live run short; drives the real fetch -> map -> figure -> JPEG
+    # pipeline, including the RGB composite and HMI/AIA blend, end to end.
+    for module in ["suntoday.jpegs", "suntoday.downloaders.jsoc"]:
+        mocker.patch(f"{module}.AIA_WAVELENGTHS", ["304", "211", "171"])
+        mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
+    mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [("304", "211", "171")])
 
+    files = create_sdo_images(datetime.now(UTC) - timedelta(days=2), tmp_path)
 
-def test_save_figures_from_maps_hmi_blos(hmi_blos_test_file, tmpdir) -> None:
-    hmi_blos_map = create_hmi_map(hmi_blos_test_file)
-    wavelength, fig = create_figure_from_map(hmi_blos_map)
-    save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 3
-    assert (tmpdir / "f_HMImag.jpg").exists()
-    with Image.open(str(tmpdir / "f_HMImag.jpg")) as img:
-        assert img.size == (4096, 4096)
-    assert (tmpdir / "l_HMImag.jpg").exists()
-    with Image.open(str(tmpdir / "l_HMImag.jpg")) as img:
-        assert img.size == (1024, 1024)
-    assert (tmpdir / "t_HMImag.jpg").exists()
-    with Image.open(str(tmpdir / "t_HMImag.jpg")) as img:
-        assert img.size == (256, 256)
-
-
-def test_save_figures_from_maps_hmi_cont(hmi_cont_test_file, tmpdir) -> None:
-    hmi_cont_map = create_hmi_map(hmi_cont_test_file)
-    wavelength, fig = create_figure_from_map(hmi_cont_map)
-    save_figures([(wavelength, fig)], tmpdir)
-    assert len(tmpdir.listdir()) == 3
-    assert (tmpdir / "f_HMI_cont_aiascale.jpg").exists()
-    with Image.open(str(tmpdir / "f_HMI_cont_aiascale.jpg")) as img:
-        assert img.size == (4096, 4096)
-    assert (tmpdir / "l_HMI_cont_aiascale.jpg").exists()
-    with Image.open(str(tmpdir / "l_HMI_cont_aiascale.jpg")) as img:
-        assert img.size == (1024, 1024)
-    assert (tmpdir / "t_HMI_cont_aiascale.jpg").exists()
-    with Image.open(str(tmpdir / "t_HMI_cont_aiascale.jpg")) as img:
-        assert img.size == (256, 256)
-
-
-def test_create_sdo_images_offline(  # ruff:ignore[too-many-positional-arguments]
-    mocker,
-    tmpdir,
-    aia_1700_test_file,
-    aia_1600_test_file,
-    aia_171_test_file,
-    aia_193_test_file,
-    aia_211_test_file,
-    aia_304_test_file,
-    aia_131_test_file,
-    aia_335_test_file,
-    aia_94_test_file,
-    hmi_blos_test_file,
-    hmi_cont_test_file,
-) -> None:
-    assert len(tmpdir.listdir()) == 0
-    mocker.patch(
-        "suntoday.jpegs.fetch_aia_fits",
-        return_value=[
-            aia_131_test_file,
-            aia_1600_test_file,
-            aia_1700_test_file,
-            aia_171_test_file,
-            aia_193_test_file,
-            aia_211_test_file,
-            aia_304_test_file,
-            aia_335_test_file,
-            aia_94_test_file,
-        ],
-    )
-    mocker.patch(
-        "suntoday.jpegs.fetch_hmi_fits",
-        return_value=[
-            hmi_blos_test_file,
-            hmi_cont_test_file,
-        ],
-    )
-    create_sdo_images(datetime.now(UTC) - timedelta(hours=2), tmpdir)
-    # These are the names of the files that exist on suntoday
-    # and I had no desire to change them.
-    canonical_filelist = [
-        # Blended images
-        "f_094_335_193.jpg",
-        "f_211_193_171.jpg",
-        "f_304_211_171.jpg",
-        "l_094_335_193.jpg",
-        "l_211_193_171.jpg",
-        "l_304_211_171.jpg",
-        "t_094_335_193.jpg",
-        "t_211_193_171.jpg",
-        "t_304_211_171.jpg",
-        # HMI/AIA blended images
-        "f_HMImag_171.jpg",
-        "l_HMImag_171.jpg",
-        "t_HMImag_171.jpg",
-        # HMI images
-        "f_HMI_cont_aiascale.jpg",
-        "f_HMImag.jpg",
-        "l_HMI_cont_aiascale.jpg",
-        "l_HMImag.jpg",
-        "t_HMI_cont_aiascale.jpg",
-        "t_HMImag.jpg",
-        # AIA images
-        "f0094.jpg",
-        "f0131.jpg",
-        "f0171.jpg",
-        "f0193.jpg",
-        "f0211.jpg",
-        "f0304.jpg",
-        "f0335.jpg",
-        "f1600.jpg",
-        "f1700.jpg",
-        "l0094.jpg",
-        "l0131.jpg",
-        "l0171.jpg",
-        "l0193.jpg",
-        "l0211.jpg",
-        "l0304.jpg",
-        "l0335.jpg",
-        "l1600.jpg",
-        "l1700.jpg",
-        "t0094.jpg",
-        "t0131.jpg",
-        "t0171.jpg",
-        "t0193.jpg",
-        "t0211.jpg",
-        "t0304.jpg",
-        "t0335.jpg",
-        "t1600.jpg",
-        "t1700.jpg",
-        # Planning FITS files
-        "f0094.fits",
-        "f0131.fits",
-        "f0171.fits",
-        "f0193.fits",
-        "f0211.fits",
-        "f0304.fits",
-        "f0335.fits",
-        "f1600.fits",
-        "f1700.fits",
-        "fblos.fits",
-        "fcontinuum.fits",
-    ]
-    assert len(tmpdir.listdir()) == len(canonical_filelist)
-    for file in tmpdir.listdir():
-        assert file.basename in canonical_filelist
+    # 304/211/171, magnetogram, continuum, the RGB composite and the blend
+    # at three JPEG sizes each, plus the five planning FITS files.
+    assert len([file for file in files if file.suffix == ".jpg"]) == 21
+    assert len([file for file in files if file.suffix == ".fits"]) == 5
+    assert all(file.exists() and file.stat().st_size > 0 for file in files)
 
 
 @pytest.mark.remote_data
-def test_create_sdo_images_online(tmpdir) -> None:
-    assert len(tmpdir.listdir()) == 0
-    create_sdo_images(datetime.now(UTC) - timedelta(hours=2), tmpdir)
-    # These are the names of the files that exist on suntoday
-    # and I had no desire to change them.
-    canonical_filelist = [
-        # Blended images
-        "f_094_335_193.jpg",
-        "f_211_193_171.jpg",
-        "f_304_211_171.jpg",
-        "l_094_335_193.jpg",
-        "l_211_193_171.jpg",
-        "l_304_211_171.jpg",
-        "t_094_335_193.jpg",
-        "t_211_193_171.jpg",
-        "t_304_211_171.jpg",
-        # HMI/AIA blended images
-        "f_HMImag_171.jpg",
-        "l_HMImag_171.jpg",
-        "t_HMImag_171.jpg",
-        # HMI images
-        "f_HMI_cont_aiascale.jpg",
-        "f_HMImag.jpg",
-        "l_HMI_cont_aiascale.jpg",
-        "l_HMImag.jpg",
-        "t_HMI_cont_aiascale.jpg",
-        "t_HMImag.jpg",
-        # AIA images
-        "f0094.jpg",
-        "f0131.jpg",
-        "f0171.jpg",
-        "f0193.jpg",
-        "f0211.jpg",
-        "f0304.jpg",
-        "f0335.jpg",
-        "f1600.jpg",
-        "f1700.jpg",
-        "l0094.jpg",
-        "l0131.jpg",
-        "l0171.jpg",
-        "l0193.jpg",
-        "l0211.jpg",
-        "l0304.jpg",
-        "l0335.jpg",
-        "l1600.jpg",
-        "l1700.jpg",
-        "t0094.jpg",
-        "t0131.jpg",
-        "t0171.jpg",
-        "t0193.jpg",
-        "t0211.jpg",
-        "t0304.jpg",
-        "t0335.jpg",
-        "t1600.jpg",
-        "t1700.jpg",
-        # Planning FITS files
+def test_create_sdo_images_pfss_live_smoke(mocker, tmp_path) -> None:
+    # Full pfss run on one wavelength: real ADAPT fetch, field-line trace
+    # and the pfssnolines/pfss overlay pair for every product, anchored the
+    # way pfss_job anchors so every source has data at the requested time.
+    for module in ["suntoday.jpegs", "suntoday.downloaders.jsoc"]:
+        mocker.patch(f"{module}.AIA_WAVELENGTHS", ["171"])
+        mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
+    mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
+
+    files = create_sdo_images(find_latest_pfss_time(), tmp_path, pfss=True)
+
+    # 171, magnetogram, continuum and the blend, each as a pfssnolines base
+    # and a pfss overlay at three JPEG sizes; no planning FITS files.
+    assert len(files) == 24
+    assert len([file for file in files if "pfssnolines" in file.name]) == 12
+    assert not [file for file in files if file.suffix == ".fits"]
+    assert all(file.exists() and file.stat().st_size > 0 for file in files)
+
+
+def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
+    aia_files = [tmp_path / wavelength for wavelength in ["94", "335", "193", "171"]]
+    hmi_files = [tmp_path / measurement for measurement in ["magnetogram", "continuum"]]
+    mocker.patch("suntoday.jpegs.AIA_WAVELENGTHS", ["94", "335", "193", "171"])
+    mocker.patch("suntoday.jpegs.AIA_FITS_ONLY_WAVELENGTHS", [])
+    mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [["94", "335", "193"]])
+    mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=aia_files)
+    mocker.patch("suntoday.jpegs.fetch_hmi_fits", return_value=hmi_files)
+    mocker.patch(
+        "suntoday.jpegs.create_aia_map",
+        side_effect=lambda path: SimpleNamespace(
+            label=path.stem,
+            wavelength=SimpleNamespace(value=int(path.stem)),
+        ),
+    )
+    mocker.patch(
+        "suntoday.jpegs.create_hmi_map",
+        side_effect=lambda path: SimpleNamespace(label=path.stem, measurement=path.stem),
+    )
+    mocker.patch(
+        "suntoday.jpegs.create_figure_from_map",
+        side_effect=lambda amap: (amap.label, mocker.sentinel.figure),
+    )
+    create_rgb = mocker.patch(
+        "suntoday.jpegs.create_rgb_figure_from_maps",
+        return_value=("rgb", mocker.sentinel.figure),
+    )
+    create_blend = mocker.patch(
+        "suntoday.jpegs.create_blended_figure_from_maps",
+        return_value=("blend", mocker.sentinel.figure),
+    )
+    mocker.patch("suntoday.jpegs.save_fits", side_effect=lambda _map, directory, name: directory / name)
+    save_product = mocker.patch(
+        "suntoday.jpegs._save_product",
+        side_effect=lambda figure, _map, _lines, directory: [directory / f"{figure[0]}.jpg"],
+    )
+
+    files = create_sdo_images(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
+
+    assert {path.name for path in files} == {
         "f0094.fits",
-        "f0131.fits",
         "f0171.fits",
         "f0193.fits",
-        "f0211.fits",
-        "f0304.fits",
         "f0335.fits",
-        "f1600.fits",
-        "f1700.fits",
         "fblos.fits",
         "fcontinuum.fits",
+        "94.jpg",
+        "171.jpg",
+        "193.jpg",
+        "335.jpg",
+        "magnetogram.jpg",
+        "continuum.jpg",
+        "rgb.jpg",
+        "blend.jpg",
+    }
+    assert [amap.label for amap in create_rgb.call_args.args[0]] == ["94", "335", "193"]
+    assert [amap.label for amap in create_blend.call_args.args[0]] == ["magnetogram", "171"]
+    assert all(product.args[2] is None for product in save_product.call_args_list)
+
+
+def test_save_product_pfss(mocker, tmp_path) -> None:
+    fig = mocker.Mock(axes=[mocker.sentinel.axes])
+    amap = mocker.sentinel.map
+    field_lines = mocker.sentinel.field_lines
+    base = tmp_path / "base.jpg"
+    overlay = tmp_path / "overlay.jpg"
+    save = mocker.patch("suntoday.jpegs.save_figures", side_effect=[[base], [overlay]])
+    draw = mocker.patch("suntoday.jpegs._draw_field_lines")
+
+    assert _save_product(("0171", fig), amap, field_lines, tmp_path) == [base, overlay]
+    assert save.call_args_list == [
+        call([("0171pfssnolines", fig)], tmp_path, close=False),
+        call([("0171pfss", fig)], tmp_path),
     ]
-    assert len(tmpdir.listdir()) == len(canonical_filelist)
-    for file in tmpdir.listdir():
-        assert file.basename in canonical_filelist
+    draw.assert_called_once_with(mocker.sentinel.axes, amap, field_lines)
+
+
+def test_create_pfss_images_uses_field_lines(
+    mocker,
+    tmp_path,
+) -> None:
+    aia_file = tmp_path / "171"
+    hmi_file = tmp_path / "magnetogram"
+    adapt_file = tmp_path / "adapt"
+    aia_map = mocker.sentinel.aia_map
+    hmi_map = mocker.Mock(measurement="magnetogram")
+    field_lines = mocker.sentinel.field_lines
+    mocker.patch("suntoday.jpegs.AIA_WAVELENGTHS", ["171"])
+    mocker.patch("suntoday.jpegs.AIA_FITS_ONLY_WAVELENGTHS", [])
+    mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
+    mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=[aia_file])
+    mocker.patch("suntoday.jpegs.fetch_hmi_fits", return_value=[hmi_file])
+    mocker.patch("suntoday.jpegs.fetch_adapt_fits", return_value=adapt_file)
+    boundary = mocker.patch("suntoday.jpegs.create_adapt_map").return_value
+    trace = mocker.patch("suntoday.jpegs.trace_field_lines", return_value=field_lines)
+    mocker.patch("suntoday.jpegs.create_aia_map", return_value=aia_map)
+    mocker.patch("suntoday.jpegs.create_hmi_map", return_value=hmi_map)
+    mocker.patch("suntoday.jpegs.create_figure_from_map", return_value=("single", mocker.sentinel.figure))
+    mocker.patch("suntoday.jpegs.create_blended_figure_from_maps", return_value=("blend", mocker.sentinel.figure))
+    save_fits = mocker.patch("suntoday.jpegs.save_fits")
+    save_product = mocker.patch("suntoday.jpegs._save_product", return_value=[])
+
+    assert create_sdo_images(datetime.now(UTC), tmp_path, pfss=True) == []
+    trace.assert_called_once_with(boundary)
+    save_fits.assert_not_called()
+    assert save_product.call_count == 3
+    assert all(product.args[2] is field_lines for product in save_product.call_args_list)

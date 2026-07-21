@@ -3,7 +3,13 @@ from datetime import UTC, datetime, timedelta
 import pytest
 
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.downloaders.jsoc import _get_latest_record_time, fetch_aia_fits, find_latest_jsoc_times, get_aia_urls
+from suntoday.downloaders.jsoc import (
+    _get_latest_record_time,
+    fetch_aia_fits,
+    find_latest_jsoc_times,
+    find_latest_pfss_time,
+    get_aia_urls,
+)
 
 
 def test_get_latest_record_time_parses_tai_format(mocker) -> None:
@@ -112,3 +118,13 @@ def test_find_latest_jsoc_times_per_instrument(mocker) -> None:
 
     assert aia_time == aia_latest - timedelta(minutes=3)
     assert hmi_time == cont_latest
+
+
+def test_find_latest_pfss_time_uses_oldest_source(mocker) -> None:
+    aia_time = datetime(2026, 7, 14, 11, 50, tzinfo=UTC)
+    hmi_time = datetime(2026, 7, 14, 12, 0, tzinfo=UTC)
+    adapt_time = datetime(2026, 7, 14, 12, 10, tzinfo=UTC)
+    mocker.patch("suntoday.downloaders.jsoc.find_latest_jsoc_times", return_value=(aia_time, hmi_time))
+    mocker.patch("suntoday.downloaders.jsoc.find_latest_adapt_time", return_value=adapt_time)
+
+    assert find_latest_pfss_time() == aia_time

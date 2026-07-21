@@ -13,6 +13,7 @@ from requests.auth import HTTPBasicAuth
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
+from suntoday.downloaders.adapt import find_latest_adapt_time
 from suntoday.downloaders.downloader import create_downloader
 
 __all__ = [
@@ -20,6 +21,7 @@ __all__ = [
     "fetch_aia_timeseries",
     "fetch_hmi_fits",
     "find_latest_jsoc_times",
+    "find_latest_pfss_time",
     "get_aia_urls",
     "get_hmi_urls",
 ]
@@ -280,6 +282,27 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
     )
     logger.info(f"Latest JSOC data: AIA at {aia_time}, HMI at {hmi_time}")
     return aia_time, hmi_time
+
+
+def find_latest_pfss_time() -> datetime:
+    """
+    Find the anchor time for the PFSS job.
+
+    The PFSS images must all carry the same timestamp as the field lines,
+    so the anchor is the oldest available AIA, HMI, or ADAPT time. ADAPT
+    updates every 2 hours, so the record nearest the anchor (either side) is
+    then at most an hour away.
+
+    Returns
+    -------
+    datetime.datetime
+        The newest time every PFSS data source has data for.
+    """
+    aia_time, hmi_time = find_latest_jsoc_times()
+    adapt_time = find_latest_adapt_time()
+    anchor = min(aia_time, hmi_time, adapt_time)
+    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, ADAPT {adapt_time})")
+    return anchor
 
 
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:

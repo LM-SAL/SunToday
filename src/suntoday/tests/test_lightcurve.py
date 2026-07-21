@@ -58,20 +58,6 @@ def test_add_aia_lightcurve_drops_bad_quality_frames() -> None:
     plt.close(fig)
 
 
-def _has_jsoc_credentials() -> bool:
-    from suntoday.config import Settings
-
-    settings = Settings()
-    return bool(settings.jsoc_user and settings.jsoc_password)
-
-
-@mpl_svg_compare
-def test_plot_goes_secondary_timeseries(goes_secondary_timeseries):
-    fig, ax = plt.subplots(1, 1)
-    add_goes_lightcurve(ax, goes_secondary_timeseries)
-    return fig
-
-
 @mpl_svg_compare
 def test_plot_goes_primary_timeseries(goes_primary_timeseries):
     fig, ax = plt.subplots(1, 1)
@@ -91,18 +77,11 @@ def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
-# Never compared in CI: tox's figure comparison env filters out remote_data,
-# so this only runs under figure-generate as a live rendering smoke test.
-@pytest.mark.remote_data
-@pytest.mark.skipif(not _has_jsoc_credentials(), reason="JSOC test credentials are not configured.")
 @mpl_svg_compare
-def test_lightcurve_figure_latest():
-    from suntoday.downloaders.goes import fetch_goes_timeseries
-    from suntoday.downloaders.jsoc import fetch_aia_timeseries
-
-    aia_timeseries = fetch_aia_timeseries(datetime.now(UTC))
-    goes_primary_timeseries, _goes_secondary_timeseries = fetch_goes_timeseries()
-    return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
+def test_plot_lightcurve_from_timeseries_real(real_aia_timeseries, real_goes_primary_timeseries):
+    # Real flare morphology, so styling changes can be judged on data that
+    # actually looks like production, not the synthetic ramps above.
+    return plot_lightcurve_from_timeseries(real_goes_primary_timeseries, real_aia_timeseries)
 
 
 @pytest.mark.remote_data

@@ -6,6 +6,7 @@ import matplotlib as mpl
 
 mpl.use("module://mplcairo.base")
 
+import warnings
 from pathlib import Path
 
 import matplotlib.pyplot as plt
@@ -14,12 +15,14 @@ import sunpy.map as smap
 from aiapy.calibrate import correct_degradation
 from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
+from sunkit_magex.pfss.utils import car_to_cea
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
+from sunpy.util.exceptions import SunpyMetadataWarning
 
-from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS
 from suntoday.data import RESPONSE_TABLE_V10
 
-__all__ = ["create_aia_map", "create_hmi_map"]
+__all__ = ["create_adapt_map", "create_aia_map", "create_hmi_map"]
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:
@@ -50,8 +53,43 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         aia_map.plot_settings["cmap"] = cmap
         aia_map._data[aia_map._data <= 1] = 0  # ruff:ignore[private-member-access]
         aia_map._data[np.isnan(aia_map._data)] = 0  # ruff:ignore[private-member-access]
-        aia_map._data = aia_map._data.astype(int)  # ruff:ignore[private-member-access]
+        # int32 not int64: halves the resident size of every held map (the RGB
+        # composites hold three at once) on the 4 GB production VM.
+        aia_map._data = aia_map._data.astype(np.int32)  # ruff:ignore[private-member-access]
         return aia_map
+
+
+def create_adapt_map(file: Path, realization: int = 0) -> smap.GenericMap:
+    """
+    Creates a full-Sun Carrington map from one realization of an ADAPT
+    synchronic magnetogram FITS file.
+
+    ADAPT's header is standard enough that sunpy recognizes it directly,
+    but the map ships in a plate-carree (CAR) projection; the PFSS solver
+    needs the equal-area (CEA) one, so it is reprojected here.
+
+    Parameters
+    ----------
+    file : `pathlib.Path`
+        Path to the ADAPT FITS file written by
+        `suntoday.downloaders.adapt.fetch_adapt_fits`.
+    realization : int, optional
+        Which of the 12 model realizations to use (default the first).
+
+    Returns
+    -------
+    `sunpy.map.GenericMap`
+        Full-Sun magnetogram in the heliographic Carrington frame.
+    """
+    with warnings.catch_warnings():
+        # ADAPT is a modeled composite, not a single instrument's observation,
+        # so it has no observer keywords; assuming Earth is the expected,
+        # correct fallback. The warning fires on WCS access, which happens
+        # lazily inside car_to_cea, not at Map() construction.
+        warnings.filterwarnings("ignore", category=SunpyMetadataWarning, message="Missing metadata for observer")
+        with fits.open(file, memmap=False) as hdul:
+            adapt_map = smap.Map(hdul[0].data[realization], hdul[0].header)
+        return car_to_cea(adapt_map)
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:
@@ -73,10 +111,10 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
         fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
         hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
         if hmi_map.measurement == "magnetogram":
-            hmi_map.plot_settings["norm"] = plt.Normalize(-HMI_NORM_GAUSS, HMI_NORM_GAUSS)
+            hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
             hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("gray").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
             hmi_map._data[np.isnan(hmi_map._data)] = 0  # ruff:ignore[private-member-access]
             with np.errstate(all="ignore"):
-                hmi_map._data = hmi_map.data.astype(int)  # ruff:ignore[private-member-access]
+                hmi_map._data = hmi_map.data.astype(np.int32)  # ruff:ignore[private-member-access]
         return hmi_map

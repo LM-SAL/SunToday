@@ -46,11 +46,11 @@ WORKDIR /app
 ENV PARFIVE_TOTAL_TIMEOUT=100
 ENV SUNTODAY_SAVE_DIRECTORY=/app/images
 
-# Cap BLAS thread pools to the container's 4 cores instead of the default
+# Cap BLAS thread pools to the t2.medium's 2 cores instead of the default
 # (auto-detects host core count, which can wildly overshoot the container's cgroup limit).
-ENV OPENBLAS_NUM_THREADS=4
-ENV OMP_NUM_THREADS=4
-ENV MKL_NUM_THREADS=4
-ENV NUMEXPR_NUM_THREADS=4
+ENV OPENBLAS_NUM_THREADS=2
+ENV OMP_NUM_THREADS=2
+ENV MKL_NUM_THREADS=2
+ENV NUMEXPR_NUM_THREADS=2
 
 ENTRYPOINT ["python", "/app/src/suntoday/main.py"]

@@ -4,7 +4,13 @@ import pandas as pd
 import pytest
 
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_aia_timeseries, fetch_hmi_fits, get_aia_urls, get_hmi_urls
+from suntoday.downloaders.jsoc import (
+    fetch_aia_fits,
+    fetch_aia_timeseries,
+    fetch_hmi_fits,
+    get_aia_urls,
+    get_hmi_urls,
+)
 
 
 @pytest.mark.remote_data
