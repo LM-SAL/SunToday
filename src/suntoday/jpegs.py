@@ -25,7 +25,7 @@ from sunpy.coordinates import SphericalScreen
 
 from suntoday import logger
 from suntoday.config import Settings
-from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS, RGB_COMBINATIONS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS, HMI_NORM_GAUSS, RGB_COMBINATIONS
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
 from suntoday.logos import PNG_IMAGE
 from suntoday.maps import (
@@ -65,12 +65,23 @@ HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 # out most of the disk instead of showing polarity. This map instead holds
 # black out to +-15 G (only true photon/readout noise stays invisible) and
 # saturates to blue/red by +-120 G, so network- and plage-strength field pops
-# clearly. Assumes the HMI norm range is +-1000 G (see maps.py). Polarity:
-# red = positive (toward observer), blue = negative (away from observer);
-# also called out in BLEND_POLARITY_LABEL on the figure itself.
+# clearly. Stops are derived from the shared HMI_NORM_GAUSS norm half-range
+# (used by maps.py for the display Normalize) so the thresholds stay physical
+# if the norm ever changes. Polarity: red = positive (toward observer), blue =
+# negative (away from observer); also called out in BLEND_POLARITY_LABEL on
+# the figure itself.
+BLEND_HMI_NOISE_GAUSS = 15
+BLEND_HMI_SATURATION_GAUSS = 120
 BLEND_HMI_CMAP = colors.LinearSegmentedColormap.from_list(
     "hmi_polarity_blend",
-    [(0.0, "blue"), (0.44, "blue"), (0.4925, "black"), (0.5075, "black"), (0.56, "red"), (1.0, "red")],
+    [
+        (0.0, "blue"),
+        (0.5 - BLEND_HMI_SATURATION_GAUSS / (2 * HMI_NORM_GAUSS), "blue"),
+        (0.5 - BLEND_HMI_NOISE_GAUSS / (2 * HMI_NORM_GAUSS), "black"),
+        (0.5 + BLEND_HMI_NOISE_GAUSS / (2 * HMI_NORM_GAUSS), "black"),
+        (0.5 + BLEND_HMI_SATURATION_GAUSS / (2 * HMI_NORM_GAUSS), "red"),
+        (1.0, "red"),
+    ],
 )
 BLEND_POLARITY_LABEL = "HMI polarity: red = +, blue = -"
 # Auto-exposure for the RGB composites: if the luminance at this percentile

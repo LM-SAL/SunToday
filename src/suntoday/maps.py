@@ -16,7 +16,7 @@ from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
-from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
 from suntoday.data import RESPONSE_TABLE_V10
 
 __all__ = ["create_aia_map", "create_hmi_map"]
@@ -73,7 +73,7 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
         fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
         hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
         if hmi_map.measurement == "magnetogram":
-            hmi_map.plot_settings["norm"] = plt.Normalize(-1000, 1000)
+            hmi_map.plot_settings["norm"] = plt.Normalize(-HMI_NORM_GAUSS, HMI_NORM_GAUSS)
             hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("gray").with_extremes(bad="black")
         if hmi_map.measurement == "continuum":
             hmi_map._data[np.isnan(hmi_map._data)] = 0  # ruff:ignore[private-member-access]

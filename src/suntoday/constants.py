@@ -8,8 +8,12 @@ __all__ = [
     "AIA_COLORS",
     "AIA_WAVELENGTHS",
     "BLEND_COMBINATIONS",
+    "HMI_NORM_GAUSS",
     "RGB_COMBINATIONS",
 ]
+# HMI magnetogram display norm half-range: maps.py builds Normalize(+-this)
+# and jpegs.py derives the polarity-blend colormap stops from it.
+HMI_NORM_GAUSS = 1000
 AIA_COLORS = {
     "131": "blue",
     "1600": "green",

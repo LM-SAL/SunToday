@@ -27,7 +27,7 @@ def test_create_hmi_cont_map(hmi_cont_test_file) -> None:
 
 def test_create_hmi_blos_map(hmi_blos_test_file) -> None:
     hmi_map = create_hmi_map(hmi_blos_test_file)
-    assert hmi_map.plot_settings["cmap"].name == "hmimag"
+    assert hmi_map.plot_settings["cmap"].name == "gray"
     assert isinstance(hmi_map, smap.GenericMap)
     np.testing.assert_allclose(
         hmi_map.rotation_matrix,
