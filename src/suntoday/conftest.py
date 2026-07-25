@@ -10,8 +10,6 @@ from sqlalchemy.orm.session import sessionmaker
 from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
-# Tests must never initialize the production Sentry client, even when pytest is
-# run directly instead of through tox (which sets the same variable).
 os.environ["SUNTODAY_TEST_ENV"] = "True"
 
 test_db = factories.postgresql_proc(port=None, dbname="test_db")
@@ -77,8 +75,6 @@ def goes_primary_timeseries():
 
 @pytest.fixture
 def real_aia_timeseries():
-    # Real 24 h of data from 2026-01-26, downsampled ~5x to keep the files
-    # small.
     timeseries = pd.read_csv(get_test_filepath("20260126_aia_timeseries.csv"), index_col=0, parse_dates=True)
     timeseries.index = pd.to_datetime(timeseries.index, format="mixed")
     return timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
@@ -89,7 +85,6 @@ def real_goes_primary_timeseries():
     return pd.read_csv(get_test_filepath("20260126_goes_primary_timeseries.csv"), index_col=0, parse_dates=True)
 
 
-# These are in order of the files stored on my local disk
 @pytest.fixture(scope="session")
 def adapt_test_file():
     return get_test_filepath("20260717_220000_adapt.fits")
