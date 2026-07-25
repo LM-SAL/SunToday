@@ -3,19 +3,21 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from astropy.time import Time
 
+from suntoday.conftest import latest_or_skip
 from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 
 @pytest.mark.remote_data
 def test_fetch_adapt_fits(tmp_path) -> None:
-    file = fetch_adapt_fits(datetime.now(UTC) - timedelta(days=2), save_directory=tmp_path)
+    latest = latest_or_skip(find_latest_adapt_time)
+    file = fetch_adapt_fits(latest, save_directory=tmp_path)
     assert file.exists()
 
 
 @pytest.mark.remote_data
 def test_find_latest_adapt_time_online() -> None:
-    latest = find_latest_adapt_time()
+    latest = latest_or_skip(find_latest_adapt_time)
 
     now = datetime.now(UTC)
     assert latest.tzinfo is not None

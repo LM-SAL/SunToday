@@ -1,12 +1,14 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import call
 
 import pytest
 from PIL import Image
 
+from suntoday.conftest import latest_or_skip
 from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.data.test import get_aia_test_filepath
+from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
     _save_product,
@@ -128,7 +130,8 @@ def test_create_sdo_images_live_smoke(mocker, tmp_path) -> None:
         mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [("304", "211", "171")])
 
-    files = create_sdo_images(datetime.now(UTC) - timedelta(days=2), tmp_path)
+    aia_time, hmi_time = latest_or_skip(find_latest_jsoc_times)
+    files = create_sdo_images(aia_time, tmp_path, hmi_time)
 
     assert len([file for file in files if file.suffix == ".jpg"]) == 21
     assert len([file for file in files if file.suffix == ".fits"]) == 5
@@ -142,7 +145,8 @@ def test_create_sdo_images_pfss_live_smoke(mocker, tmp_path) -> None:
         mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
 
-    files = create_sdo_images(datetime.now(UTC) - timedelta(days=2), tmp_path, pfss=True)
+    anchor = latest_or_skip(find_latest_pfss_time)
+    files = create_sdo_images(anchor, tmp_path, pfss=True)
 
     assert len(files) == 24
     assert len([file for file in files if "pfssnolines" in file.name]) == 12

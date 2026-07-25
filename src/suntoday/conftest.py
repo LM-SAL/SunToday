@@ -12,6 +12,26 @@ from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"
 
+
+def latest_or_skip(find_latest):
+    """
+    Anchor an online test on the newest upstream record.
+
+    Skips the test when the upstream archive has no data at all: an upstream
+    outage is not a code bug, and the empty-archive error paths are covered
+    by offline tests.
+
+    Returns
+    -------
+    Any
+        Whatever ``find_latest`` returns.
+    """
+    try:
+        return find_latest()
+    except ValueError as exc:
+        pytest.skip(f"Upstream has no data: {exc}")
+
+
 test_db = factories.postgresql_proc(port=None, dbname="test_db")
 
 
