@@ -98,8 +98,16 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path = Path("./")
         Path to the downloaded ``.fts.gz`` file. The primary HDU's data is
         a ``(12, 180, 360)`` cube, one slice per model realization; see
         `suntoday.maps.create_adapt_map`.
+
+    Raises
+    ------
+    OSError
+        If parfive fails to download the file.
     """
-    files = Fido.fetch(_nearest_adapt_row(requested_time), path=str(save_directory / "{file}"))
+    files = Fido.fetch(_nearest_adapt_row(requested_time), path=str(save_directory / "{file}"), max_splits=1)
+    if files.errors:
+        msg = f"Failed to download {files.errors}."
+        raise OSError(msg)
     return Path(files[0])
 
 

@@ -15,6 +15,14 @@ def test_fetch_adapt_fits(tmp_path) -> None:
     assert file.exists()
 
 
+def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:
+    mocker.patch.object(adapt, "_nearest_adapt_row", return_value={"Start Time": Time("2026-07-20T12:00:00")})
+    mocker.patch.object(adapt.Fido, "fetch", return_value=mocker.Mock(errors=["connection reset"]))
+
+    with pytest.raises(OSError, match="Failed to download"):
+        fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=tmp_path)
+
+
 def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:
     # HMI-limited anchor at 11:59 with ADAPT epochs at 10:00 and 12:00:
     # only-before selection would pick the 2-hour-older map.
