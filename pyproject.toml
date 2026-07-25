@@ -8,7 +8,7 @@ build-backend = 'setuptools.build_meta'
 [project]
 name = "suntoday"
 dynamic = ["dependencies", "optional-dependencies"]
-version = "0.1.2"
+version = "1.0.0"
 
 [tool.setuptools]
 zip-safe = false
