@@ -1,4 +1,4 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from astropy.time import Time
@@ -9,10 +9,17 @@ from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 @pytest.mark.remote_data
 def test_fetch_adapt_fits(tmp_path) -> None:
-    # Anchor on the newest map the archive actually has, the way pfss_job
-    # does: an arbitrary recent time can fall inside the publication lag.
-    file = fetch_adapt_fits(find_latest_adapt_time(), save_directory=tmp_path)
+    file = fetch_adapt_fits(datetime.now(UTC) - timedelta(days=2), save_directory=tmp_path)
     assert file.exists()
+
+
+@pytest.mark.remote_data
+def test_find_latest_adapt_time_online() -> None:
+    latest = find_latest_adapt_time()
+
+    now = datetime.now(UTC)
+    assert latest.tzinfo is not None
+    assert now - timedelta(days=7) < latest < now
 
 
 def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:

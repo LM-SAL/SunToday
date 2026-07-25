@@ -6,7 +6,6 @@ import pytest
 from PIL import Image
 
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.downloaders.jsoc import find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
     _save_product,
@@ -142,7 +141,7 @@ def test_create_sdo_images_pfss_live_smoke(mocker, tmp_path) -> None:
         mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
 
-    files = create_sdo_images(find_latest_pfss_time(), tmp_path, pfss=True)
+    files = create_sdo_images(datetime.now(UTC) - timedelta(days=2), tmp_path, pfss=True)
 
     assert len(files) == 24
     assert len([file for file in files if "pfssnolines" in file.name]) == 12
