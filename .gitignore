@@ -27,6 +27,7 @@ wheels/
 .installed.cfg
 *.egg
 MANIFEST
+uv.lock
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -215,7 +216,6 @@ docs/whatsnew/latest_changelog.txt
 *.orig
 .tmp
 figure_test_images/
-suntoday-*/
+rendered_products/
+# Default docker-compose bind mount for generated products
 images/
-pgdata/
-reference_jpegs/

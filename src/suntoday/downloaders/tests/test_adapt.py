@@ -1,18 +1,35 @@
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 import pytest
 from astropy.time import Time
 
+from suntoday.conftest import latest_or_skip
 from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 
 @pytest.mark.remote_data
 def test_fetch_adapt_fits(tmp_path) -> None:
-    # Anchor on the newest map the archive actually has, the way pfss_job
-    # does: an arbitrary recent time can fall inside the publication lag.
-    file = fetch_adapt_fits(find_latest_adapt_time(), save_directory=tmp_path)
+    latest = latest_or_skip(find_latest_adapt_time)
+    file = fetch_adapt_fits(latest, save_directory=tmp_path)
     assert file.exists()
+
+
+@pytest.mark.remote_data
+def test_find_latest_adapt_time_online() -> None:
+    latest = latest_or_skip(find_latest_adapt_time)
+
+    now = datetime.now(UTC)
+    assert latest.tzinfo is not None
+    assert now - timedelta(days=7) < latest < now
+
+
+def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:
+    mocker.patch.object(adapt, "_nearest_adapt_row", return_value={"Start Time": Time("2026-07-20T12:00:00")})
+    mocker.patch.object(adapt.Fido, "fetch", return_value=mocker.Mock(errors=["connection reset"]))
+
+    with pytest.raises(OSError, match="Failed to download"):
+        fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=tmp_path)
 
 
 def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:

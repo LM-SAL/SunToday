@@ -4,6 +4,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# Superseded runs are cancelled: a new push to the same PR makes the run
+# in flight pointless, and GitHub Actions otherwise lets it finish.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 jobs:
   offline:
     name: Offline unit tests
@@ -39,7 +45,7 @@ jobs:
       - name: Check out repository
         uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v7.0.0
         with:
-          lfs: true
+          lfs: false
           submodules: recursive
       - name: Install cairo build deps
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config

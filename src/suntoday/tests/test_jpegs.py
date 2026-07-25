@@ -1,11 +1,14 @@
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import call
 
 import pytest
 from PIL import Image
 
-from suntoday.downloaders.jsoc import find_latest_pfss_time
+from suntoday.conftest import latest_or_skip
+from suntoday.constants import AIA_WAVELENGTHS
+from suntoday.data.test import find_test_filepath
+from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
     _save_product,
@@ -22,17 +25,15 @@ from suntoday.tests.conftest import mpl_svg_compare
 
 @pytest.fixture(scope="module")
 def pfss_field_lines(adapt_test_file):
-    # Real solve + trace (fixed RNG seed) so the baselines show the actual
-    # effect of the seeding and line-style parameters on a real image;
-    # regenerate the baselines after tuning the pfss.py constants.
     return trace_field_lines(create_adapt_map(adapt_test_file))
 
 
+@pytest.mark.parametrize("wavelength", AIA_WAVELENGTHS)
 @mpl_svg_compare
-def test_create_figure_from_map_aia_171(aia_171_test_file):
-    aia_map = create_aia_map(aia_171_test_file)
-    wavelength, fig = create_figure_from_map(aia_map)
-    assert wavelength == "0171"
+def test_create_figure_from_map_aia(wavelength):
+    aia_map = create_aia_map(find_test_filepath(wavelength))
+    filename, fig = create_figure_from_map(aia_map)
+    assert filename == wavelength.zfill(4)
     return fig
 
 
@@ -44,9 +45,17 @@ def test_create_figure_from_map_hmi_blos(hmi_blos_test_file):
     return fig
 
 
+@mpl_svg_compare
+def test_create_figure_from_map_hmi_continuum(hmi_cont_test_file):
+    hmi_map = create_hmi_map(hmi_cont_test_file)
+    wavelength, fig = create_figure_from_map(hmi_map)
+    assert wavelength == "_HMI_cont_aiascale"
+    return fig
+
+
 @pytest.mark.mpl_image_compare
-def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_blended_figure_from_maps(hmi_blos_test_file):
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
     assert wavelength == "_HMImag_171"
@@ -54,50 +63,59 @@ def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_193_test_file):
-    aia_94_map = create_aia_map(aia_94_test_file)
-    aia_335_map = create_aia_map(aia_335_test_file)
-    aia_193_map = create_aia_map(aia_193_test_file)
+def test_create_rgb_figure_from_maps_1():
+    aia_94_map = create_aia_map(find_test_filepath("94"))
+    aia_335_map = create_aia_map(find_test_filepath("335"))
+    aia_193_map = create_aia_map(find_test_filepath("193"))
     wavelength, fig = create_rgb_figure_from_maps([aia_94_map, aia_335_map, aia_193_map])
     assert wavelength == "_094_335_193"
     return fig
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia_171_test_file):
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_193_map = create_aia_map(aia_193_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_rgb_figure_from_maps_2():
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_193_map = create_aia_map(find_test_filepath("193"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_211_map, aia_193_map, aia_171_map])
     assert wavelength == "_211_193_171"
     return fig
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_3(aia_304_test_file, aia_211_test_file, aia_171_test_file):
-    aia_304_map = create_aia_map(aia_304_test_file)
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_rgb_figure_from_maps_3():
+    aia_304_map = create_aia_map(find_test_filepath("304"))
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     return fig
 
 
+def test_create_figure_from_map_requires_aia_norm() -> None:
+    fake = SimpleNamespace(instrument="AIA_4", wavelength=SimpleNamespace(value=4500.0), plot_settings={})
+    with pytest.raises(ValueError, match="no fixed display norm"):
+        create_figure_from_map(fake)
+
+
+def test_create_rgb_figure_from_maps_requires_scaling() -> None:
+    fake = SimpleNamespace(wavelength=SimpleNamespace(value=4500.0))
+    with pytest.raises(ValueError, match="No AIA scaling defined for wavelength 4500"):
+        create_rgb_figure_from_maps([fake, fake, fake])
+
+
 @pytest.mark.mpl_image_compare
 def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lines):
-    # The magnetogram is the natural check for the traced lines: footpoints
-    # must sit on the visible flux concentrations.
     hmi_map = create_hmi_map(hmi_blos_test_file)
     _, fig = create_figure_from_map(hmi_map)
     _draw_field_lines(fig.axes[0], hmi_map, pfss_field_lines)
-    # Padded so the datetime column matches "SDO/HMI - HMI BLOS - <date>".
     assert fig.axes[0].texts[-1].get_text() == "PFSS ADAPT         - 2026-07-17 22:00:00"
     return fig
 
 
-def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_171_test_file, tmpdir) -> None:
-    aia_304_map = create_aia_map(aia_304_test_file)
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_save_figures_from_maps_aia(tmpdir) -> None:
+    aia_304_map = create_aia_map(find_test_filepath("304"))
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     saved_paths = save_figures([(wavelength, fig)], tmpdir)
     assert set(saved_paths) == {
@@ -119,18 +137,14 @@ def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_17
 
 @pytest.mark.remote_data
 def test_create_sdo_images_live_smoke(mocker, tmp_path) -> None:
-    # Three wavelengths make one real RGB combination possible while keeping
-    # the live run short; drives the real fetch -> map -> figure -> JPEG
-    # pipeline, including the RGB composite and HMI/AIA blend, end to end.
     for module in ["suntoday.jpegs", "suntoday.downloaders.jsoc"]:
         mocker.patch(f"{module}.AIA_WAVELENGTHS", ["304", "211", "171"])
         mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [("304", "211", "171")])
 
-    files = create_sdo_images(datetime.now(UTC) - timedelta(days=2), tmp_path)
+    aia_time, hmi_time = latest_or_skip(find_latest_jsoc_times)
+    files = create_sdo_images(aia_time, tmp_path, hmi_time)
 
-    # 304/211/171, magnetogram, continuum, the RGB composite and the blend
-    # at three JPEG sizes each, plus the five planning FITS files.
     assert len([file for file in files if file.suffix == ".jpg"]) == 21
     assert len([file for file in files if file.suffix == ".fits"]) == 5
     assert all(file.exists() and file.stat().st_size > 0 for file in files)
@@ -138,18 +152,14 @@ def test_create_sdo_images_live_smoke(mocker, tmp_path) -> None:
 
 @pytest.mark.remote_data
 def test_create_sdo_images_pfss_live_smoke(mocker, tmp_path) -> None:
-    # Full pfss run on one wavelength: real ADAPT fetch, field-line trace
-    # and the pfssnolines/pfss overlay pair for every product, anchored the
-    # way pfss_job anchors so every source has data at the requested time.
     for module in ["suntoday.jpegs", "suntoday.downloaders.jsoc"]:
         mocker.patch(f"{module}.AIA_WAVELENGTHS", ["171"])
         mocker.patch(f"{module}.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
 
-    files = create_sdo_images(find_latest_pfss_time(), tmp_path, pfss=True)
+    anchor = latest_or_skip(find_latest_pfss_time)
+    files = create_sdo_images(anchor, tmp_path, pfss=True)
 
-    # 171, magnetogram, continuum and the blend, each as a pfssnolines base
-    # and a pfss overlay at three JPEG sizes; no planning FITS files.
     assert len(files) == 24
     assert len([file for file in files if "pfssnolines" in file.name]) == 12
     assert not [file for file in files if file.suffix == ".fits"]

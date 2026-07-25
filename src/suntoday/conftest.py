@@ -2,19 +2,35 @@ import os
 
 import pandas as pd
 import pytest
-import sunpy.map as smap
 from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sunpy.io._file_tools import read_file  # ruff:ignore[import-private-name]
 
-from suntoday.data.test import get_test_filepath
+from suntoday.data.test import find_test_filepath, get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
-# Tests must never initialize the production Sentry client, even when pytest is
-# run directly instead of through tox (which sets the same variable).
 os.environ["SUNTODAY_TEST_ENV"] = "True"
+
+
+def latest_or_skip(find_latest):
+    """
+    Anchor an online test on the newest upstream record.
+
+    Skips the test when the upstream archive has no data at all: an upstream
+    outage is not a code bug, and the empty-archive error paths are covered
+    by offline tests.
+
+    Returns
+    -------
+    Any
+        Whatever ``find_latest`` returns.
+    """
+    try:
+        return find_latest()
+    except ValueError as exc:
+        pytest.skip(f"Upstream has no data: {exc}")
+
 
 test_db = factories.postgresql_proc(port=None, dbname="test_db")
 
@@ -77,8 +93,6 @@ def goes_primary_timeseries():
     return pd.concat(frames)
 
 
-# Real 24 h of data from 2026-01-26, downsampled ~5x to keep the files
-# small, so one figure test shows the styling on actual flare morphology.
 @pytest.fixture
 def real_aia_timeseries():
     timeseries = pd.read_csv(get_test_filepath("20260126_aia_timeseries.csv"), index_col=0, parse_dates=True)
@@ -91,65 +105,16 @@ def real_goes_primary_timeseries():
     return pd.read_csv(get_test_filepath("20260126_goes_primary_timeseries.csv"), index_col=0, parse_dates=True)
 
 
-# These are in order of the files stored on my local disk
 @pytest.fixture(scope="session")
 def adapt_test_file():
-    return get_test_filepath("20260717_220000_adapt.fits")
+    return find_test_filepath("adapt")
 
 
 @pytest.fixture
 def hmi_cont_test_file():
-    return get_test_filepath("20260717_221200_continuum.fits")
+    return find_test_filepath("continuum")
 
 
 @pytest.fixture
 def hmi_blos_test_file():
-    return get_test_filepath("20260717_221200_magnetogram.fits")
-
-
-@pytest.fixture
-def aia_171_test_file():
-    return get_test_filepath("20260717_221157_171.fits")
-
-
-@pytest.fixture
-def aia_211_test_file():
-    return get_test_filepath("20260717_221157_211.fits")
-
-
-@pytest.fixture
-def aia_94_test_file():
-    return get_test_filepath("20260717_221159_94.fits")
-
-
-@pytest.fixture
-def aia_335_test_file():
-    return get_test_filepath("20260717_221200_335.fits")
-
-
-@pytest.fixture
-def aia_193_test_file():
-    return get_test_filepath("20260717_221204_193.fits")
-
-
-@pytest.fixture
-def aia_304_test_file():
-    return get_test_filepath("20260717_221205_304.fits")
-
-
-@pytest.fixture
-def aia_171_test_generic_map(aia_171_test_file):
-    ((data, header),) = read_file(aia_171_test_file)
-    # Get rid of the blank keyword to prevent some astropy fits fixing warnings
-    header.pop("BLANK")
-    return smap.Map((data, header))
-
-
-@pytest.fixture
-def hmi_test_generic_map(hmi_cont_test_file):
-    ((data, header),) = read_file(hmi_cont_test_file)
-    # Get rid of the blank keyword to prevent some astropy fits fixing warnings
-    header.pop("BLANK")
-    header.pop("CRDER1")
-    header.pop("CRDER2")
-    return smap.Map((data, header))
+    return find_test_filepath("magnetogram")

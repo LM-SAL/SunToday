@@ -1,13 +1,13 @@
-from datetime import UTC, datetime, timedelta
-
 import pandas as pd
 import pytest
 
+from suntoday.conftest import latest_or_skip
 from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.downloaders.jsoc import (
     fetch_aia_fits,
     fetch_aia_timeseries,
     fetch_hmi_fits,
+    find_latest_jsoc_times,
     get_aia_urls,
     get_hmi_urls,
 )
@@ -15,7 +15,8 @@ from suntoday.downloaders.jsoc import (
 
 @pytest.mark.remote_data
 def test_get_aia_urls() -> None:
-    aia_urls = get_aia_urls(datetime.now(UTC) - timedelta(days=2))
+    aia_time, _ = latest_or_skip(find_latest_jsoc_times)
+    aia_urls = get_aia_urls(aia_time)
     assert isinstance(aia_urls, pd.DataFrame)
     assert len(aia_urls) == len(AIA_WAVELENGTHS)
     assert len(aia_urls.columns) == 3
@@ -37,7 +38,8 @@ def test_get_aia_urls() -> None:
 
 @pytest.mark.remote_data
 def test_get_hmi_urls() -> None:
-    hmi_urls = get_hmi_urls(datetime.now(UTC) - timedelta(days=2))
+    _, hmi_time = latest_or_skip(find_latest_jsoc_times)
+    hmi_urls = get_hmi_urls(hmi_time)
     assert isinstance(hmi_urls, pd.DataFrame)
     assert len(hmi_urls) == 2
     assert len(hmi_urls.columns) == 2
@@ -48,7 +50,8 @@ def test_get_hmi_urls() -> None:
 
 @pytest.mark.remote_data
 def test_fetch_aia_fits(tmp_path) -> None:
-    files = fetch_aia_fits(datetime.now(UTC) - timedelta(days=2), time_span="36s", save_directory=tmp_path)
+    aia_time, _ = latest_or_skip(find_latest_jsoc_times)
+    files = fetch_aia_fits(aia_time, time_span="36s", save_directory=tmp_path)
     assert len(files) == 9
     assert all(str(tmp_path) in file for file in files)
     all_wavelengths = [f.split("_")[-1].split(".")[0] for f in files]
@@ -57,7 +60,8 @@ def test_fetch_aia_fits(tmp_path) -> None:
 
 @pytest.mark.remote_data
 def test_fetch_hmi_fits(tmp_path) -> None:
-    files = fetch_hmi_fits(datetime.now(UTC) - timedelta(days=2), save_directory=tmp_path)
+    _, hmi_time = latest_or_skip(find_latest_jsoc_times)
+    files = fetch_hmi_fits(hmi_time, save_directory=tmp_path)
     assert len(files) == 2
     assert all(str(tmp_path) in file for file in files)
     all_wavelengths = [f.split("_")[-1].split(".")[0] for f in files]
@@ -66,7 +70,8 @@ def test_fetch_hmi_fits(tmp_path) -> None:
 
 @pytest.mark.remote_data
 def test_fetch_aia_timeseries() -> None:
-    aia_ts = fetch_aia_timeseries(datetime.now(UTC) - timedelta(days=2))
+    aia_time, _ = latest_or_skip(find_latest_jsoc_times)
+    aia_ts = fetch_aia_timeseries(aia_time)
     assert isinstance(aia_ts, pd.DataFrame)
     assert len(aia_ts) > 0
     assert len(aia_ts.columns) == 4

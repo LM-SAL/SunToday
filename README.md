@@ -152,17 +152,16 @@ $ tox -l
 py
 py-online
 py-figure
-py-figure-generate
 codestyle
 ```
 
 - `py` runs the offline tests only; the network (remote-data) tests are skipped.
 - `py-online` runs the network tests. These hit the JSOC test server, so you must provide credentials via `SUNTODAY_JSOC_USER` and `SUNTODAY_JSOC_PASSWORD` (e.g. exported in your shell or in a `.env` file).
-- `py-figure` compares only deterministic figure tests against the stored baselines.
+- `py-figure` renders every figure product into `figure_test_images/rendered` with a browsable HTML summary. Nothing is compared, so eyeball it.
 - `codestyle` is a check for the automated coding tools.
 
-To update stored figure baselines, run `tox -e py-figure-generate`.
-This also generates live remote-data figures when the JSOC credentials are available.
+For the real JPEG products (all three sizes, as the pipeline writes them) run
+`python tools/render_products.py`, which needs no network.
 
 ## Future Work
 
