@@ -41,6 +41,13 @@ def aia_norm(wavelength: str) -> colors.Normalize | None:
     -------
     `matplotlib.colors.Normalize` or None
         None for channels with no entry (the FITS-only ones).
+
+    Raises
+    ------
+    ValueError
+        If the entry names a kind this does not build, or a "power" entry has
+        no exponent. Both are raised rather than falling through to a norm
+        that would silently render the channel through the wrong curve.
     """
     scaling = AIA_SCALING.get(wavelength)
     if scaling is None:
@@ -50,7 +57,13 @@ def aia_norm(wavelength: str) -> colors.Normalize | None:
     # "bad" colour, matching IDL's bytscl of a hard-clipped image.
     if kind == "log":
         return colors.LogNorm(vmin=vmin, vmax=vmax, clip=True)
-    return colors.PowerNorm(parameter, vmin=vmin, vmax=vmax, clip=True)
+    if kind == "power":
+        if parameter is None or parameter <= 0:
+            msg = f"AIA_SCALING[{wavelength!r}] is a power curve so it needs a positive exponent, got {parameter!r}."
+            raise ValueError(msg)
+        return colors.PowerNorm(parameter, vmin=vmin, vmax=vmax, clip=True)
+    msg = f"AIA_SCALING[{wavelength!r}] has unknown kind {kind!r}, expected 'log' or 'power'."
+    raise ValueError(msg)
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:

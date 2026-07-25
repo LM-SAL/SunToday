@@ -4,7 +4,7 @@ jobs:
   figures:
     docker:
       - image: cimg/python:3.13
-    resource_class: large
+    resource_class: medium
     steps:
       - run:
           name: Install cairo build deps

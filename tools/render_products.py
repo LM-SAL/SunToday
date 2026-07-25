@@ -18,7 +18,7 @@ mpl.use("module://mplcairo.base")
 
 from astropy.io import fits
 
-from suntoday.constants import BLEND_COMBINATIONS, RGB_COMBINATIONS
+from suntoday.constants import RGB_COMBINATIONS
 from suntoday.jpegs import (
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -62,14 +62,14 @@ for combination in RGB_COMBINATIONS:
     save_figures([(name, fig)], OUTPUT_DIRECTORY)
     print("wrote", name)
 
-for wavelength, _ in BLEND_COMBINATIONS:
-    if wavelength not in aia_files or "magnetogram" not in hmi_files:
-        print("skipping blend", wavelength, "- missing channels")
-        continue
+# The one blend pair, hardcoded the same way create_sdo_images hardcodes it.
+if "171" in aia_files and "magnetogram" in hmi_files:
     name, fig = create_blended_figure_from_maps(
-        [create_hmi_map(hmi_files["magnetogram"]), create_aia_map(aia_files[wavelength])]
+        [create_hmi_map(hmi_files["magnetogram"]), create_aia_map(aia_files["171"])]
     )
     save_figures([(name, fig)], OUTPUT_DIRECTORY)
     print("wrote", name)
+else:
+    print("skipping blend - missing 171 or magnetogram")
 
 print("wrote everything to", OUTPUT_DIRECTORY)
