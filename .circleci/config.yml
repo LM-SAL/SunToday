@@ -4,7 +4,8 @@ jobs:
   figures:
     docker:
       - image: cimg/python:3.13
-    resource_class: medium
+    # 8 GB: rendering all 20 figures in one process and peaks at 5.7 GB.
+    resource_class: large
     steps:
       - run:
           name: Install cairo build deps
