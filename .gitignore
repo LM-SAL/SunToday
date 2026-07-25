@@ -215,7 +215,4 @@ docs/whatsnew/latest_changelog.txt
 *.orig
 .tmp
 figure_test_images/
-suntoday-*/
-images/
-pgdata/
-reference_jpegs/
+rendered_products/

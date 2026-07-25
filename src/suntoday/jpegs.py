@@ -19,7 +19,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import sunpy.map as smap
 from astropy.coordinates import SkyCoord
-from astropy.visualization import AsinhStretch, LogStretch, ManualInterval
 from matplotlib import colors
 from mplcairo import operator_t
 from PIL import Image
@@ -27,11 +26,12 @@ from sunpy.coordinates import Heliocentric, SphericalScreen, propagate_with_sola
 
 from suntoday import logger
 from suntoday.config import Settings
-from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS, HMI_NORM_GAUSS, RGB_COMBINATIONS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.downloaders.adapt import fetch_adapt_fits
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
 from suntoday.logos import PNG_IMAGE
 from suntoday.maps import (
+    aia_norm,
     create_adapt_map,
     create_aia_map,
     create_hmi_map,
@@ -70,31 +70,23 @@ HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 # out most of the disk instead of showing polarity. This map instead holds
 # black out to +-15 G (only true photon/readout noise stays invisible) and
 # saturates to blue/red by +-120 G, so network- and plage-strength field pops
-# clearly. Stops are derived from the shared HMI_NORM_GAUSS norm half-range
-# (used by maps.py for the display Normalize) so the thresholds stay physical
-# if the norm ever changes. Polarity: red = positive (toward observer), blue =
-# negative (away from observer); also called out in BLEND_POLARITY_LABEL on
-# the figure itself.
+# clearly. Polarity: red = positive (toward observer), blue = negative (away
+# from observer); also called out in BLEND_POLARITY_LABEL on the figure
+# itself. The blend uses its own norm rather than the magnetogram display one
+# from HMI_NORM_GAUSS, so the two can be tuned independently.
 BLEND_HMI_NOISE_GAUSS = 15
 BLEND_HMI_SATURATION_GAUSS = 120
+BLEND_HMI_NORM = colors.Normalize(-BLEND_HMI_SATURATION_GAUSS, BLEND_HMI_SATURATION_GAUSS)
 BLEND_HMI_CMAP = colors.LinearSegmentedColormap.from_list(
     "hmi_polarity_blend",
     [
         (0.0, "blue"),
-        (0.5 - BLEND_HMI_SATURATION_GAUSS / (2 * HMI_NORM_GAUSS), "blue"),
-        (0.5 - BLEND_HMI_NOISE_GAUSS / (2 * HMI_NORM_GAUSS), "black"),
-        (0.5 + BLEND_HMI_NOISE_GAUSS / (2 * HMI_NORM_GAUSS), "black"),
-        (0.5 + BLEND_HMI_SATURATION_GAUSS / (2 * HMI_NORM_GAUSS), "red"),
+        (0.5 - BLEND_HMI_NOISE_GAUSS / (2 * BLEND_HMI_SATURATION_GAUSS), "black"),
+        (0.5 + BLEND_HMI_NOISE_GAUSS / (2 * BLEND_HMI_SATURATION_GAUSS), "black"),
         (1.0, "red"),
     ],
 )
 BLEND_POLARITY_LABEL = "HMI polarity: red = +, blue = -"
-# Auto-exposure for the RGB composites: if the luminance at this percentile
-# exceeds 1, the image is scaled down so it lands at the target instead. Keeps
-# the brightest active regions on the linear part of the tone curve at the cost
-# of overall brightness; quiet days are left untouched.
-EXPOSURE_PERCENTILE = 99.99
-EXPOSURE_TARGET = 0.98
 # Pillow's default JPEG quality (75) leaves visible banding in the dark
 # corona; 90 removes it for ~35% more bytes than 85. optimize/progressive
 # are NOT used: combined with subsampling=0 they make Pillow do a two-pass
@@ -140,57 +132,6 @@ def _add_lmsal_logo(ax: plt.Axes) -> None:
     logo[..., :3] = np.clip(logo[..., :3] * LOGO_BRIGHTNESS, 0, 1)
     ax_logo.imshow(logo)
     ax_logo.set_axis_off()
-
-
-def _rec709_luminance(rgb: np.ndarray) -> np.ndarray:
-    """
-    Perceived brightness of the output image.
-
-    Uses the Rec. 709 relative-luminance weights, which match the sRGB
-    primaries the JPEGs are viewed with.
-
-    Parameters
-    ----------
-    rgb : np.ndarray
-        RGB image data in the last axis.
-
-    Returns
-    -------
-    np.ndarray
-        Relative luminance per pixel.
-    """
-    return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
-
-
-def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
-    """
-    Roll off luminance above ``shoulder`` with a tanh curve instead of
-    clipping.
-
-    Expects unclipped stretched data (values may exceed 1). All three channels
-    are scaled by the same per-pixel ratio, so the channel balance and hue are
-    preserved; pixels below the shoulder are untouched.
-
-    Parameters
-    ----------
-    rgb : np.ndarray
-        RGB image data, >= 0, highlights may exceed 1.
-    shoulder : float
-        Luminance where the rolloff starts, in (0, 1).
-
-    Returns
-    -------
-    np.ndarray
-        RGB image data compressed into the [0, 1] range.
-    """
-    lum = _rec709_luminance(rgb)
-    out_lum = np.where(
-        lum > shoulder,
-        shoulder + (1 - shoulder) * np.tanh((lum - shoulder) / (1 - shoulder)),
-        lum,
-    )
-    ratio = np.where(lum > 1e-6, out_lum / np.maximum(lum, 1e-6), 1.0)
-    return np.clip(rgb * ratio[..., None], 0.0, 1.0)
 
 
 def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord) -> None:
@@ -268,8 +209,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = plt.subplot(projection=amap)
     _full_bleed(ax)
-    clip_interval = (0.01, 99.99) * u.percent if "AIA" in amap.instrument else None
-    amap.plot(axes=ax, clip_interval=clip_interval, autoalign=False, interpolation="nearest")
+    amap.plot(axes=ax, autoalign=False, interpolation="nearest")
     wavelength = (
         WAVELENGTH_FORMAT_LABEL.format(amap.wavelength.value)
         if "AIA" in amap.instrument
@@ -329,62 +269,17 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111)
     _full_bleed(ax)
-    # Use the maximum value of the 99% percentile over all three filters
-    # as the maximum value
-    pctl = 99
-    maximum = 0
-    for img in [maps[0].data, maps[1].data, maps[2].data]:
-        val = np.percentile(img, pctl)
-        maximum = max(maximum, val)
-    # Since this is combo specific, I just hardcode it here.
-    # This is not a good solution, but it works for now.
-    # This looks nice for RGB 1 (94, 335, 193)
-    if maps[0].wavelength.value == 94:
-        intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.04),
-            ManualInterval(vmin=0, vmax=maximum * 0.15),
-            ManualInterval(vmin=0, vmax=maximum * 1.5),
-        ]
-        stretch = LogStretch(100)
-    # This looks nice for RGB 2 (211, 193, 171)
-    elif maps[0].wavelength.value == 211:
-        intervals = [
-            ManualInterval(vmin=0, vmax=maximum * 0.3),
-            ManualInterval(vmin=0, vmax=maximum * 0.9),
-            ManualInterval(vmin=0, vmax=maximum * 0.8),
-        ]
-        stretch = AsinhStretch(0.04)
-    # This looks nice for RGB 3 (304, 211, 171)
-    elif maps[0].wavelength.value == 304:
-        intervals = [
-            ManualInterval(vmin=0, vmax=maximum),
-            ManualInterval(vmin=0, vmax=maximum),
-            ManualInterval(vmin=0, vmax=maximum),
-        ]
-        stretch = AsinhStretch(0.04)
-    else:
-        msg = f"No RGB stretch/interval defined for lead wavelength {maps[0].wavelength.value}."
-        raise ValueError(msg)
-    # Assembled by hand instead of astropy's make_rgb: make_rgb hard-clips to
-    # [0, 1], which flattens the bright active-region cores to white before the
-    # highlight rolloff gets a chance to compress them.
-    # float32 per channel before stacking: the float64 stack plus its float32
-    # copy would transiently cost ~600 MB at 4096 px.
-    channels = [
-        stretch(np.clip(interval(amap.data, clip=False), 0, None), clip=False).astype(np.float32)
-        for amap, interval in zip(maps, intervals, strict=True)
-    ]
+    # Each channel is normalized with the same fixed norm as its single wavelength JPEG.
+    channels = []
+    for amap in maps:
+        wavelength = f"{amap.wavelength.value:.0f}"
+        norm = aia_norm(wavelength)
+        if norm is None:
+            msg = f"No AIA_SCALING entry for wavelength {wavelength}."
+            raise ValueError(msg)
+        channels.append(np.ma.filled(norm(amap.data), 0).astype(np.float32))
     rgb = np.stack(channels, axis=-1)
     del channels
-    rgb = (rgb - 0.5) * settings.rgb_contrast + 0.5
-    rgb = np.clip(rgb, 0, None)
-    # Auto-exposure: keep the brightest active regions on the linear part of
-    # the curve; the knee below then only touches the outlier pixels.
-    peak = np.percentile(_rec709_luminance(rgb), EXPOSURE_PERCENTILE)
-    if peak > 1:
-        rgb *= EXPOSURE_TARGET / peak
-    rgb *= settings.rgb_brightness
-    rgb = _tone_map_highlights(rgb, settings.rgb_knee_shoulder)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):
@@ -439,6 +334,7 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     maps[0].plot(
         axes=ax,
         cmap=BLEND_HMI_CMAP,
+        norm=BLEND_HMI_NORM,
         autoalign=False,
         interpolation="nearest",
     )

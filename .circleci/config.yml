@@ -1,0 +1,29 @@
+version: 2.1
+
+jobs:
+  figures:
+    docker:
+      - image: cimg/python:3.13
+    resource_class: large
+    steps:
+      - run:
+          name: Install cairo build deps
+          command: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
+      - checkout
+      - run:
+          name: Fetch the FITS test data
+          command: git lfs pull
+      - run:
+          name: Install tox
+          command: pip install --upgrade pip tox
+      - run:
+          name: Render every figure product
+          command: tox -e py-figure
+      - store_artifacts:
+          path: figure_test_images
+          destination: figures
+
+workflows:
+  figures:
+    jobs:
+      - figures

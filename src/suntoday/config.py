@@ -28,7 +28,6 @@ class Settings(BaseSettings):
     cron_frequency: int = 10  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
-    db_password: str = "suntoday_user_password"  # ruff:ignore[hardcoded-password-string]
     db_port: int = 5432
     db_user: str = "suntoday_user"
     # Built from the db_* components below if not set explicitly via env.
@@ -38,26 +37,13 @@ class Settings(BaseSettings):
     host_save_directory: Path = Path("./images")  # Docker Compose bind source
     jsoc_base_url: str = "http://jsoc.stanford.edu"
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
-    # Credentials for the authenticated test data series. Not shipped in code:
-    # set SUNTODAY_JSOC_USER / SUNTODAY_JSOC_PASSWORD via .env or CI secrets.
+    # Credentials for the authenticated test data series.
     jsoc_password: str = ""
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
     jsoc_user: str = ""
     log_level: str = "INFO"
     map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
     resize_fig_size: int = 1024  # pixels
-    # Overall brightness multiplier for the RGB composites, applied after
-    # auto-exposure; the highlight knee keeps the bright cores from clipping.
-    rgb_brightness: float = 1.30
-    # Slope of the tone curve around mid-gray: >1 darkens shadows and brightens
-    # highlights across the whole image, 1.0 = no change.
-    rgb_contrast: float = 1.3
-    # Luminance above this rolls off smoothly toward white instead of clipping.
-    # Higher = rolloff starts later = brighter highlights, closer to hard clip.
-    rgb_knee_shoulder: float = 0.50
-    # If set, generated files are uploaded to this S3 bucket at the end of each
-    # main job. Credentials come from standard AWS environment variables
-    # AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY and AWS_DEFAULT_REGION.
     s3_bucket: str = ""
     save_directory: Path = Path("./")
     sdo_fig_name_large: str = "f{}.jpg"

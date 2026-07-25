@@ -28,3 +28,5 @@ optional-dependencies = {test = { file = ["requirements-test.txt"] }}
 contaminaton = "contaminaton"
 blos = "blos"
 CPY = "CPY"
+# IDL's log10.
+alog = "alog"

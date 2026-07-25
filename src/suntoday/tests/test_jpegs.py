@@ -5,6 +5,7 @@ from unittest.mock import call
 import pytest
 from PIL import Image
 
+from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.downloaders.jsoc import find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
@@ -28,11 +29,14 @@ def pfss_field_lines(adapt_test_file):
     return trace_field_lines(create_adapt_map(adapt_test_file))
 
 
+# One baseline per channel: AIA_SCALING holds a separate curve and limits for
+# each one, so a single channel cannot catch a wrong entry in the other eight.
+@pytest.mark.parametrize("wavelength", AIA_WAVELENGTHS)
 @mpl_svg_compare
-def test_create_figure_from_map_aia_171(aia_171_test_file):
-    aia_map = create_aia_map(aia_171_test_file)
-    wavelength, fig = create_figure_from_map(aia_map)
-    assert wavelength == "0171"
+def test_create_figure_from_map_aia(request, wavelength):
+    aia_map = create_aia_map(request.getfixturevalue(f"aia_{wavelength}_test_file"))
+    filename, fig = create_figure_from_map(aia_map)
+    assert filename == wavelength.zfill(4)
     return fig
 
 
@@ -41,6 +45,14 @@ def test_create_figure_from_map_hmi_blos(hmi_blos_test_file):
     hmi_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_figure_from_map(hmi_map)
     assert wavelength == "_HMImag"
+    return fig
+
+
+@mpl_svg_compare
+def test_create_figure_from_map_hmi_continuum(hmi_cont_test_file):
+    hmi_map = create_hmi_map(hmi_cont_test_file)
+    wavelength, fig = create_figure_from_map(hmi_map)
+    assert wavelength == "_HMI_cont_aiascale"
     return fig
 
 

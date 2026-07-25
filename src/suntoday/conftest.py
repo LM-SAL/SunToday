@@ -2,12 +2,10 @@ import os
 
 import pandas as pd
 import pytest
-import sunpy.map as smap
 from pytest_postgresql import factories
 from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
-from sunpy.io._file_tools import read_file  # ruff:ignore[import-private-name]
 
 from suntoday.data.test import get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
@@ -77,10 +75,10 @@ def goes_primary_timeseries():
     return pd.concat(frames)
 
 
-# Real 24 h of data from 2026-01-26, downsampled ~5x to keep the files
-# small, so one figure test shows the styling on actual flare morphology.
 @pytest.fixture
 def real_aia_timeseries():
+    # Real 24 h of data from 2026-01-26, downsampled ~5x to keep the files
+    # small.
     timeseries = pd.read_csv(get_test_filepath("20260126_aia_timeseries.csv"), index_col=0, parse_dates=True)
     timeseries.index = pd.to_datetime(timeseries.index, format="mixed")
     return timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
@@ -95,6 +93,16 @@ def real_goes_primary_timeseries():
 @pytest.fixture(scope="session")
 def adapt_test_file():
     return get_test_filepath("20260717_220000_adapt.fits")
+
+
+@pytest.fixture
+def aia_1600_test_file():
+    return get_test_filepath("20260717_221150_1600.fits")
+
+
+@pytest.fixture
+def aia_131_test_file():
+    return get_test_filepath("20260717_221154_131.fits")
 
 
 @pytest.fixture
@@ -133,23 +141,10 @@ def aia_193_test_file():
 
 
 @pytest.fixture
+def aia_1700_test_file():
+    return get_test_filepath("20260717_221204_1700.fits")
+
+
+@pytest.fixture
 def aia_304_test_file():
     return get_test_filepath("20260717_221205_304.fits")
-
-
-@pytest.fixture
-def aia_171_test_generic_map(aia_171_test_file):
-    ((data, header),) = read_file(aia_171_test_file)
-    # Get rid of the blank keyword to prevent some astropy fits fixing warnings
-    header.pop("BLANK")
-    return smap.Map((data, header))
-
-
-@pytest.fixture
-def hmi_test_generic_map(hmi_cont_test_file):
-    ((data, header),) = read_file(hmi_cont_test_file)
-    # Get rid of the blank keyword to prevent some astropy fits fixing warnings
-    header.pop("BLANK")
-    header.pop("CRDER1")
-    header.pop("CRDER2")
-    return smap.Map((data, header))
