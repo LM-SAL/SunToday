@@ -7,7 +7,7 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
 
-from suntoday.data.test import get_test_filepath
+from suntoday.data.test import find_test_filepath, get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"
@@ -107,14 +107,14 @@ def real_goes_primary_timeseries():
 
 @pytest.fixture(scope="session")
 def adapt_test_file():
-    return get_test_filepath("20260717_220000_adapt.fits")
+    return find_test_filepath("adapt")
 
 
 @pytest.fixture
 def hmi_cont_test_file():
-    return get_test_filepath("20260717_221200_continuum.fits")
+    return find_test_filepath("continuum")
 
 
 @pytest.fixture
 def hmi_blos_test_file():
-    return get_test_filepath("20260717_221200_magnetogram.fits")
+    return find_test_filepath("magnetogram")

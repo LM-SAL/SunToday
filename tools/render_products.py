@@ -13,7 +13,7 @@ import warnings
 from pathlib import Path
 
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
-from suntoday.data.test import TEST_DATA_ROOTDIR
+from suntoday.data.test import TEST_DATA_ROOTDIR, find_test_filepath
 from suntoday.jpegs import (
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -35,7 +35,11 @@ def write(name_and_figure):
 
 
 def find(suffix):
-    return next(TEST_DATA_ROOTDIR.glob(f"*_{suffix}.fits"), None)
+    # Missing files just skip that product; duplicates still raise.
+    try:
+        return find_test_filepath(suffix)
+    except FileNotFoundError:
+        return None
 
 
 aia = {wavelength: path for wavelength in AIA_WAVELENGTHS if (path := find(wavelength))}

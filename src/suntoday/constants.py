@@ -15,6 +15,9 @@ __all__ = [
     "HMI_NORM_GAUSS",
     "RGB_COMBINATIONS",
 ]
+# HMI magnetogram display norm half-range: maps.py builds Normalize(+-this)
+# for the grayscale JPEG. Independent of the polarity blend's
+# BLEND_HMI_SATURATION_GAUSS in jpegs.py, so the two are tuned separately.
 HMI_NORM_GAUSS = 70
 # Absolute display scaling per AIA channel, as a factory that `suntoday.maps.aia_norm`
 # calls for a fresh norm. vmin/vmax are in the degradation-corrected DN/s that

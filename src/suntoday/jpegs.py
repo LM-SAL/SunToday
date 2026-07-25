@@ -76,6 +76,8 @@ HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 # from HMI_NORM_GAUSS, so the two can be tuned independently.
 BLEND_HMI_NOISE_GAUSS = 15
 BLEND_HMI_SATURATION_GAUSS = 120
+# The limits are fixed (never autoscaled) and nothing
+# mutates a norm (no set_clim, no colorbar).
 BLEND_HMI_NORM = colors.Normalize(-BLEND_HMI_SATURATION_GAUSS, BLEND_HMI_SATURATION_GAUSS)
 BLEND_HMI_CMAP = colors.LinearSegmentedColormap.from_list(
     "hmi_polarity_blend",
@@ -204,7 +206,19 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
         The wavelength of the map(s). This is used as part of the filename.
     `plt.Figure`
         The figure object.
+
+    Raises
+    ------
+    ValueError
+        If an AIA map carries no fixed display norm (no
+        `suntoday.constants.AIA_SCALING` entry): plotting would silently
+        autoscale to the frame, breaking the fixed-scaling contract.
     """
+    if "AIA" in amap.instrument:
+        norm = amap.plot_settings.get("norm")
+        if norm is None or norm.vmin is None or norm.vmax is None:
+            msg = f"AIA map for wavelength {amap.wavelength.value:.0f} has no fixed display norm (see AIA_SCALING)."
+            raise ValueError(msg)
     settings = Settings()
     fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
     ax = plt.subplot(projection=amap)
@@ -261,6 +275,7 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     ------
     ValueError
         If not 3 maps are passed.
+        If a map's wavelength has no `suntoday.constants.AIA_SCALING` entry.
     """
     if len(maps) != 3:
         msg = "RGB figure needs exactly three maps."
@@ -270,10 +285,14 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     ax = fig.add_subplot(111)
     _full_bleed(ax)
     # Each channel is normalized with the same fixed norm as its single wavelength JPEG.
-    rgb = np.stack(
-        [np.ma.filled(aia_norm(f"{amap.wavelength.value:.0f}")(amap.data), 0).astype(np.float32) for amap in maps],
-        axis=-1,
-    )
+    channels = []
+    for amap in maps:
+        wavelength = f"{amap.wavelength.value:.0f}"
+        if (norm := aia_norm(wavelength)) is None:
+            msg = f"No AIA scaling defined for wavelength {wavelength}."
+            raise ValueError(msg)
+        channels.append(np.ma.filled(norm(amap.data), 0).astype(np.float32))
+    rgb = np.stack(channels, axis=-1)
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):

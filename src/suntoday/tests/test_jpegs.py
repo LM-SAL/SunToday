@@ -7,7 +7,7 @@ from PIL import Image
 
 from suntoday.conftest import latest_or_skip
 from suntoday.constants import AIA_WAVELENGTHS
-from suntoday.data.test import get_aia_test_filepath
+from suntoday.data.test import find_test_filepath
 from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
@@ -31,7 +31,7 @@ def pfss_field_lines(adapt_test_file):
 @pytest.mark.parametrize("wavelength", AIA_WAVELENGTHS)
 @mpl_svg_compare
 def test_create_figure_from_map_aia(wavelength):
-    aia_map = create_aia_map(get_aia_test_filepath(wavelength))
+    aia_map = create_aia_map(find_test_filepath(wavelength))
     filename, fig = create_figure_from_map(aia_map)
     assert filename == wavelength.zfill(4)
     return fig
@@ -55,7 +55,7 @@ def test_create_figure_from_map_hmi_continuum(hmi_cont_test_file):
 
 @pytest.mark.mpl_image_compare
 def test_create_blended_figure_from_maps(hmi_blos_test_file):
-    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
     assert wavelength == "_HMImag_171"
@@ -64,9 +64,9 @@ def test_create_blended_figure_from_maps(hmi_blos_test_file):
 
 @mpl_svg_compare
 def test_create_rgb_figure_from_maps_1():
-    aia_94_map = create_aia_map(get_aia_test_filepath("94"))
-    aia_335_map = create_aia_map(get_aia_test_filepath("335"))
-    aia_193_map = create_aia_map(get_aia_test_filepath("193"))
+    aia_94_map = create_aia_map(find_test_filepath("94"))
+    aia_335_map = create_aia_map(find_test_filepath("335"))
+    aia_193_map = create_aia_map(find_test_filepath("193"))
     wavelength, fig = create_rgb_figure_from_maps([aia_94_map, aia_335_map, aia_193_map])
     assert wavelength == "_094_335_193"
     return fig
@@ -74,9 +74,9 @@ def test_create_rgb_figure_from_maps_1():
 
 @mpl_svg_compare
 def test_create_rgb_figure_from_maps_2():
-    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
-    aia_193_map = create_aia_map(get_aia_test_filepath("193"))
-    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_193_map = create_aia_map(find_test_filepath("193"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_211_map, aia_193_map, aia_171_map])
     assert wavelength == "_211_193_171"
     return fig
@@ -84,11 +84,23 @@ def test_create_rgb_figure_from_maps_2():
 
 @mpl_svg_compare
 def test_create_rgb_figure_from_maps_3():
-    aia_304_map = create_aia_map(get_aia_test_filepath("304"))
-    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
-    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
+    aia_304_map = create_aia_map(find_test_filepath("304"))
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     return fig
+
+
+def test_create_figure_from_map_requires_aia_norm() -> None:
+    fake = SimpleNamespace(instrument="AIA_4", wavelength=SimpleNamespace(value=4500.0), plot_settings={})
+    with pytest.raises(ValueError, match="no fixed display norm"):
+        create_figure_from_map(fake)
+
+
+def test_create_rgb_figure_from_maps_requires_scaling() -> None:
+    fake = SimpleNamespace(wavelength=SimpleNamespace(value=4500.0))
+    with pytest.raises(ValueError, match="No AIA scaling defined for wavelength 4500"):
+        create_rgb_figure_from_maps([fake, fake, fake])
 
 
 @pytest.mark.mpl_image_compare
@@ -101,9 +113,9 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
 
 
 def test_save_figures_from_maps_aia(tmpdir) -> None:
-    aia_304_map = create_aia_map(get_aia_test_filepath("304"))
-    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
-    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
+    aia_304_map = create_aia_map(find_test_filepath("304"))
+    aia_211_map = create_aia_map(find_test_filepath("211"))
+    aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     saved_paths = save_figures([(wavelength, fig)], tmpdir)
     assert set(saved_paths) == {

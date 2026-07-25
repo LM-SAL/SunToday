@@ -217,3 +217,5 @@ docs/whatsnew/latest_changelog.txt
 .tmp
 figure_test_images/
 rendered_products/
+# Default docker-compose bind mount for generated products
+images/

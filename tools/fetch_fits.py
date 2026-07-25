@@ -8,9 +8,9 @@ set. Needs the test-series credentials (``SUNTODAY_JSOC_USER`` /
 
 python tools/fetch_fits.py
 
-After running, update the HMI file names in
-``src/suntoday/conftest.py``; the AIA ones are found by wavelength, so
-they need no change.
+The test fixtures find every file by its suffix (wavelength,
+``magnetogram``, ``continuum``, ``adapt``), so no conftest updates are
+needed; figure tests asserting on-image timestamps still change.
 """
 
 import os
@@ -20,7 +20,7 @@ os.environ["SUNTODAY_TEST_ENV"] = "True"  # Has to be set before importing anyth
 from pathlib import Path
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS
-from suntoday.downloaders.adapt import fetch_adapt_fits
+from suntoday.downloaders.adapt import fetch_adapt_fits, find_nearest_adapt_time
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits, find_latest_pfss_time
 
 TEST_DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "src" / "suntoday" / "data" / "test"
@@ -39,7 +39,14 @@ print(f"Fetching HMI FITS files {timestamp}...")
 fetched |= {Path(file) for file in fetch_hmi_fits(timestamp, save_directory=TEST_DATA_DIRECTORY)}
 
 print(f"Fetching ADAPT FITS file {timestamp}...")
-fetched.add(fetch_adapt_fits(timestamp, save_directory=TEST_DATA_DIRECTORY))
+# Rename from the NSO archive name (adapt*.fts.gz, gzip astropy reads fine)
+# to the stored convention, so the conftest fixture, the *.fits globs and
+# the git-lfs filter all match it.
+adapt_file = fetch_adapt_fits(timestamp, save_directory=TEST_DATA_DIRECTORY)
+adapt_path = adapt_file.rename(
+    TEST_DATA_DIRECTORY / f"{find_nearest_adapt_time(timestamp):%Y%m%d_%H%M%S}_adapt.fits"
+)
+fetched.add(adapt_path)
 
 for path in sorted(fetched):
     if path.stem.rsplit("_", 1)[-1] in AIA_FITS_ONLY_WAVELENGTHS:

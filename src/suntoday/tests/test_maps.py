@@ -3,7 +3,7 @@ import pytest
 import sunpy.map as smap
 
 from suntoday.constants import AIA_SCALING
-from suntoday.data.test import get_aia_test_filepath
+from suntoday.data.test import find_test_filepath
 from suntoday.maps import (
     aia_norm,
     create_adapt_map,
@@ -13,7 +13,7 @@ from suntoday.maps import (
 
 
 def test_create_aia_171_map() -> None:
-    aia_map = create_aia_map(get_aia_test_filepath("171"))
+    aia_map = create_aia_map(find_test_filepath("171"))
     assert isinstance(aia_map, smap.GenericMap)
     assert aia_map.meta["wavelnth"] == 171
     assert aia_map.meta["exptime"] == 1.0  # ruff:ignore[float-equality-comparison]
@@ -43,7 +43,7 @@ def test_aia_norm_curve_shape() -> None:
 
 def test_create_aia_faint_channel_keeps_low_signal() -> None:
     # 94 spans roughly 0.3-10 DN/s, so any integer cast collapses it.
-    aia_map = create_aia_map(get_aia_test_filepath("94"))
+    aia_map = create_aia_map(find_test_filepath("94"))
     assert aia_map.data.min() >= 0
     on_disk = aia_map.data[aia_map.data > 0]
     assert np.count_nonzero(on_disk < 1) > 0
@@ -80,3 +80,16 @@ def test_create_hmi_blos_map(hmi_blos_test_file) -> None:
         hmi_map.rotation_matrix,
         np.array([[1, 0], [0, 1]]),
     )
+
+
+def test_find_test_filepath_missing() -> None:
+    with pytest.raises(FileNotFoundError, match="No test FITS file"):
+        find_test_filepath("9999")
+
+
+def test_find_test_filepath_ambiguous(mocker, tmp_path) -> None:
+    (tmp_path / "a_171.fits").touch()
+    (tmp_path / "b_171.fits").touch()
+    mocker.patch("suntoday.data.test.TEST_DATA_ROOTDIR", tmp_path)
+    with pytest.raises(ValueError, match="Multiple test FITS files"):
+        find_test_filepath("171")
