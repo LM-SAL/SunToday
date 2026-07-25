@@ -46,9 +46,6 @@ def test_aia_norm_curve_shape() -> None:
     [(("asinh", 0.01, 1.0, 2.0), "unknown kind"), (("power", None, 1.0, 2.0), "positive exponent")],
 )
 def test_aia_norm_rejects_bad_scaling(monkeypatch, scaling, match) -> None:
-    # An entry that does not name a curve this builds must not quietly fall
-    # through to one that does: that renders the channel through the wrong
-    # curve, which looks plausible and is how the contrast broke before.
     monkeypatch.setitem(AIA_SCALING, "193", scaling)
     with pytest.raises(ValueError, match=match):
         aia_norm("193")
