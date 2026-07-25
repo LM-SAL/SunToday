@@ -6,6 +6,7 @@ import pytest
 from PIL import Image
 
 from suntoday.constants import AIA_WAVELENGTHS
+from suntoday.data.test import get_aia_test_filepath
 from suntoday.jpegs import (
     _draw_field_lines,
     _save_product,
@@ -27,8 +28,8 @@ def pfss_field_lines(adapt_test_file):
 
 @pytest.mark.parametrize("wavelength", AIA_WAVELENGTHS)
 @mpl_svg_compare
-def test_create_figure_from_map_aia(request, wavelength):
-    aia_map = create_aia_map(request.getfixturevalue(f"aia_{wavelength}_test_file"))
+def test_create_figure_from_map_aia(wavelength):
+    aia_map = create_aia_map(get_aia_test_filepath(wavelength))
     filename, fig = create_figure_from_map(aia_map)
     assert filename == wavelength.zfill(4)
     return fig
@@ -51,8 +52,8 @@ def test_create_figure_from_map_hmi_continuum(hmi_cont_test_file):
 
 
 @pytest.mark.mpl_image_compare
-def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_blended_figure_from_maps(hmi_blos_test_file):
+    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
     hmi_blos_map = create_hmi_map(hmi_blos_test_file)
     wavelength, fig = create_blended_figure_from_maps([hmi_blos_map, aia_171_map])
     assert wavelength == "_HMImag_171"
@@ -60,30 +61,30 @@ def test_create_blended_figure_from_maps(aia_171_test_file, hmi_blos_test_file):
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_1(aia_94_test_file, aia_335_test_file, aia_193_test_file):
-    aia_94_map = create_aia_map(aia_94_test_file)
-    aia_335_map = create_aia_map(aia_335_test_file)
-    aia_193_map = create_aia_map(aia_193_test_file)
+def test_create_rgb_figure_from_maps_1():
+    aia_94_map = create_aia_map(get_aia_test_filepath("94"))
+    aia_335_map = create_aia_map(get_aia_test_filepath("335"))
+    aia_193_map = create_aia_map(get_aia_test_filepath("193"))
     wavelength, fig = create_rgb_figure_from_maps([aia_94_map, aia_335_map, aia_193_map])
     assert wavelength == "_094_335_193"
     return fig
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_2(aia_211_test_file, aia_193_test_file, aia_171_test_file):
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_193_map = create_aia_map(aia_193_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_rgb_figure_from_maps_2():
+    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
+    aia_193_map = create_aia_map(get_aia_test_filepath("193"))
+    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_211_map, aia_193_map, aia_171_map])
     assert wavelength == "_211_193_171"
     return fig
 
 
 @mpl_svg_compare
-def test_create_rgb_figure_from_maps_3(aia_304_test_file, aia_211_test_file, aia_171_test_file):
-    aia_304_map = create_aia_map(aia_304_test_file)
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_create_rgb_figure_from_maps_3():
+    aia_304_map = create_aia_map(get_aia_test_filepath("304"))
+    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
+    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
     _, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     return fig
 
@@ -97,10 +98,10 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     return fig
 
 
-def test_save_figures_from_maps_aia(aia_304_test_file, aia_211_test_file, aia_171_test_file, tmpdir) -> None:
-    aia_304_map = create_aia_map(aia_304_test_file)
-    aia_211_map = create_aia_map(aia_211_test_file)
-    aia_171_map = create_aia_map(aia_171_test_file)
+def test_save_figures_from_maps_aia(tmpdir) -> None:
+    aia_304_map = create_aia_map(get_aia_test_filepath("304"))
+    aia_211_map = create_aia_map(get_aia_test_filepath("211"))
+    aia_171_map = create_aia_map(get_aia_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
     saved_paths = save_figures([(wavelength, fig)], tmpdir)
     assert set(saved_paths) == {

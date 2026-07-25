@@ -12,13 +12,8 @@ Reads ``src/suntoday/data/test`` and writes the full/small/thumb JPEG set into
 import warnings
 from pathlib import Path
 
-import matplotlib as mpl
-
-mpl.use("module://mplcairo.base")
-
-from astropy.io import fits
-
-from suntoday.constants import RGB_COMBINATIONS
+from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
+from suntoday.data.test import TEST_DATA_ROOTDIR
 from suntoday.jpegs import (
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -29,46 +24,37 @@ from suntoday.maps import create_aia_map, create_hmi_map
 
 warnings.simplefilter("ignore")
 
-ROOT = Path(__file__).resolve().parent.parent
-FITS_DIRECTORY = ROOT / "src" / "suntoday" / "data" / "test"
-OUTPUT_DIRECTORY = ROOT / "rendered_products"
+OUTPUT_DIRECTORY = Path(__file__).resolve().parent.parent / "rendered_products"
 OUTPUT_DIRECTORY.mkdir(exist_ok=True)
 
-aia_files, hmi_files = {}, {}
-for path in sorted(FITS_DIRECTORY.glob("*.fits")):
-    with fits.open(path) as hdul:
-        header = next((hdu.header for hdu in hdul if hdu.data is not None), None)
-    if header is None:
-        continue
-    instrument = str(header.get("INSTRUME", "")).upper()
-    if "AIA" in instrument:
-        aia_files[f"{float(header['WAVELNTH']):.0f}"] = path
-    elif "HMI" in instrument:
-        measurement = "magnetogram" if "MAGNETOGRAM" in str(header.get("CONTENT", "")).upper() else "continuum"
-        hmi_files[measurement] = path
-print(f"AIA {sorted(aia_files)} and HMI {sorted(hmi_files)} from {FITS_DIRECTORY}")
 
-for create, files in ((create_aia_map, aia_files), (create_hmi_map, hmi_files)):
-    for path in files.values():
-        name, fig = create_figure_from_map(create(path))
-        save_figures([(name, fig)], OUTPUT_DIRECTORY)
-        print("wrote", name)
+def write(name_and_figure):
+    name, figure = name_and_figure
+    save_figures([(name, figure)], OUTPUT_DIRECTORY)
+    print("wrote", name)
+
+
+def find(suffix):
+    return next(TEST_DATA_ROOTDIR.glob(f"*_{suffix}.fits"), None)
+
+
+aia = {wavelength: path for wavelength in AIA_WAVELENGTHS if (path := find(wavelength))}
+hmi = {measurement: path for measurement in ("magnetogram", "continuum") if (path := find(measurement))}
+print(f"AIA {sorted(aia)} and HMI {sorted(hmi)} from {TEST_DATA_ROOTDIR}")
+
+for create, paths in ((create_aia_map, aia.values()), (create_hmi_map, hmi.values())):
+    for path in paths:
+        write(create_figure_from_map(create(path)))
 
 for combination in RGB_COMBINATIONS:
-    if not all(wavelength in aia_files for wavelength in combination):
+    if all(wavelength in aia for wavelength in combination):
+        write(create_rgb_figure_from_maps([create_aia_map(aia[wavelength]) for wavelength in combination]))
+    else:
         print("skipping RGB", combination, "- missing channels")
-        continue
-    name, fig = create_rgb_figure_from_maps([create_aia_map(aia_files[w]) for w in combination])
-    save_figures([(name, fig)], OUTPUT_DIRECTORY)
-    print("wrote", name)
 
 # The one blend pair, hardcoded the same way create_sdo_images hardcodes it.
-if "171" in aia_files and "magnetogram" in hmi_files:
-    name, fig = create_blended_figure_from_maps(
-        [create_hmi_map(hmi_files["magnetogram"]), create_aia_map(aia_files["171"])]
-    )
-    save_figures([(name, fig)], OUTPUT_DIRECTORY)
-    print("wrote", name)
+if "171" in aia and "magnetogram" in hmi:
+    write(create_blended_figure_from_maps([create_hmi_map(hmi["magnetogram"]), create_aia_map(aia["171"])]))
 else:
     print("skipping blend - missing 171 or magnetogram")
 

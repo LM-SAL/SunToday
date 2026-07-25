@@ -270,16 +270,10 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
     ax = fig.add_subplot(111)
     _full_bleed(ax)
     # Each channel is normalized with the same fixed norm as its single wavelength JPEG.
-    channels = []
-    for amap in maps:
-        wavelength = f"{amap.wavelength.value:.0f}"
-        norm = aia_norm(wavelength)
-        if norm is None:
-            msg = f"No AIA_SCALING entry for wavelength {wavelength}."
-            raise ValueError(msg)
-        channels.append(np.ma.filled(norm(amap.data), 0).astype(np.float32))
-    rgb = np.stack(channels, axis=-1)
-    del channels
+    rgb = np.stack(
+        [np.ma.filled(aia_norm(f"{amap.wavelength.value:.0f}")(amap.data), 0).astype(np.float32) for amap in maps],
+        axis=-1,
+    )
     ax.imshow(rgb, origin="lower")
     wavelength_names = []
     for i, amap in enumerate(maps):

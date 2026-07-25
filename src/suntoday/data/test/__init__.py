@@ -6,10 +6,31 @@ from suntoday.data import DATA_ROOTDIR
 
 __all__ = [
     "TEST_DATA_ROOTDIR",
+    "get_aia_test_filepath",
     "get_test_filepath",
 ]
 
 TEST_DATA_ROOTDIR = DATA_ROOTDIR / "test"
+
+
+def get_aia_test_filepath(wavelength):
+    """
+    Return the full path to the stored AIA test FITS file for a wavelength.
+
+    Globbed rather than named so refreshing the test data with
+    ``tools/fetch_fits.py`` does not need every call site updated.
+
+    Parameters
+    ----------
+    wavelength : `str`
+        Channel as it appears in the file name, e.g. ``"171"``.
+
+    Returns
+    -------
+    filepath : `pathlib.Path`
+        The full path to the file.
+    """
+    return next(TEST_DATA_ROOTDIR.glob(f"*_{wavelength}.fits"))
 
 
 def get_test_filepath(filename, **kwargs):

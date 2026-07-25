@@ -1,16 +1,16 @@
 """
 Refresh the stored FITS test data from the JSOC, in place.
 
-Writes straight into ``src/suntoday/data/test`` and removes the previous set on
-success, so the directory always holds one temporally matched set. Needs the
-test-series credentials (``SUNTODAY_JSOC_USER`` / ``SUNTODAY_JSOC_PASSWORD``).
+Writes straight into ``src/suntoday/data/test`` and removes the previous
+set on success, so the directory always holds one temporally matched
+set. Needs the test-series credentials (``SUNTODAY_JSOC_USER`` /
+``SUNTODAY_JSOC_PASSWORD``).
 
-    python tools/fetch_fits.py
+python tools/fetch_fits.py
 
-After running you must:
-
-1. Update the file names in the fixtures in ``src/suntoday/conftest.py``.
-2. Regenerate the figure baselines (``tox -e py-figure-generate``).
+After running, update the HMI file names in
+``src/suntoday/conftest.py``; the AIA ones are found by wavelength, so
+they need no change.
 """
 
 import os
