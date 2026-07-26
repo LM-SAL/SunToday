@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     """
     Default configuration.
 
-    These can be overridden using environment variables.
-    e.g., ``export suntoday_save_directory = "./"`` or via a .env file.
+    These can be overridden using environment variables, e.g. ``export
+    SUNTODAY_SAVE_DIRECTORY="./"``, or via a .env file.
     """
 
     model_config: SettingsConfigDict = SettingsConfigDict(

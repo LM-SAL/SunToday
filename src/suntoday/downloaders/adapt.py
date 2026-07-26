@@ -80,7 +80,7 @@ def _nearest_adapt_row(time: datetime, window: timedelta = timedelta(hours=4)) -
     return min(_adapt_rows(time - window, time + window), key=lambda row: abs(_row_time(row) - time))
 
 
-def fetch_adapt_fits(requested_time: datetime, save_directory: Path = Path("./")) -> Path:
+def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
     """
     Download the public GONG-input ADAPT magnetogram nearest to a time.
 
@@ -89,7 +89,7 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path = Path("./")
     requested_time : datetime.datetime
         Time to find the nearest ADAPT map for, on either side. ADAPT
         publishes every 2 hours, so the offset is at most ~1 hour.
-    save_directory : pathlib.Path, optional
+    save_directory : pathlib.Path
         Directory to save the downloaded file to.
 
     Returns

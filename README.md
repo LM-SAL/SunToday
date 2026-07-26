@@ -4,12 +4,13 @@ This repository contains the code to generate the figures for the SunToday webpa
 
 This includes:
 
-- The AIA JPEGs in 4K and 1K resolution without magnetic field lines.
+- The AIA JPEGs in three sizes: full resolution 4096 px (`f*.jpg`), 1024 px (`l*.jpg`), and 256 px thumbnails (`t*.jpg`).
   - 131
   - 1600
   - 1700
   - 171
   - 193
+  - 193 with the old IDL pipeline scaling, full resolution only (`f0193i.jpg`)
   - 211
   - 211 - 193 - 171
   - 304
@@ -17,10 +18,12 @@ This includes:
   - 335
   - 94
   - 94 - 335 - 193
-- The HMI JPEGs in 4K and 1K resolution without magnetic field lines.
+- The HMI JPEGs in the same three sizes.
   - 171 - B_LOS
   - B_LOS
   - Continuum
+- PFSS variants of every JPEG above, anchored to the matched GONG ADAPT file time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
+- Planning FITS files for every AIA channel (plus 4500, which is FITS-only) and the HMI B_LOS and continuum.
 - The combination of the AIA lightcurves with GOES.
 
 Future movie support will need to produce the following:
@@ -67,6 +70,7 @@ docker compose version
 Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
 
 - Copy the relevant environment file to `.env` and update its values.
+- Set `HOST_UID`/`HOST_GID` in `.env` to a uid/gid that can write to the NFS share (e.g. `id -u ec2-user`); the default is 500, which owns the legacy date directories on the share.
 - Set `SUNTODAY_HOST_SAVE_DIRECTORY` to the host output directory; it defaults to `./images`. Compose mounts it at the fixed container path `/app/images`.
 - To upload generated files after each job, set `SUNTODAY_S3_BUCKET` (optionally including a key prefix, e.g. `s3://suntoday.lmsal.com/sdomedia/SunInTime`) plus `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` in `.env`. If temporary credentials are used, also set `AWS_SESSION_TOKEN`. Leave `SUNTODAY_S3_BUCKET` unset to skip uploads. Static keys are used for now; an EC2 IAM role can replace them later.
 - Configure the NFS drive to mount automatically at `/opt/SunInTime`. Add this line to `/etc/fstab`:
@@ -92,6 +96,7 @@ sudo setsebool -P virt_use_nfs 1
 ```
 
 PostgreSQL uses a Docker-managed local volume; no host database directory or permission setup is required.
+An Adminer database browser is published on port 1234 (System: PostgreSQL, Server: db, User: suntoday_user, Database: suntoday, no password); the Postgres port itself is never exposed.
 
 - Build the images.
 
@@ -141,6 +146,12 @@ Accepted formats:
 
 - Date only: `YYYY-MM-DD` (interpreted as midnight UTC)
 - Datetime: ISO-8601, e.g. `2026-02-04T12:30:00Z`
+
+Add `--pfss` to run the PFSS overlay job instead of the main job (requires `--date`):
+
+```bash
+docker compose run --rm suntoday --date 2026-02-04 --pfss
+```
 
 ## Tests
 

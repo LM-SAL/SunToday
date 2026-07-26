@@ -88,7 +88,8 @@ def _build_args() -> argparse.ArgumentParser:
 
 def cli() -> None:
     """
-    Allows one to call the code once if required.
+    Parse the CLI arguments: run a one-off job when ``--date`` is given,
+    otherwise start the scheduler.
     """
     parser = _build_args()
     args = parser.parse_args()

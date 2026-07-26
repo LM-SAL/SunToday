@@ -18,18 +18,7 @@ GOES_RETRY_DELAY = 5
 
 def _reformat_goes_df(goes_df: pd.DataFrame) -> pd.DataFrame:
     """
-    Reformats the GOES DataFrame to have a proper datetime index and correct
-    data types.
-
-    Parameters
-    ----------
-    goes_df : pandas.DataFrame
-        The GOES DataFrame to reformat.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The reformatted GOES DataFrame.
+    Set a datetime index, drop the unused columns and fix the dtypes.
     """
     goes_df = goes_df.set_index("time_tag")
     goes_df.index = pd.to_datetime(goes_df.index)
@@ -39,22 +28,7 @@ def _reformat_goes_df(goes_df: pd.DataFrame) -> pd.DataFrame:
 
 def _read_goes_json(url: str) -> pd.DataFrame:
     """
-    Fetches a GOES JSON file into a DataFrame, retrying transient failures.
-
-    Parameters
-    ----------
-    url : str
-        URL of the GOES JSON file.
-
-    Returns
-    -------
-    pandas.DataFrame
-        The raw GOES data.
-
-    Raises
-    ------
-    RuntimeError
-        If the download still fails after all retries.
+    Fetch a GOES JSON file into a DataFrame, retrying transient failures.
     """
     last_error: Exception | None = None
     for attempt in range(GOES_RETRIES + 1):

@@ -156,13 +156,13 @@ def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeri
 
     Returns
     -------
-    Model
-        The matching record from the database.
+    Model | None
+        The most recently updated record, or None if the table is empty.
 
     Raises
     ------
     ValueError
-        If ``model_type`` is not one of the valid types defined in ``VALID_TYPES``.
+        If ``model_type`` is not one of the valid types defined in ``VALID_MODELS``.
     """
     model = VALID_MODELS.get(model_type)
     if model is None:
