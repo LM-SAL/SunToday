@@ -48,20 +48,7 @@ def _format_aia_timeseries(timeseries: pd.DataFrame) -> str:
 
 def _hour_minute_with_date_at_midnight(x: float, _pos: int | None = None) -> str:
     """
-    Tick formatter: "HH:MM", with the date underneath at midnight so day
-    crossovers are visible without an offset string.
-
-    Parameters
-    ----------
-    x : float
-        Tick value as a matplotlib date number.
-    _pos : int, optional
-        Tick position, unused.
-
-    Returns
-    -------
-    str
-        The formatted tick label.
+    Tick formatter: "HH:MM", plus the date underneath at midnight.
     """
     when = dates.num2date(x)
     if when.hour == 0 and when.minute == 0:
@@ -79,7 +66,7 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         Axes to plot the lightcurve on.
     timeseries : pandas.DataFrame
         `~pandas.DataFrame` containing the AIA data.
-    wavelengths : list of int
+    wavelengths : list of str
         Wavelengths to plot.
         Defaults to `~suntoday.constants.AIA_WAVELENGTHS`.
     """

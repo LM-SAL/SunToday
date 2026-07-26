@@ -59,6 +59,10 @@ lint.extend-ignore = [
 [lint.pydocstyle]
 convention = "numpy"
 
+[lint.pydoclint]
+# Short helper docstrings don't need full Returns/Raises sections.
+ignore-one-line-docstrings = true
+
 [format]
 docstring-code-format = true
 indent-style = "space"

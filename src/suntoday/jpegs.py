@@ -1,5 +1,7 @@
 """
-Provides all the functions needed to create SDO/AIA JPEGS.
+Provides all the functions needed to create the SDO JPEG products: AIA and HMI
+single channels, RGB composites, the HMI/AIA blend and the PFSS overlay
+variants.
 """
 
 import matplotlib as mpl
@@ -120,9 +122,6 @@ def _full_bleed(ax: plt.Axes) -> None:
 
     This avoids default subplot padding so the map scales to the
     intended pixel size instead of being surrounded by margins.
-
-    This was not required but all of a sudden I did and I cba to track
-    down why.
     """
     fig = ax.figure
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -131,12 +130,7 @@ def _full_bleed(ax: plt.Axes) -> None:
 
 def _add_lmsal_logo(ax: plt.Axes) -> None:
     """
-    Add LMSAL logo to the given Axes object.
-
-    Parameters
-    ----------
-    ax : `matplotlib.pyplot.Axes`
-        The Axes object to add the logo to.
+    Add the LMSAL logo to the bottom-right corner of the axes.
     """
     ax_logo = ax.inset_axes([0.72, 0, 0.28, 0.08])
     logo = plt.imread(PNG_IMAGE).copy()
@@ -169,11 +163,6 @@ def _create_canvas(projection=None) -> tuple[plt.Figure, plt.Axes]:
 def _finish_figure(ax: plt.Axes) -> None:
     """
     Strip the axes decorations and add the LMSAL logo.
-
-    Parameters
-    ----------
-    ax : `matplotlib.pyplot.Axes`
-        The axes to finish.
     """
     ax.set_axis_off()
     ax.set_title("")
@@ -209,19 +198,7 @@ def _draw_label(ax: plt.Axes, line: int, text: str, stroke: str = "black") -> No
 
 def _map_label(amap: smap.GenericMap, wavelength: str) -> str:
     """
-    Build the on-image label for a map.
-
-    Parameters
-    ----------
-    amap : `sunpy.map.GenericMap`
-        The map providing observatory, instrument and date.
-    wavelength : str
-        The already-formatted wavelength/measurement part.
-
-    Returns
-    -------
-    str
-        The label text.
+    Build the on-image label; ``wavelength`` is already formatted.
     """
     return LABEL_FORMAT.format(
         observatory=amap.observatory,
@@ -331,9 +308,9 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
 
 def create_figure_from_map(amap: smap.GenericMap, norm: colors.Normalize | None = None) -> tuple[str, plt.Figure]:
     """
-    Creates the final figure from the input Map.
+    Creates the final figure from the input AIA or HMI Map.
 
-    Adds the AIA LMSAL logo, the timestamp and wavelength.
+    Adds the LMSAL logo, the timestamp and the wavelength/measurement label.
 
     Parameters
     ----------
@@ -515,15 +492,6 @@ def save_figures(
 def _save_jpeg_set(fig: plt.Figure, full_path: Path, small_path: Path, thumb_path: Path, settings: Settings) -> None:
     """
     Save one figure as its full/small/thumb JPEG set, atomically.
-
-    Parameters
-    ----------
-    fig : `plt.Figure`
-        The figure to save.
-    full_path, small_path, thumb_path : pathlib.Path
-        Destination paths for the three sizes.
-    settings : Settings
-        The application settings.
     """
     with atomic_save(full_path) as full_tmp:
         fig.savefig(full_tmp, dpi=settings.fig_dpi, pil_kwargs=JPEG_SAVE_OPTIONS)
@@ -571,7 +539,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         products: every JPEG is saved twice (``pfssnolines`` base and
         ``pfss`` field line overlay from an ADAPT boundary map) and no
         planning FITS files are written. The caller should anchor
-        ``requested_time`` to the lagging HMI NRT series and leave
+        ``requested_time`` to the matched GONG ADAPT file time and leave
         ``hmi_time`` unset so all the image timestamps match.
 
     Returns

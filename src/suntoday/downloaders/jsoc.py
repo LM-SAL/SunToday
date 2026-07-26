@@ -1,5 +1,10 @@
 """
-Provides a JSOC NRT downloader for the AIA level 1.5 series.
+JSOC NRT downloaders: AIA and HMI FITS files, the AIA timeseries, and series
+freshness helpers.
+
+The data comes from the test series John creates on JSOC 2. The AWS VM
+is whitelisted, and DRMS cannot authenticate against that server, so
+plain requests are used throughout.
 """
 
 from datetime import UTC, datetime, timedelta
@@ -74,8 +79,8 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
 
     Returns
     -------
-    requests.Response
-        Response from the JSOC.
+    dict
+        Parsed JSON response from the JSOC.
 
     Raises
     ------
@@ -107,23 +112,20 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
     """
     Gets the NRT AIA FITS URLS for the given time.
 
-    This uses the test data that John creates on JSOC 2.
-    The AWS VM has been whitelisted.
-
-    I can not see how to auth with the JSOC2 server using DRMS, so I use requests to get the data.
-
     Parameters
     ----------
     requested_time : datetime.datetime
         Time wanted for the data.
     time_span : str
-        Time span for the data. Default is "60s".
-        We go back 60 seconds to capture 1600 and 1700, but we get repeats of the other wavelengths.
+        Length of the query window, which runs forward from
+        ``requested_time``. Default is "60s"; production calls pass "180s"
+        (the `fetch_aia_fits` default) to catch 1600 and 1700, which have
+        a slower cadence than the EUV channels.
 
     Returns
     -------
     pandas.DataFrame
-        AIA data for the previous ``time_span`` hours.
+        One row per wavelength found in the window, newest record kept.
 
     Raises
     ------
@@ -162,9 +164,10 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
     """
     Gets the NRT (m45s and Ic_45s) HMI FITS URL for the given time.
 
-    This uses the test data that John creates on JSOC 2.
-    The AWS VM has been whitelisted.
-    I can not see how to auth with the JSOC2 server using DRMS, so I use requests to get the data.
+    Parameters
+    ----------
+    requested_time : datetime.datetime
+        Time wanted for the data.
 
     Returns
     -------
@@ -270,7 +273,9 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
     Returns
     -------
     tuple of datetime.datetime
-        ``(aia_time, hmi_time)``: the newest available time per instrument.
+        ``(aia_time, hmi_time)``: the newest available time per instrument,
+        with AIA stepped back three minutes so its forward query window
+        lands inside the data.
     """
     # The AIA query window runs forward from the requested time, so step
     # back three minutes to have the full set of wavelengths land inside it.
@@ -289,7 +294,7 @@ def find_latest_pfss_time() -> datetime:
     Find the anchor time for the PFSS job.
 
     The PFSS images must all carry the same timestamp as the field lines,
-    so the anchor is the oldest available AIA, HMI, or ADAPT time. ADAPT
+    so the anchor is the minimum of the latest AIA, HMI, and ADAPT times. ADAPT
     updates every 2 hours, so the record nearest the anchor (either side) is
     then at most an hour away.
 
@@ -308,8 +313,6 @@ def find_latest_pfss_time() -> datetime:
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     """
     Fetches the NRT AIA data mean for the previous 24 hours.
-
-    This uses the test data that John creates on JSOC 2.
 
     Parameters
     ----------
@@ -352,7 +355,7 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     return aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
 
 
-def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", save_directory: Path = Path("./")) -> Results:
+def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_directory: Path) -> Results:
     """
     Download AIA fits files for a given time.
 
@@ -363,9 +366,8 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", save_direc
     time_span : str
         Time span to download files for.
         Defaults to "180s".
-    save_directory : Path, optional
+    save_directory : Path
         Directory to save the files to.
-        Defaults to ``Path("./")`` which saves to current directory.
 
     Returns
     -------
@@ -393,15 +395,16 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", save_direc
     return files
 
 
-def fetch_hmi_fits(requested_time: datetime, save_directory: Path = Path("./")) -> Results:
+def fetch_hmi_fits(requested_time: datetime, save_directory: Path) -> Results:
     """
     Download HMI FITS files for a given time.
 
     Parameters
     ----------
-    save_directory : Path, optional
+    requested_time : datetime.datetime
+        Datetime to download HMI FITS files for.
+    save_directory : Path
         Directory to save the files to.
-        Defaults to ``Path("./")`` which saves to current directory.
 
     Returns
     -------
