@@ -165,5 +165,4 @@ For the real JPEG products (all three sizes, as the pipeline writes them) run
 
 ## Future Work
 
-1. Add PFSS fieldlines
-2. Add movies
+1. Add movies
