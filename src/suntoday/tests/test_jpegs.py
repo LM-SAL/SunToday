@@ -11,6 +11,7 @@ from suntoday.data.test import find_test_filepath
 from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
+    _save_idl_193_figure,
     _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -91,15 +92,9 @@ def test_create_rgb_figure_from_maps_3():
     return fig
 
 
-def test_create_figure_from_map_requires_aia_norm() -> None:
-    fake = SimpleNamespace(instrument="AIA_4", wavelength=SimpleNamespace(value=4500.0), plot_settings={})
-    with pytest.raises(ValueError, match="no fixed display norm"):
-        create_figure_from_map(fake)
-
-
 def test_create_rgb_figure_from_maps_requires_scaling() -> None:
     fake = SimpleNamespace(wavelength=SimpleNamespace(value=4500.0))
-    with pytest.raises(ValueError, match="No AIA scaling defined for wavelength 4500"):
+    with pytest.raises(ValueError, match="No RGB recipe for wavelength combination"):
         create_rgb_figure_from_maps([fake, fake, fake])
 
 
@@ -108,7 +103,7 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     hmi_map = create_hmi_map(hmi_blos_test_file)
     _, fig = create_figure_from_map(hmi_map)
     _draw_field_lines(fig.axes[0], hmi_map, pfss_field_lines)
-    assert fig.axes[0].texts[-1].get_text() == "PFSS ADAPT         - 2026-07-17 22:00:00"
+    assert fig.axes[0].texts[-1].get_text() == "PFSS ADAPT                 - 2026-07-17 22:00:00"
     return fig
 
 
@@ -133,6 +128,16 @@ def test_save_figures_from_maps_aia(tmpdir) -> None:
     assert (tmpdir / "t_304_211_171.jpg").exists()
     with Image.open(str(tmpdir / "t_304_211_171.jpg")) as img:
         assert img.size == (256, 256)
+
+
+def test_save_idl_193_figure(tmp_path) -> None:
+    aia_map = create_aia_map(find_test_filepath("193"))
+    path = _save_idl_193_figure(aia_map, tmp_path)
+    assert path == tmp_path / "f0193i.jpg"
+    # 4k only: no small/thumbnail variants.
+    assert [file.name for file in tmp_path.iterdir()] == ["f0193i.jpg"]
+    with Image.open(str(path)) as img:
+        assert img.size == (4096, 4096)
 
 
 @pytest.mark.remote_data
@@ -202,6 +207,10 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "suntoday.jpegs._save_product",
         side_effect=lambda figure, _map, _lines, directory: [directory / f"{figure[0]}.jpg"],
     )
+    idl_193 = mocker.patch(
+        "suntoday.jpegs._save_idl_193_figure",
+        side_effect=lambda _map, directory: directory / "f0193i.jpg",
+    )
 
     files = create_sdo_images(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
 
@@ -215,6 +224,7 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "94.jpg",
         "171.jpg",
         "193.jpg",
+        "f0193i.jpg",
         "335.jpg",
         "magnetogram.jpg",
         "continuum.jpg",
@@ -224,6 +234,7 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
     assert [amap.label for amap in create_rgb.call_args.args[0]] == ["94", "335", "193"]
     assert [amap.label for amap in create_blend.call_args.args[0]] == ["magnetogram", "171"]
     assert all(product.args[2] is None for product in save_product.call_args_list)
+    assert idl_193.call_args.args[0].label == "193"
 
 
 def test_save_product_pfss(mocker, tmp_path) -> None:
@@ -247,16 +258,16 @@ def test_create_pfss_images_uses_field_lines(
     mocker,
     tmp_path,
 ) -> None:
-    aia_file = tmp_path / "171"
+    aia_files = [tmp_path / "171", tmp_path / "193"]
     hmi_file = tmp_path / "magnetogram"
     adapt_file = tmp_path / "adapt"
     aia_map = mocker.sentinel.aia_map
     hmi_map = mocker.Mock(measurement="magnetogram")
     field_lines = mocker.sentinel.field_lines
-    mocker.patch("suntoday.jpegs.AIA_WAVELENGTHS", ["171"])
+    mocker.patch("suntoday.jpegs.AIA_WAVELENGTHS", ["171", "193"])
     mocker.patch("suntoday.jpegs.AIA_FITS_ONLY_WAVELENGTHS", [])
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
-    mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=[aia_file])
+    mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=aia_files)
     mocker.patch("suntoday.jpegs.fetch_hmi_fits", return_value=[hmi_file])
     mocker.patch("suntoday.jpegs.fetch_adapt_fits", return_value=adapt_file)
     boundary = mocker.patch("suntoday.jpegs.create_adapt_map").return_value
@@ -267,9 +278,12 @@ def test_create_pfss_images_uses_field_lines(
     mocker.patch("suntoday.jpegs.create_blended_figure_from_maps", return_value=("blend", mocker.sentinel.figure))
     save_fits = mocker.patch("suntoday.jpegs.save_fits")
     save_product = mocker.patch("suntoday.jpegs._save_product", return_value=[])
+    idl_193 = mocker.patch("suntoday.jpegs._save_idl_193_figure")
 
     assert create_sdo_images(datetime.now(UTC), tmp_path, pfss=True) == []
     trace.assert_called_once_with(boundary)
     save_fits.assert_not_called()
-    assert save_product.call_count == 3
+    # The IDL-scaled 193 file is a regular product only, never a PFSS one.
+    idl_193.assert_not_called()
+    assert save_product.call_count == 4
     assert all(product.args[2] is field_lines for product in save_product.call_args_list)

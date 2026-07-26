@@ -19,31 +19,10 @@ from sunkit_magex.pfss.utils import car_to_cea
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 from sunpy.util.exceptions import SunpyMetadataWarning
 
-from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_SCALING, HMI_NORM_GAUSS
+from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
 from suntoday.data import RESPONSE_TABLE_V10
 
-__all__ = ["aia_norm", "create_adapt_map", "create_aia_map", "create_hmi_map"]
-
-
-def aia_norm(wavelength: str) -> colors.Normalize | None:
-    """
-    Builds the fixed display norm for an AIA channel.
-
-    A fresh instance per call: matplotlib norms cache their limits and the
-    artists they are attached to.
-
-    Parameters
-    ----------
-    wavelength : str
-        Channel as it appears in `suntoday.constants.AIA_SCALING`, e.g. "193".
-
-    Returns
-    -------
-    `matplotlib.colors.Normalize` or None
-        None for channels with no entry (the FITS-only ones).
-    """
-    scaling = AIA_SCALING.get(wavelength)
-    return scaling() if scaling is not None else None
+__all__ = ["create_adapt_map", "create_aia_map", "create_hmi_map"]
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:
@@ -73,15 +52,9 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         aia_map.meta["BUNIT"] = "ct / s"
         cmap = mpl.colormaps.get_cmap(aia_map.plot_settings["cmap"]).with_extremes(bad="black")
         aia_map.plot_settings["cmap"] = cmap
-        if (norm := aia_norm(wavelength)) is not None:
-            aia_map.plot_settings["norm"] = norm
-        data = aia_map.data
-        data[~np.isfinite(data)] = 0
-        # Only the negative readout noise is floored: the faint channels sit
-        # near the noise (94 spans ~0.3-10 DN/s), so zeroing everything below
-        # 1 DN/s, or rounding to integers, erased most of their disk detail.
-        np.clip(data, 0, None, out=data)
-        aia_map._data = data.astype(np.float32)  # ruff:ignore[private-member-access]
+        aia_map._data[aia_map._data <= 1] = 0  # ruff:ignore[private-member-access]
+        aia_map._data[np.isnan(aia_map._data)] = 0  # ruff:ignore[private-member-access]
+        aia_map._data = aia_map._data.astype(np.int32)  # ruff:ignore[private-member-access]
         return aia_map
 
 
@@ -108,10 +81,8 @@ def create_adapt_map(file: Path, realization: int = 0) -> smap.GenericMap:
         Full-Sun magnetogram in the heliographic Carrington frame.
     """
     with warnings.catch_warnings():
-        # ADAPT is a modeled composite, not a single instrument's observation,
-        # so it has no observer keywords; assuming Earth is the expected,
-        # correct fallback. The warning fires on WCS access, which happens
-        # lazily inside car_to_cea, not at Map() construction.
+        # ADAPT is a modeled composite with no observer keywords; the Earth
+        # fallback is correct. The warning fires lazily inside car_to_cea.
         warnings.filterwarnings("ignore", category=SunpyMetadataWarning, message="Missing metadata for observer")
         with fits.open(file, memmap=False) as hdul:
             adapt_map = smap.Map(hdul[0].data[realization], hdul[0].header)

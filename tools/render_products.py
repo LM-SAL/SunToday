@@ -5,8 +5,11 @@ For eyeballing a scaling or layout change without waiting on a JSOC query:
 
     python tools/render_products.py
 
-Reads ``src/suntoday/data/test`` and writes the full/small/thumb JPEG set into
-``rendered_products/`` at the repo root, exactly as ``create_sdo_images`` would.
+Reads ``src/suntoday/data/test`` and writes the JPEG products into
+``rendered_products/`` at the repo root, exactly as ``create_sdo_images``
+would: the full/small/thumb set per product, the IDL-scaled ``f0193i.jpg``,
+and - when the ADAPT test file is present - the ``pfssnolines``/``pfss``
+pair per product instead of the plain one, matching a ``pfss=True`` run.
 """
 
 import warnings
@@ -15,23 +18,19 @@ from pathlib import Path
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.data.test import TEST_DATA_ROOTDIR, find_test_filepath
 from suntoday.jpegs import (
+    _save_idl_193_figure,
+    _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
     create_rgb_figure_from_maps,
-    save_figures,
 )
-from suntoday.maps import create_aia_map, create_hmi_map
+from suntoday.maps import create_adapt_map, create_aia_map, create_hmi_map
+from suntoday.pfss import trace_field_lines
 
 warnings.simplefilter("ignore")
 
 OUTPUT_DIRECTORY = Path(__file__).resolve().parent.parent / "rendered_products"
 OUTPUT_DIRECTORY.mkdir(exist_ok=True)
-
-
-def write(name_and_figure):
-    name, figure = name_and_figure
-    save_figures([(name, figure)], OUTPUT_DIRECTORY)
-    print("wrote", name)
 
 
 def find(suffix):
@@ -46,19 +45,38 @@ aia = {wavelength: path for wavelength in AIA_WAVELENGTHS if (path := find(wavel
 hmi = {measurement: path for measurement in ("magnetogram", "continuum") if (path := find(measurement))}
 print(f"AIA {sorted(aia)} and HMI {sorted(hmi)} from {TEST_DATA_ROOTDIR}")
 
+field_lines = None
+if adapt := find("adapt"):
+    print("tracing PFSS field lines")
+    field_lines = trace_field_lines(create_adapt_map(adapt))
+else:
+    print("skipping PFSS variants - no adapt file")
+
+
+def write(name_and_figure, amap):
+    saved = _save_product(name_and_figure, amap, field_lines, OUTPUT_DIRECTORY)
+    print("wrote", *sorted({path.name for path in saved}))
+
+
 for create, paths in ((create_aia_map, aia.values()), (create_hmi_map, hmi.values())):
     for path in paths:
-        write(create_figure_from_map(create(path)))
+        amap = create(path)
+        write(create_figure_from_map(amap), amap)
+
+if "193" in aia:
+    print("wrote", _save_idl_193_figure(create_aia_map(aia["193"]), OUTPUT_DIRECTORY).name)
 
 for combination in RGB_COMBINATIONS:
     if all(wavelength in aia for wavelength in combination):
-        write(create_rgb_figure_from_maps([create_aia_map(aia[wavelength]) for wavelength in combination]))
+        maps = [create_aia_map(aia[wavelength]) for wavelength in combination]
+        write(create_rgb_figure_from_maps(maps), maps[0])
     else:
         print("skipping RGB", combination, "- missing channels")
 
 # The one blend pair, hardcoded the same way create_sdo_images hardcodes it.
 if "171" in aia and "magnetogram" in hmi:
-    write(create_blended_figure_from_maps([create_hmi_map(hmi["magnetogram"]), create_aia_map(aia["171"])]))
+    maps = [create_hmi_map(hmi["magnetogram"]), create_aia_map(aia["171"])]
+    write(create_blended_figure_from_maps(maps), maps[0])
 else:
     print("skipping blend - missing 171 or magnetogram")
 

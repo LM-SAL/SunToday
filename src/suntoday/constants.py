@@ -6,37 +6,45 @@ TODO: Probably should be config.
 
 from functools import partial
 
+from astropy.visualization import (
+    AsinhStretch,
+    AsymmetricPercentileInterval,
+    ImageNormalize,
+    LinearStretch,
+    LogStretch,
+)
 from matplotlib import colors
 
 __all__ = [
+    "AIA_193_IDL_NORM",
     "AIA_COLORS",
-    "AIA_SCALING",
+    "AIA_SINGLE_NORMS",
     "AIA_WAVELENGTHS",
     "HMI_NORM_GAUSS",
     "RGB_COMBINATIONS",
+    "RGB_MAX_PERCENTILE",
+    "RGB_RECIPES",
 ]
-# HMI magnetogram display norm half-range: maps.py builds Normalize(+-this)
-# for the grayscale JPEG. Independent of the polarity blend's
-# BLEND_HMI_SATURATION_GAUSS in jpegs.py, so the two are tuned separately.
-HMI_NORM_GAUSS = 70
-# Absolute display scaling per AIA channel, as a factory that `suntoday.maps.aia_norm`
-# calls for a fresh norm. vmin/vmax are in the degradation-corrected DN/s that
-# create_aia_map produces. LogNorm is log10 between the limits, which is exactly what
-# the previous IDL pipeline did, e.g. for 193:
-#   bytscl(alog10(image*(2.9995/exptime) > (120d/2.2) < (6000d/2.2)))
-# clip=True so out-of-range pixels land on the end colours instead of the "bad"
-# colour, matching IDL's bytscl of a hard-clipped image.
-AIA_SCALING = {
-    "94": partial(colors.PowerNorm, 0.7, vmin=0.33, vmax=9.6, clip=True),
-    "131": partial(colors.LogNorm, vmin=1.19, vmax=223.0, clip=True),
-    "171": partial(colors.PowerNorm, 0.5, vmin=5.9, vmax=1255.0, clip=True),
-    "193": partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True),
-    "211": partial(colors.LogNorm, vmin=10.1, vmax=4619.0, clip=True),
-    "304": partial(colors.LogNorm, vmin=10.8, vmax=518.0, clip=True),
-    "335": partial(colors.LogNorm, vmin=1.03, vmax=231.0, clip=True),
-    "1600": partial(colors.PowerNorm, 0.7, vmin=19.4, vmax=737.0, clip=True),
-    "1700": partial(colors.PowerNorm, 0.6, vmin=268.0, vmax=6435.0, clip=True),
+# HMI magnetogram display half-range in Gauss; the polarity blend in jpegs.py
+# has its own saturation, tuned separately.
+HMI_NORM_GAUSS = 100
+# Norm overrides for single-channel JPEGs; unlisted channels get sunpy's
+# default stretch plus the AIA_CLIP_INTERVAL clip in jpegs.py. Factories, not
+# instances: norms cache limits, so each figure needs a fresh one.
+# 1600/1700: with the default treatment the disk saturates near-white and the
+# CCD bleed glows around it. The disk covers just under half the frame, so a
+# floor at the 50th percentile blacks out sky and bleed, and the linear
+# stretch spreads the plage network over the range instead of piling it at
+# white. Limits still autoscale per frame.
+AIA_SINGLE_NORMS = {
+    "1600": partial(ImageNormalize, interval=AsymmetricPercentileInterval(50, 99.99), stretch=LinearStretch()),
+    "1700": partial(ImageNormalize, interval=AsymmetricPercentileInterval(50, 99.99), stretch=LinearStretch()),
 }
+# The extra full-resolution-only 193 product (f0193i.jpg) with the previous
+# IDL pipeline's absolute scaling, in degradation-corrected DN/s:
+#   bytscl(alog10(image*(2.9995/exptime) > (120d/2.2) < (6000d/2.2)))
+# clip=True matches IDL's bytscl of a hard-clipped image.
+AIA_193_IDL_NORM = partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True)
 AIA_COLORS = {
     "131": "blue",
     "1600": "green",
@@ -49,11 +57,17 @@ AIA_COLORS = {
     "94": "darkgreen",
 }
 AIA_WAVELENGTHS = list(AIA_COLORS.keys())
-# Channels saved as planning FITS only, no JPEGs. Taken roughly hourly, so
-# they are usually absent from the query window and never required.
+# Channels saved as planning FITS only, no JPEGs.
 AIA_FITS_ONLY_WAVELENGTHS = ["4500"]
-RGB_COMBINATIONS = [
-    ("211", "193", "171"),
-    ("304", "211", "171"),
-    ("94", "335", "193"),
-]
+# Recipe per RGB composite, keyed by the (R, G, B) wavelength combo:
+# (per-channel interval multipliers, stretch). Each channel is clipped to
+# [0, multiplier * shared max] before the stretch; the shared max is the
+# largest RGB_MAX_PERCENTILE'th percentile over the three channels.
+# Multipliers tuned by eye. Stretches are stateless and safe to share.
+RGB_MAX_PERCENTILE = 99
+RGB_RECIPES = {
+    ("211", "193", "171"): ((0.3, 0.9, 0.8), AsinhStretch(0.04)),
+    ("304", "211", "171"): ((1.0, 1.0, 1.0), AsinhStretch(0.04)),
+    ("94", "335", "193"): ((0.04, 0.15, 1.5), LogStretch(100)),
+}
+RGB_COMBINATIONS = list(RGB_RECIPES)
