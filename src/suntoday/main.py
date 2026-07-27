@@ -229,6 +229,10 @@ def _run_job(
         if settings.s3_bucket and created_files:
             logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
             sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
+            # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
+            # for the latest images. Keys are bare filenames (root is the dated
+            # directory), so each run overwrites the previous set.
+            sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
         # Records only after a successful upload: marking success first would
         # make the next run skip regeneration and leave S3 partially updated.
         for image_type in created_by_type:
