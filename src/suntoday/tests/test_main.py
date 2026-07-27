@@ -107,7 +107,10 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
     requested_time = datetime(2026, 7, 13, tzinfo=UTC)
     main_job(requested_time, tmp_path)
 
-    upload.assert_called_once_with([created_file], "my-bucket", tmp_path.resolve())
+    assert upload.mock_calls == [
+        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
+        mocker.call([created_file], "my-bucket/mostrecent", tmp_path.resolve() / "2026" / "07" / "13"),
+    ]
     # Only the type that created files gets a record, and only after upload.
     record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
 
