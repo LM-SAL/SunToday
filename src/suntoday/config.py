@@ -54,8 +54,9 @@ class Settings(BaseSettings):
     stale_alert_hours: float = 6
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
+    # 4:5 matches the legacy 1024x1280 plot, so the page layout is unchanged.
     timeseries_fig_x_size: float = 1200 / fig_dpi  # pixels / dpi = inches
-    timeseries_fig_y_size: float = 2400 / fig_dpi  # pixels / dpi = inches
+    timeseries_fig_y_size: float = 1500 / fig_dpi  # pixels / dpi = inches
 
     @model_validator(mode="after")
     def _build_db_url(self) -> "Settings":
