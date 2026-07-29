@@ -33,10 +33,10 @@ LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "
 BAD_QUALITY_BITS = 0x37FC00
 
 # Font sizes (points) for all text in the lightcurve figure.
-LABEL_FONTSIZE = 8
-TICK_FONTSIZE = 8
-Y_TICK_FONTSIZE = 6
-LEGEND_FONTSIZE = 6
+LABEL_FONTSIZE = 4
+TICK_FONTSIZE = 4
+Y_TICK_FONTSIZE = 3
+LEGEND_FONTSIZE = 3
 
 
 def _format_aia_timeseries(timeseries: pd.DataFrame) -> str:
@@ -92,11 +92,11 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
             values,
             color=AIA_COLORS[wavelength],
             label=f"AIA-{wavelength}" + r"$\AA$",
-            linewidth=2,
+            linewidth=1,
         )
         ax.xaxis.set_major_formatter(ticker.FuncFormatter(_hour_minute_with_date_at_midnight))
-        ax.tick_params(which="major", direction="in", size=8, labelsize=TICK_FONTSIZE)
-        ax.tick_params(which="minor", direction="in", size=3, labelsize=TICK_FONTSIZE)
+        ax.tick_params(which="major", direction="in", size=4, labelsize=TICK_FONTSIZE)
+        ax.tick_params(which="minor", direction="in", size=2, labelsize=TICK_FONTSIZE)
         ax.tick_params(axis="y", labelsize=Y_TICK_FONTSIZE)
         ax.xaxis.grid(visible=True, which="major", color="black")
         ax.legend(frameon=True, framealpha=1, loc="best", fontsize=LEGEND_FONTSIZE)
@@ -120,21 +120,21 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
         grouped_energy.get_group("0.1-0.8nm")["flux"],
         color="red",
         label=f"GOES-{sat_number} 1.0-8.0" + r"$\AA$",
-        linewidth=2,
+        linewidth=1,
     )
     ax.plot(
         grouped_energy.get_group("0.05-0.4nm")["flux"],
         color="blue",
         label=f"GOES-{sat_number} 0.5-4.0" + r"$\AA$",
-        linewidth=2,
+        linewidth=1,
     )
     ax.set_ylabel(r"Flux (Watts $\cdot$ m$^{-2}$)", size=LABEL_FONTSIZE)
     ax.set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
     ax.set_yscale("log")
     ax.set_ylim([10**-9, 10**-2])
     ax.set_yticks([10**-8, 10**-7, 10**-6, 10**-5, 10**-4, 10**-3])
-    ax.tick_params(which="major", direction="in", size=8, labelsize=TICK_FONTSIZE)
-    ax.tick_params(which="minor", direction="in", size=3, labelsize=TICK_FONTSIZE)
+    ax.tick_params(which="major", direction="in", size=4, labelsize=TICK_FONTSIZE)
+    ax.tick_params(which="minor", direction="in", size=2, labelsize=TICK_FONTSIZE)
     ax.tick_params(axis="y", labelsize=Y_TICK_FONTSIZE)
     ax.yaxis.set_minor_locator(ticker.LogLocator(numticks=999, subs="auto"))
     ax_rhs = ax.twinx()
@@ -146,7 +146,7 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
     for band in [3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4]:
         ax_rhs.axhline(band, color="grey", ls="-", lw=0.4)
     ax_rhs.set_yticklabels(["A", "B", "C", "M", "X"], fontsize=Y_TICK_FONTSIZE)
-    ax_rhs.tick_params(which="major", direction="in", size=8, labelsize=Y_TICK_FONTSIZE)
+    ax_rhs.tick_params(which="major", direction="in", size=4, labelsize=Y_TICK_FONTSIZE)
     ax_rhs.tick_params(which="minor", direction="in", size=0, labelright=False, labelleft=False)
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(_hour_minute_with_date_at_midnight))
     ax.xaxis.grid(visible=True, which="major", color="black")
@@ -181,12 +181,16 @@ def plot_lightcurve_from_timeseries(
         dpi=settings.fig_dpi,
     )
     add_goes_lightcurve(axes[0], goes_timeseries)
-    for axis, wavelength in zip(axes[1:], LIGHTCURVE_WAVELENGTH_ORDER, strict=True):
+    aia_axes = axes[1:]
+    for axis, wavelength in zip(aia_axes, LIGHTCURVE_WAVELENGTH_ORDER, strict=True):
         add_aia_lightcurve(axis, aia_timeseries, [wavelength])
+    for axis in aia_axes:
+        axis.set_ylabel("")
+    aia_axes[len(aia_axes) // 2].set_ylabel(r"Data Mean (DN)", size=LABEL_FONTSIZE)
     # GOES sits on top, so the bottom (AIA) axis carries the time label.
     axes[0].set_xlabel("")
     axes[-1].set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
-    fig.tight_layout()
+    fig.tight_layout(h_pad=0)
     return fig
 
 

@@ -97,6 +97,15 @@ def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries
     return plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
 
 
+def test_plot_lightcurve_has_one_aia_y_label(aia_timeseries, goes_primary_timeseries) -> None:
+    fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
+    aia_axes = fig.axes[1:-1]
+    assert [axis.get_ylabel() for axis in aia_axes].count(r"Data Mean (DN)") == 1
+    assert aia_axes[len(aia_axes) // 2].get_ylabel() == r"Data Mean (DN)"
+    assert all(axis.get_legend() is not None for axis in aia_axes)
+    plt.close(fig)
+
+
 @mpl_svg_compare
 def test_plot_lightcurve_from_timeseries_real(real_aia_timeseries, real_goes_primary_timeseries):
     # Real flare morphology, so styling changes can be judged on data that
