@@ -10,8 +10,7 @@ from suntoday.downloaders.goes import fetch_goes_timeseries
 
 
 aia_timeseries = fetch_aia_timeseries(datetime.now(UTC))
-goes_primary_timeseries, goes_secondary_timeseries = fetch_goes_timeseries()
+goes_primary_timeseries = fetch_goes_timeseries(datetime.now(UTC))
 
 aia_timeseries.to_csv(Path(__file__).parent.parent / "src/suntoday/data/test/aia_timeseries.csv",na_rep='NULL')
 goes_primary_timeseries.to_csv(Path(__file__).parent.parent / "src/suntoday/data/test/goes_primary_timeseries.csv", na_rep='NULL')
-goes_secondary_timeseries.to_csv(Path(__file__).parent.parent / "src/suntoday/data/test/goes_secondary_timeseries.csv", na_rep='NULL')

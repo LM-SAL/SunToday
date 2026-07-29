@@ -1,19 +1,29 @@
 """
-Provides a GOES NRT downloader for the 1 day JSON files.
+Provides GOES XRS downloaders: the SWPC NRT JSON for recent times and the NOAA
+NCEI science archive for historical backfills.
 """
 
 import time
+from datetime import UTC, datetime, timedelta
 
 import pandas as pd
 import requests
 
 __all__ = ["fetch_goes_timeseries"]
 
-GOES_PRIMARY_URL = "https://services.swpc.noaa.gov/json/goes/primary/xrays-1-day.json"
-GOES_SECONDARY_URL = "https://services.swpc.noaa.gov/json/goes/secondary/xrays-1-day.json"
+GOES_NRT_URL = "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json"
 GOES_RETRIES = 2
 GOES_TIMEOUT = 60
 GOES_RETRY_DELAY = 5
+# Satellite used for archive fetches, by the date its XRS science data starts
+# being the sensible choice, newest first. GOES-19 replaced GOES-16 as the
+# SWPC primary on 2025-04-04; GOES-16 science data starts 2017-02-07.
+GOES_ARCHIVE_SATELLITES = [
+    (datetime(2025, 4, 4, tzinfo=UTC), 19),
+    (datetime(2017, 2, 7, tzinfo=UTC), 16),
+]
+# sunpy XRS timeseries column -> energy band label used by the SWPC JSON.
+GOES_ENERGY_BANDS = {"xrsa": "0.05-0.4nm", "xrsb": "0.1-0.8nm"}
 
 
 def _reformat_goes_df(goes_df: pd.DataFrame) -> pd.DataFrame:
@@ -46,17 +56,72 @@ def _read_goes_json(url: str) -> pd.DataFrame:
     raise RuntimeError(msg) from last_error
 
 
-def fetch_goes_timeseries() -> tuple[pd.DataFrame, pd.DataFrame]:
+def _archive_satellite(end_time: datetime) -> int:
+    for start_date, satellite in GOES_ARCHIVE_SATELLITES:
+        if end_time >= start_date:
+            return satellite
+    msg = f"No GOES archive satellite configured for {end_time}; extend GOES_ARCHIVE_SATELLITES."
+    raise ValueError(msg)
+
+
+def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> pd.DataFrame:
     """
-    Fetches the GOES XRS JSON data for the previous 24 hours.
+    Fetch science-quality 1-min GOES XRS data from the NOAA NCEI archive.
+    """
+    from sunpy.net import Fido
+    from sunpy.net import attrs as a
+    from sunpy.timeseries import TimeSeries
+
+    satellite = _archive_satellite(end_time)
+    results = Fido.search(
+        a.Time(start_time, end_time),
+        a.Instrument("XRS"),
+        a.Resolution("avg1m"),
+        a.goes.SatelliteNumber(satellite),
+    )
+    files = Fido.fetch(results)
+    if not files:
+        msg = f"No GOES-{satellite} XRS archive data found between {start_time} and {end_time}"
+        raise RuntimeError(msg)
+    data = TimeSeries(files, concatenate=True).to_dataframe()
+    data.index = data.index.tz_localize("UTC")
+    goes_df = pd.concat(
+        pd.DataFrame({"satellite": satellite, "flux": data[column], "energy": energy})
+        for column, energy in GOES_ENERGY_BANDS.items()
+    )
+    # Drops NaN and the negative fill values the science files use for bad points.
+    goes_df = goes_df[goes_df["flux"] > 0]
+    return goes_df.astype({"satellite": int, "flux": float, "energy": str})
+
+
+def fetch_goes_timeseries(end_time: datetime) -> pd.DataFrame:
+    """
+    Fetches the GOES XRS data for the 24 hours before ``end_time``.
+
+    Windows the SWPC 7-day NRT JSON when it covers the requested time,
+    otherwise falls back to the NOAA NCEI science archive via `sunpy`.
+
+    Parameters
+    ----------
+    end_time : datetime.datetime
+        End of the 24 hour window (timezone aware).
 
     Returns
     -------
-    pandas.DataFrame, pandas.DataFrame
-        GOES XRS data for the previous 24 hours for the primary and secondary satellites.
+    pandas.DataFrame
+        GOES XRS data for the 24 hours before ``end_time``.
+
+    Raises
+    ------
+    ValueError
+        If ``end_time`` is timezone-naive.
     """
-    goes_primary = _read_goes_json(GOES_PRIMARY_URL)
-    goes_secondary = _read_goes_json(GOES_SECONDARY_URL)
-    goes_primary = _reformat_goes_df(goes_primary)
-    goes_secondary = _reformat_goes_df(goes_secondary)
-    return goes_primary, goes_secondary
+    if end_time.tzinfo is None:
+        msg = "end_time must be timezone-aware"
+        raise ValueError(msg)
+    start_time = end_time - timedelta(days=1)
+    if start_time >= datetime.now(UTC) - timedelta(days=7):
+        goes_df = _reformat_goes_df(_read_goes_json(GOES_NRT_URL))
+    else:
+        goes_df = _fetch_archive_goes_timeseries(start_time, end_time)
+    return goes_df[(goes_df.index > pd.Timestamp(start_time)) & (goes_df.index <= pd.Timestamp(end_time))]

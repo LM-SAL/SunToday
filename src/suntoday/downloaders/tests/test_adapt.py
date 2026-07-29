@@ -3,6 +3,7 @@ from datetime import UTC, datetime, timedelta
 import pytest
 from astropy.time import Time
 
+from suntoday import DataNotReadyError
 from suntoday.conftest import latest_or_skip
 from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
@@ -48,5 +49,5 @@ def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:
 
 def test_nearest_adapt_row_raises_when_empty(mocker) -> None:
     mocker.patch.object(adapt.Fido, "search", return_value=[])
-    with pytest.raises(ValueError, match="No ADAPT map found"):
+    with pytest.raises(DataNotReadyError, match="No ADAPT map found"):
         adapt._nearest_adapt_row(datetime(2026, 7, 20, 11, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]

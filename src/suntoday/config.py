@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"
     sdo_fig_name_thumb: str = "t{}.jpg"
+    # Sentry pages when the newest record of any image type is older than
+    # this; transient JSOC/ADAPT lag below it stays a per-run warning.
+    stale_alert_hours: float = 6
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
     timeseries_fig_x_size: float = 1536 / fig_dpi  # pixels / dpi = inches

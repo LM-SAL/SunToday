@@ -7,6 +7,7 @@ from pytest_postgresql.janitor import DatabaseJanitor
 from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
 
+from suntoday import DataNotReadyError
 from suntoday.data.test import find_test_filepath, get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
@@ -28,7 +29,7 @@ def latest_or_skip(find_latest):
     """
     try:
         return find_latest()
-    except ValueError as exc:
+    except (DataNotReadyError, ValueError) as exc:
         pytest.skip(f"Upstream has no data: {exc}")
 
 

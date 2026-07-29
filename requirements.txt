@@ -20,4 +20,4 @@ sqlalchemy-utils==0.42.1
 sqlalchemy==2.0.51
 sunkit-magex==1.1.0
 # Sunpy 8.0.0 has a bug with the SpericalScreen and mutiple threads
-sunpy[map]==7.1.2
+sunpy[map,timeseries]==7.1.2

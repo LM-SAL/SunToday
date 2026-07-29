@@ -1,3 +1,4 @@
+from datetime import UTC, datetime, timedelta
 from unittest.mock import Mock, call
 
 import pandas as pd
@@ -5,6 +6,30 @@ import pytest
 import requests
 
 from suntoday.downloaders import goes
+
+
+def _raw_json_frame(times: pd.DatetimeIndex) -> pd.DataFrame:
+    return pd.DataFrame({
+        "time_tag": times.strftime("%Y-%m-%dT%H:%M:%SZ"),
+        "satellite": 19,
+        "flux": 1e-6,
+        "observed_flux": 1e-6,
+        "electron_correction": 0.0,
+        "electron_contaminaton": False,
+        "energy": "0.1-0.8nm",
+    })
+
+
+def _assert_goes_frame(goes_df: pd.DataFrame, end_time: datetime) -> None:
+    assert isinstance(goes_df, pd.DataFrame)
+    assert len(goes_df) > 0
+    assert sorted(goes_df.columns.tolist()) == sorted(["satellite", "flux", "energy"])
+    assert goes_df["satellite"].unique()[0] in {16, 17, 18, 19}
+    assert goes_df["flux"].dtype == "float64"
+    assert str(goes_df["energy"].dtype) == "str"
+    assert sorted(goes_df["energy"].unique().tolist()) == sorted(["0.05-0.4nm", "0.1-0.8nm"])
+    assert goes_df.index.min() > pd.Timestamp(end_time - timedelta(days=1))
+    assert goes_df.index.max() <= pd.Timestamp(end_time)
 
 
 def test_read_goes_json_retries_after_timeout(monkeypatch) -> None:
@@ -32,18 +57,70 @@ def test_read_goes_json_raises_after_all_retries(monkeypatch) -> None:
     assert sleep.call_args_list == [call(goes.GOES_RETRY_DELAY)] * goes.GOES_RETRIES
 
 
-@pytest.mark.remote_data
-def test_fetch_goes_timeseries() -> None:
-    goes_16, goes_18 = goes.fetch_goes_timeseries()
-    for dataframe in [goes_16, goes_18]:
-        assert isinstance(dataframe, pd.DataFrame)
-        assert str(dataframe.index.dtype) == "datetime64[us, UTC]"
-        assert len(dataframe) > 0
-        assert len(dataframe.columns) == 3
-        assert sorted(dataframe.columns.tolist()) == sorted(
-            ["satellite", "flux", "energy"],
+def test_fetch_goes_timeseries_windows_nrt_for_recent_times(monkeypatch) -> None:
+    end_time = datetime.now(UTC)
+    times = pd.date_range(end_time - timedelta(days=7), end_time, freq="h", tz="UTC")
+    monkeypatch.setattr(goes, "_read_goes_json", lambda _url: _raw_json_frame(times))
+    monkeypatch.setattr(
+        goes, "_fetch_archive_goes_timeseries", Mock(side_effect=AssertionError("archive used for recent time"))
+    )
+
+    goes_df = goes.fetch_goes_timeseries(end_time)
+    # Only the 24 hourly points inside (end_time - 1 day, end_time] survive.
+    assert len(goes_df) == 24
+    assert goes_df.index.min() > pd.Timestamp(end_time - timedelta(days=1))
+    assert goes_df.index.max() <= pd.Timestamp(end_time)
+
+
+def test_fetch_goes_timeseries_uses_archive_for_old_times(monkeypatch) -> None:
+    end_time = datetime(2022, 3, 31, tzinfo=UTC)
+    times = pd.date_range(end_time - timedelta(days=1), end_time, freq="h", tz="UTC", inclusive="right")
+    archive_frame = pd.DataFrame({"satellite": 16, "flux": 1e-6, "energy": "0.1-0.8nm"}, index=times)
+    archive = Mock(return_value=archive_frame)
+    monkeypatch.setattr(goes, "_fetch_archive_goes_timeseries", archive)
+    monkeypatch.setattr(goes, "_read_goes_json", Mock(side_effect=AssertionError("NRT JSON used for old time")))
+
+    goes_df = goes.fetch_goes_timeseries(end_time)
+    assert archive.call_args == call(end_time - timedelta(days=1), end_time)
+    assert len(goes_df) == 24
+
+
+def test_fetch_goes_timeseries_rejects_naive_end_time() -> None:
+    with pytest.raises(ValueError, match="end_time must be timezone-aware"):
+        goes.fetch_goes_timeseries(datetime(2022, 3, 31))  # ruff:ignore[call-datetime-without-tzinfo]
+
+
+def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None:
+    import sunpy.net
+
+    fido = Mock()
+    fido.search.return_value = Mock()
+    fido.fetch.return_value = []
+    monkeypatch.setattr(sunpy.net, "Fido", fido)
+
+    with pytest.raises(RuntimeError, match="No GOES-16 XRS archive data found"):
+        goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
+            datetime(2022, 3, 30, tzinfo=UTC), datetime(2022, 3, 31, tzinfo=UTC)
         )
-        assert dataframe["satellite"].unique()[0] in {16, 18, 17, 19}
-        assert dataframe["flux"].dtype == "float64"
-        assert str(dataframe["energy"].dtype) == "str"
-        assert sorted(dataframe["energy"].unique().tolist()) == sorted(["0.05-0.4nm", "0.1-0.8nm"])
+    fido.fetch.assert_called_once_with(fido.search.return_value)
+
+
+def test_archive_satellite_selection() -> None:
+    assert goes._archive_satellite(datetime(2022, 3, 31, tzinfo=UTC)) == 16  # ruff:ignore[private-member-access]
+    assert goes._archive_satellite(datetime(2025, 6, 1, tzinfo=UTC)) == 19  # ruff:ignore[private-member-access]
+    with pytest.raises(ValueError, match="No GOES archive satellite"):
+        goes._archive_satellite(datetime(2016, 1, 1, tzinfo=UTC))  # ruff:ignore[private-member-access]
+
+
+@pytest.mark.remote_data
+def test_fetch_goes_timeseries_nrt() -> None:
+    end_time = datetime.now(UTC)
+    _assert_goes_frame(goes.fetch_goes_timeseries(end_time), end_time)
+
+
+@pytest.mark.remote_data
+def test_fetch_goes_timeseries_archive() -> None:
+    end_time = datetime(2022, 3, 31, tzinfo=UTC)
+    goes_df = goes.fetch_goes_timeseries(end_time)
+    _assert_goes_frame(goes_df, end_time)
+    assert goes_df["satellite"].unique()[0] == 16

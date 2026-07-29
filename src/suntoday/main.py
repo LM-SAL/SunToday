@@ -8,6 +8,7 @@ as the scheduled jobs for creating JPEG images and timeseries data.
 import argparse
 import datetime
 import functools
+import multiprocessing
 import os
 import tempfile
 import time
@@ -19,7 +20,7 @@ from sentry_sdk.integrations.serverless import serverless_function
 from sqlalchemy.orm import Session, sessionmaker
 from sunpy.time import parse_time
 
-from suntoday import logger
+from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.db import create_db, get_latest_record, get_record, write_or_update_record
 from suntoday.downloaders.adapt import find_nearest_adapt_time
@@ -34,36 +35,83 @@ if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     )
 
 
-def catch_exceptions(*, cancel_on_failure=False):
+def _job_entrypoint(job_func) -> None:
     """
-    Stolen from https://github.com/schedule/schedule
+    Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
+    instead of crashing, so it never reaches Sentry; the staleness alert pages
+    if the lag persists.
 
-    Parameters
-    ----------
-    cancel_on_failure : bool, optional
-        If True, the job will be canceled on failure, by default False
-
-    Returns
-    -------
-    function
-        A decorator that wraps the job function to catch exceptions.
+    Raises
+    ------
+    SystemExit
+        With ``os.EX_TEMPFAIL`` when the upstream data is not ready.
     """
+    try:
+        job_func()
+    except DataNotReadyError as e:
+        logger.warning(f"Job {job_func.__name__} skipped, data not ready: {e}")
+        raise SystemExit(os.EX_TEMPFAIL) from None
 
-    def catch_exceptions_decorator(job_func):
-        @functools.wraps(job_func)
-        def wrapper(*args, **kwargs):
-            try:
-                return job_func(*args, **kwargs)
-            # Blanket catch by design: a failing scheduled job must be logged
-            # and swallowed, never kill the scheduler loop.
-            except Exception as e:  # ruff:ignore[blind-except]
-                logger.exception(f"Error occurred in job {job_func.__name__}: {e}")
-                if cancel_on_failure:
-                    return schedule.CancelJob
 
-        return wrapper
+def _run_job_in_subprocess(job_func) -> None:
+    """
+    Run a scheduled job in a fresh spawned process.
 
-    return catch_exceptions_decorator
+    CPython does not return freed heap to the OS, so running the heavy
+    jobs in the scheduler process ratchets its RSS up to the job peak
+    forever; a child process hands the memory back when it exits. A
+    dying job (OOM kill, segfault) also cannot take the scheduler loop
+    down.
+    """
+    try:
+        process = multiprocessing.get_context("spawn").Process(
+            target=_job_entrypoint, args=(job_func,), name=job_func.__name__
+        )
+        process.start()
+        process.join()
+    # Blanket catch by design: a failing scheduled job must be logged
+    # and swallowed, never kill the scheduler loop.
+    except Exception as e:  # ruff:ignore[blind-except]
+        logger.exception(f"Error occurred running job {job_func.__name__}: {e}")
+        return
+    if process.exitcode == os.EX_TEMPFAIL:
+        logger.warning(f"Job {job_func.__name__} skipped: data not ready")
+    elif process.exitcode != 0:
+        logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}")
+    _alert_if_stale()
+
+
+def _alert_if_stale() -> None:
+    """
+    Page once per incident when the newest data is older than the threshold.
+
+    Per-run "no data yet" skips stay silent because transient JSOC/ADAPT
+    lag self-heals; data that stops updating for any reason eventually
+    breaches the threshold and alerts, so nothing has to distinguish
+    "slow" from "broken" at run time.
+    """
+    settings = Settings()
+    engine = create_db()
+    session = sessionmaker(bind=engine)()
+    try:
+        for image_type in ("images", "timeseries", "pfss"):
+            record = get_latest_record(session, image_type)
+            updated_at = record.updated_at if record is not None else None
+            if updated_at is not None and updated_at.tzinfo is None:
+                updated_at = updated_at.replace(tzinfo=datetime.UTC)
+            if updated_at is not None:
+                age = datetime.datetime.now(datetime.UTC) - updated_at
+                if age <= datetime.timedelta(hours=settings.stale_alert_hours):
+                    continue
+                logger.error(f"Stale data: newest {image_type} record is {age.total_seconds() / 3600:.1f}h old")
+            else:
+                logger.error(f"Stale data: no {image_type} record exists")
+            # Static message so Sentry groups every occurrence into one issue
+            # and alerts once per incident, not once per run.
+            sentry_sdk.capture_message(f"SunToday {image_type} data is stale", level="error")
+    finally:
+        session.close()
+        engine.dispose()
 
 
 def _build_args() -> argparse.ArgumentParser:
@@ -99,6 +147,12 @@ def cli() -> None:
     """
     Parse the CLI arguments: run a one-off main job when ``--date`` is given
     (plus the PFSS job with ``--pfss``), otherwise start the scheduler.
+
+    Raises
+    ------
+    SystemExit
+        With ``os.EX_TEMPFAIL`` when the archives have no data for the
+        requested time.
     """
     parser = _build_args()
     args = parser.parse_args()
@@ -124,19 +178,25 @@ def cli() -> None:
     # AIA/HMI FITS files the main job already fetched for the same time.
     with tempfile.TemporaryDirectory() as shared_downloads:
         download_directory = Path(shared_downloads)
-        main_job(
-            requested_time=requested_time,
-            root_save_directory=root_save_directory,
-            force=args.force,
-            download_directory=download_directory,
-        )
-        if args.pfss:
-            pfss_job(
+        try:
+            main_job(
                 requested_time=requested_time,
                 root_save_directory=root_save_directory,
                 force=args.force,
                 download_directory=download_directory,
             )
+            if args.pfss:
+                pfss_job(
+                    requested_time=requested_time,
+                    root_save_directory=root_save_directory,
+                    force=args.force,
+                    download_directory=download_directory,
+                )
+        # A one-off backfill of a time the archives have no data for is not
+        # a bug worth a Sentry event; report it on the exit code instead.
+        except DataNotReadyError as e:
+            logger.error(f"Data not ready: {e}")
+            raise SystemExit(os.EX_TEMPFAIL) from None
     return
 
 
@@ -391,8 +451,8 @@ def scheduled() -> None:
     Main function to start the scheduled job.
     """
     settings = Settings()
-    scheduled_job = catch_exceptions(cancel_on_failure=False)(main_job)
-    scheduled_pfss = catch_exceptions(cancel_on_failure=False)(pfss_job)
+    scheduled_job = functools.partial(_run_job_in_subprocess, main_job)
+    scheduled_pfss = functools.partial(_run_job_in_subprocess, pfss_job)
     logger.info(f"Starting main job with cron frequency: {settings.cron_frequency} minutes")
     schedule.every(settings.cron_frequency).minutes.do(scheduled_job)
     schedule.every(settings.cron_frequency).minutes.do(scheduled_pfss)
