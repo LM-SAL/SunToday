@@ -15,7 +15,7 @@ import requests
 from parfive import Results
 from requests.auth import HTTPBasicAuth
 
-from suntoday import logger
+from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.adapt import find_latest_adapt_time
@@ -86,6 +86,8 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
     ------
     OSError
         If the network connection fails to the JSOC.
+    suntoday.DataNotReadyError
+        If the JSOC has no records for the requested time yet.
     ValueError
         If the JSOC response has missing required keys.
     """
@@ -103,6 +105,11 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
         raise OSError(msg)
     json_response = response.json()
     if not {"keywords", "segments"}.issubset(set(json_response.keys())):
+        # A clean zero-count response means the JSOC has not exported the
+        # requested time yet; anything else is a malformed response.
+        if json_response.get("status") == 0 and json_response.get("count") == 0:
+            msg = f"JSOC has no records yet for {query!r}."
+            raise DataNotReadyError(msg)
         msg = f"JSOC request for {query!r} returned with no data but with {json_response}."
         raise ValueError(msg)
     return json_response

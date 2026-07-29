@@ -14,6 +14,8 @@ from sunpy.net import Fido
 from sunpy.net import attrs as a
 from sunpy.net.base_client import QueryResponseRow
 
+from suntoday import DataNotReadyError
+
 __all__ = ["fetch_adapt_fits", "find_latest_adapt_time", "find_nearest_adapt_time"]
 
 _ADAPT_QUERY = (
@@ -34,13 +36,13 @@ def _adapt_rows(start: datetime, end: datetime):
 
     Raises
     ------
-    ValueError
+    suntoday.DataNotReadyError
         If no map is found in the range.
     """
     result = Fido.search(a.Time(start, end), *_ADAPT_QUERY)
     if len(result) == 0 or len(result[0]) == 0:
         msg = f"No ADAPT map found between {start!r} and {end!r}."
-        raise ValueError(msg)
+        raise DataNotReadyError(msg)
     return result[0]
 
 

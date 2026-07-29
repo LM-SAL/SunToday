@@ -3,8 +3,9 @@ from datetime import UTC, datetime, timedelta
 import pytest
 import sentry_sdk
 
+from suntoday import DataNotReadyError, logger
 from suntoday.db import PFSSImages, SDOImages, TimeSeriesImages, write_or_update_record
-from suntoday.main import cli, create_images, main_job, pfss_job
+from suntoday.main import _alert_if_stale, _run_job_in_subprocess, cli, create_images, main_job, pfss_job
 
 
 def test_sentry_disabled_during_tests() -> None:
@@ -115,6 +116,54 @@ def test_cli_force_requires_date(mocker, capsys) -> None:
     # parser.error exits with the message on stderr, not in the exception.
     assert "--force requires --date" in capsys.readouterr().err
     scheduled_mock.assert_not_called()
+
+
+def _child_job_ok() -> None:
+    pass
+
+
+def _child_job_fails() -> None:
+    raise SystemExit(3)
+
+
+def _child_job_not_ready() -> None:
+    msg = "JSOC still exporting"
+    raise DataNotReadyError(msg)
+
+
+def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
+    mocker.patch("suntoday.main._alert_if_stale")
+    messages = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        # A dying child must not raise in the scheduler process, only log.
+        _run_job_in_subprocess(_child_job_fails)
+        _run_job_in_subprocess(_child_job_ok)
+        # Data-not-ready is a warning-level skip, never an error.
+        _run_job_in_subprocess(_child_job_not_ready)
+    finally:
+        logger.remove(sink_id)
+    assert any("_child_job_fails exited with code 3" in message for message in messages)
+    assert not any("_child_job_ok" in message for message in messages)
+    assert any("_child_job_not_ready skipped: data not ready" in message for message in messages)
+    assert not any("_child_job_not_ready exited" in message for message in messages)
+
+
+def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
+    mocker.patch("suntoday.main.create_db")
+    mocker.patch("suntoday.main.sessionmaker")
+    fresh = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=1))
+    stale = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=7))
+    # images fresh, timeseries stale, pfss has no record at all.
+    mocker.patch("suntoday.main.get_latest_record", side_effect=[fresh, stale, None])
+    capture = mocker.patch("suntoday.main.sentry_sdk.capture_message")
+
+    _alert_if_stale()
+
+    assert capture.call_args_list == [
+        mocker.call("SunToday timeseries data is stale", level="error"),
+        mocker.call("SunToday pfss data is stale", level="error"),
+    ]
 
 
 def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mocker) -> None:
