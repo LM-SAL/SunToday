@@ -108,6 +108,12 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         _style_lightcurve_axis(ax)
         ax.legend(frameon=True, framealpha=1, loc="best", fontsize=LEGEND_FONTSIZE)
         ax.set_ylabel(r"Data Mean (DN)", size=LABEL_FONTSIZE)
+    # The per-channel ranges are narrow, so a full tick ladder is noise;
+    # min/max-only ticks show the range directly (matching the legacy plot).
+    plotted = [line.get_ydata() for line in ax.lines if len(line.get_ydata())]
+    if plotted:
+        ax.set_yticks([min(data.min() for data in plotted), max(data.max() for data in plotted)])
+        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda value, _pos: f"{value:.4g}"))
 
 
 def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
