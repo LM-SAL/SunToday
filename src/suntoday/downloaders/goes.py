@@ -110,7 +110,15 @@ def fetch_goes_timeseries(end_time: datetime) -> pd.DataFrame:
     -------
     pandas.DataFrame
         GOES XRS data for the 24 hours before ``end_time``.
+
+    Raises
+    ------
+    ValueError
+        If ``end_time`` is timezone-naive.
     """
+    if end_time.tzinfo is None:
+        msg = "end_time must be timezone-aware"
+        raise ValueError(msg)
     start_time = end_time - timedelta(days=1)
     if start_time >= datetime.now(UTC) - timedelta(days=7):
         goes_df = _reformat_goes_df(_read_goes_json(GOES_NRT_URL))

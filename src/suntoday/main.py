@@ -37,9 +37,9 @@ if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
 
 def _job_entrypoint(job_func) -> None:
     """
-    Child-process wrapper: normal processing lag exits with
-    ``EX_TEMPFAIL`` instead of crashing, so it never reaches Sentry; the
-    staleness alert pages if the lag persists.
+    Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
+    instead of crashing, so it never reaches Sentry; the staleness alert pages
+    if the lag persists.
 
     Raises
     ------
@@ -83,8 +83,7 @@ def _run_job_in_subprocess(job_func) -> None:
 
 def _alert_if_stale() -> None:
     """
-    Page once per incident when the newest data is older than the
-    threshold.
+    Page once per incident when the newest data is older than the threshold.
 
     Per-run "no data yet" skips stay silent because transient JSOC/ADAPT
     lag self-heals; data that stops updating for any reason eventually

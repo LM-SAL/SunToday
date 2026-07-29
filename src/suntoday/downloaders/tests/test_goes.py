@@ -85,6 +85,26 @@ def test_fetch_goes_timeseries_uses_archive_for_old_times(monkeypatch) -> None:
     assert len(goes_df) == 24
 
 
+def test_fetch_goes_timeseries_rejects_naive_end_time() -> None:
+    with pytest.raises(ValueError, match="end_time must be timezone-aware"):
+        goes.fetch_goes_timeseries(datetime(2022, 3, 31))  # ruff:ignore[call-datetime-without-tzinfo]
+
+
+def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None:
+    import sunpy.net
+
+    fido = Mock()
+    fido.search.return_value = Mock()
+    fido.fetch.return_value = []
+    monkeypatch.setattr(sunpy.net, "Fido", fido)
+
+    with pytest.raises(RuntimeError, match="No GOES-16 XRS archive data found"):
+        goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
+            datetime(2022, 3, 30, tzinfo=UTC), datetime(2022, 3, 31, tzinfo=UTC)
+        )
+    fido.fetch.assert_called_once_with(fido.search.return_value)
+
+
 def test_archive_satellite_selection() -> None:
     assert goes._archive_satellite(datetime(2022, 3, 31, tzinfo=UTC)) == 16  # ruff:ignore[private-member-access]
     assert goes._archive_satellite(datetime(2025, 6, 1, tzinfo=UTC)) == 19  # ruff:ignore[private-member-access]
