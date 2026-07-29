@@ -352,7 +352,10 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     aia_timeseries = pd.DataFrame.from_dict(keywords)
     aia_timeseries = aia_timeseries.set_index("DATE-OBS")
     aia_timeseries.index = pd.to_datetime(aia_timeseries.index, format="mixed")
-    return aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
+    aia_timeseries = aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
+    # The series interleaves hourly 4500 A planning frames; they are never
+    # plotted and only pollute the saved txt with ~2500 DN spikes.
+    return aia_timeseries[aia_timeseries["WAVELNTH"].isin(AIA_WAVELENGTHS)]
 
 
 def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_directory: Path) -> Results:

@@ -58,6 +58,26 @@ def test_add_aia_lightcurve_drops_bad_quality_frames() -> None:
     plt.close(fig)
 
 
+def test_add_aia_lightcurve_drops_calibration_frames() -> None:
+    # Middle frame is a calibration-sequence frame (bit 18) with a 5 ms
+    # exposure; exposure-normalized it would be a ~1e6 DN/s spike.
+    timeseries = pd.DataFrame(
+        {
+            "WAVELNTH": ["211"] * 5,
+            "DATAMEAN": [114.0, 115.0, 11170.0, 113.0, 114.0],
+            "QUALITY": ["0x40000000", "0x40000000", "0x40040000", "0x40000000", "0x40000000"],
+            "EXPTIME": [2.9, 2.9, 0.005, 2.9, 2.9],
+        },
+        index=pd.date_range("2026-07-28T20:05:00Z", periods=5, freq="90s"),
+    )
+    fig, ax = plt.subplots(1, 1)
+    add_aia_lightcurve(ax, timeseries, ["211"])
+    plotted = ax.lines[0].get_ydata()
+    assert len(plotted) > 0
+    assert (plotted < 100).all()
+    plt.close(fig)
+
+
 @mpl_svg_compare
 def test_plot_goes_primary_timeseries(goes_primary_timeseries):
     fig, ax = plt.subplots(1, 1)

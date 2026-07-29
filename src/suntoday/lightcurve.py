@@ -82,9 +82,14 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         if data.empty:
             logger.warning(f"No good-quality data for AIA-{wavelength} in the last 24 hours.")
             continue
-        values = (data["DATAMEAN"] / data["EXPTIME"]).ewm(span=5).mean()
+        values = data["DATAMEAN"] / data["EXPTIME"]
+        # Trim raw outliers before smoothing so one bad frame cannot smear
+        # into its neighbors; no upper trim — the top of the range is real
+        # flare signal and QUALITY filtering already drops bad frames.
+        values = values[values >= values.quantile(0.005)]
+        values = values.ewm(span=5).mean()
         ax.plot(
-            values[values.between(values.quantile(0.005), values.quantile(0.999))],
+            values,
             color=AIA_COLORS[wavelength],
             label=f"AIA-{wavelength}" + r"$\AA$",
             linewidth=2,

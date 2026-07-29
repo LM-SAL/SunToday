@@ -61,7 +61,9 @@ def test_cli_pfss_requires_date(mocker) -> None:
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("2026-02-04", datetime(2026, 2, 4, tzinfo=UTC)),
+        # A bare date anchors to the end of that day (23:57 keeps the
+        # 3-minute forward AIA fetch window inside the day).
+        ("2026-02-04", datetime(2026, 2, 4, 23, 57, tzinfo=UTC)),
         ("2026-02-04T12:30:00Z", datetime(2026, 2, 4, 12, 30, tzinfo=UTC)),
     ],
 )
@@ -74,21 +76,28 @@ def test_cli_date_formats(value, expected, mocker) -> None:
     main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None, force=False)
 
 
-@pytest.mark.parametrize("job_name", ["main_job", "pfss_job"])
-def test_cli_force_wires_through_to_jobs(job_name, mocker) -> None:
+@pytest.mark.parametrize("with_pfss", [False, True])
+def test_cli_force_wires_through_to_jobs(with_pfss, mocker) -> None:
     argv = ["suntoday", "--date", "2026-02-04", "--force"]
-    if job_name == "pfss_job":
+    if with_pfss:
         argv.append("--pfss")
     mocker.patch("sys.argv", argv)
-    job_mock = mocker.patch(f"suntoday.main.{job_name}")
+    main_mock = mocker.patch("suntoday.main.main_job")
+    pfss_mock = mocker.patch("suntoday.main.pfss_job")
 
     cli()
 
-    job_mock.assert_called_once_with(
-        requested_time=datetime(2026, 2, 4, tzinfo=UTC),
-        root_save_directory=None,
-        force=True,
-    )
+    expected = {
+        "requested_time": datetime(2026, 2, 4, 23, 57, tzinfo=UTC),
+        "root_save_directory": None,
+        "force": True,
+    }
+    main_mock.assert_called_once_with(**expected)
+    # --pfss runs the PFSS job in addition to the main job, not instead.
+    if with_pfss:
+        pfss_mock.assert_called_once_with(**expected)
+    else:
+        pfss_mock.assert_not_called()
 
 
 def test_cli_force_requires_date(mocker, capsys) -> None:

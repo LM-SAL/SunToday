@@ -71,7 +71,10 @@ def _build_args() -> argparse.ArgumentParser:
         "--date",
         "--requested-time",
         dest="requested_time",
-        help="Date or datetime (YYYY-MM-DD or ISO-8601). If omitted, start the scheduler.",
+        help=(
+            "Date or datetime (YYYY-MM-DD or ISO-8601). A bare date uses the last "
+            "images of that day. If omitted, start the scheduler."
+        ),
     )
     parser.add_argument(
         "--root-save-directory",
@@ -81,7 +84,7 @@ def _build_args() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pfss",
         action="store_true",
-        help="Run the PFSS overlay job instead of the main job (needs --date).",
+        help="Also run the PFSS overlay job after the main job (needs --date).",
     )
     parser.add_argument(
         "--force",
@@ -93,8 +96,8 @@ def _build_args() -> argparse.ArgumentParser:
 
 def cli() -> None:
     """
-    Parse the CLI arguments: run a one-off job when ``--date`` is given,
-    otherwise start the scheduler.
+    Parse the CLI arguments: run a one-off main job when ``--date`` is given
+    (plus the PFSS job with ``--pfss``), otherwise start the scheduler.
     """
     parser = _build_args()
     args = parser.parse_args()
@@ -107,8 +110,14 @@ def cli() -> None:
         scheduled()
         return
     requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
-    job = pfss_job if args.pfss else main_job
-    job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
+    if len(args.requested_time.strip()) <= len("YYYY-MM-DD"):
+        # A bare date means the end state of that day: anchor to 23:57 so the
+        # 3-minute forward AIA fetch window stays inside the day and the
+        # 24-hour lightcurve covers the requested day, not the one before.
+        requested_time = requested_time.replace(hour=23, minute=57, second=0)
+    main_job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
+    if args.pfss:
+        pfss_job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
     return
 
 
