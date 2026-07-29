@@ -5,6 +5,7 @@ import pandas as pd
 import pytest
 import requests
 
+from suntoday import DataNotReadyError
 from suntoday.downloaders import goes
 
 
@@ -90,6 +91,16 @@ def test_fetch_goes_timeseries_rejects_naive_end_time() -> None:
         goes.fetch_goes_timeseries(datetime(2022, 3, 31))  # ruff:ignore[call-datetime-without-tzinfo]
 
 
+def test_fetch_goes_timeseries_raises_when_window_is_empty(monkeypatch) -> None:
+    end_time = datetime.now(UTC)
+    monkeypatch.setattr(
+        goes, "_read_goes_json", lambda _url: _raw_json_frame(pd.DatetimeIndex([end_time - timedelta(days=2)]))
+    )
+
+    with pytest.raises(DataNotReadyError, match="No GOES XRS data found"):
+        goes.fetch_goes_timeseries(end_time)
+
+
 def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None:
     import sunpy.net
 
@@ -98,18 +109,28 @@ def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None
     fido.fetch.return_value = []
     monkeypatch.setattr(sunpy.net, "Fido", fido)
 
-    with pytest.raises(RuntimeError, match="No GOES-16 XRS archive data found"):
+    with pytest.raises(DataNotReadyError, match="No GOES XRS archive data found"):
         goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
             datetime(2022, 3, 30, tzinfo=UTC), datetime(2022, 3, 31, tzinfo=UTC)
         )
     fido.fetch.assert_called_once_with(fido.search.return_value)
 
 
-def test_archive_satellite_selection() -> None:
-    assert goes._archive_satellite(datetime(2022, 3, 31, tzinfo=UTC)) == 16  # ruff:ignore[private-member-access]
-    assert goes._archive_satellite(datetime(2025, 6, 1, tzinfo=UTC)) == 19  # ruff:ignore[private-member-access]
-    with pytest.raises(ValueError, match="No GOES archive satellite"):
-        goes._archive_satellite(datetime(2016, 1, 1, tzinfo=UTC))  # ruff:ignore[private-member-access]
+def test_fetch_archive_goes_timeseries_omits_unsupported_satellite_filter(monkeypatch) -> None:
+    import sunpy.net
+    from sunpy.net import attrs as a
+
+    fido = Mock()
+    fido.search.return_value = Mock()
+    fido.fetch.return_value = []
+    monkeypatch.setattr(sunpy.net, "Fido", fido)
+
+    with pytest.raises(DataNotReadyError):
+        goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
+            datetime(2026, 7, 13, tzinfo=UTC), datetime(2026, 7, 14, tzinfo=UTC)
+        )
+
+    assert not any(isinstance(attr, a.goes.SatelliteNumber) for attr in fido.search.call_args.args)
 
 
 @pytest.mark.remote_data
