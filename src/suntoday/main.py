@@ -110,12 +110,16 @@ def cli() -> None:
             parser.error("--force requires --date")
         scheduled()
         return
-    requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
-    if len(args.requested_time.strip()) <= len("YYYY-MM-DD"):
+    try:
         # A bare date means the end state of that day: anchor to 23:57 so the
         # 3-minute forward AIA fetch window stays inside the day and the
         # 24-hour lightcurve covers the requested day, not the one before.
-        requested_time = requested_time.replace(hour=23, minute=57, second=0)
+        # Detected by parsing, not zeroed time components, so an explicit
+        # midnight datetime still means midnight.
+        bare_date = datetime.date.fromisoformat(args.requested_time.strip())
+        requested_time = datetime.datetime.combine(bare_date, datetime.time(23, 57), tzinfo=datetime.UTC)
+    except ValueError:
+        requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
     # One download directory across both jobs: the PFSS pass reuses the
     # AIA/HMI FITS files the main job already fetched for the same time.
     with tempfile.TemporaryDirectory() as shared_downloads:

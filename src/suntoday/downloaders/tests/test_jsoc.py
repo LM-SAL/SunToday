@@ -76,6 +76,7 @@ def test_fetch_aia_timeseries() -> None:
     assert len(aia_ts) > 0
     assert len(aia_ts.columns) == 4
     assert sorted(aia_ts.columns) == sorted(["WAVELNTH", "DATAMEAN", "QUALITY", "EXPTIME"])
+    # 4500 A planning frames are filtered out of the timeseries.
     assert sorted(aia_ts["WAVELNTH"].unique().tolist()) == sorted([
         "94",
         "131",
@@ -86,7 +87,6 @@ def test_fetch_aia_timeseries() -> None:
         "335",
         "1600",
         "1700",
-        "4500",
     ])
     assert str(aia_ts["WAVELNTH"].dtype) == "str"
     assert aia_ts["DATAMEAN"].dtype == "float64"

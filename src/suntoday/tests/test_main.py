@@ -100,9 +100,7 @@ def test_cli_force_wires_through_to_jobs(with_pfss, mocker) -> None:
     # and shares the download directory so the FITS files fetch once.
     if with_pfss:
         pfss_mock.assert_called_once_with(**expected)
-        assert (
-            pfss_mock.call_args.kwargs["download_directory"] == main_mock.call_args.kwargs["download_directory"]
-        )
+        assert pfss_mock.call_args.kwargs["download_directory"] == main_mock.call_args.kwargs["download_directory"]
     else:
         pfss_mock.assert_not_called()
 
