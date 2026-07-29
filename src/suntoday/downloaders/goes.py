@@ -9,19 +9,14 @@ from datetime import UTC, datetime, timedelta
 import pandas as pd
 import requests
 
+from suntoday import DataNotReadyError
+
 __all__ = ["fetch_goes_timeseries"]
 
 GOES_NRT_URL = "https://services.swpc.noaa.gov/json/goes/primary/xrays-7-day.json"
 GOES_RETRIES = 2
 GOES_TIMEOUT = 60
 GOES_RETRY_DELAY = 5
-# Satellite used for archive fetches, by the date its XRS science data starts
-# being the sensible choice, newest first. GOES-19 replaced GOES-16 as the
-# SWPC primary on 2025-04-04; GOES-16 science data starts 2017-02-07.
-GOES_ARCHIVE_SATELLITES = [
-    (datetime(2025, 4, 4, tzinfo=UTC), 19),
-    (datetime(2017, 2, 7, tzinfo=UTC), 16),
-]
 # sunpy XRS timeseries column -> energy band label used by the SWPC JSON.
 GOES_ENERGY_BANDS = {"xrsa": "0.05-0.4nm", "xrsb": "0.1-0.8nm"}
 
@@ -56,14 +51,6 @@ def _read_goes_json(url: str) -> pd.DataFrame:
     raise RuntimeError(msg) from last_error
 
 
-def _archive_satellite(end_time: datetime) -> int:
-    for start_date, satellite in GOES_ARCHIVE_SATELLITES:
-        if end_time >= start_date:
-            return satellite
-    msg = f"No GOES archive satellite configured for {end_time}; extend GOES_ARCHIVE_SATELLITES."
-    raise ValueError(msg)
-
-
 def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> pd.DataFrame:
     """
     Fetch science-quality 1-min GOES XRS data from the NOAA NCEI archive.
@@ -72,17 +59,21 @@ def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> 
     from sunpy.net import attrs as a
     from sunpy.timeseries import TimeSeries
 
-    satellite = _archive_satellite(end_time)
     results = Fido.search(
         a.Time(start_time, end_time),
         a.Instrument("XRS"),
         a.Resolution("avg1m"),
-        a.goes.SatelliteNumber(satellite),
     )
-    files = Fido.fetch(results)
+    satellite_numbers = {int(satellite) for response in results for satellite in response["SatelliteNumber"]}
+    if not satellite_numbers:
+        msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
+        raise DataNotReadyError(msg)
+    satellite = max(satellite_numbers)
+    results = [response[response["SatelliteNumber"] == satellite] for response in results]
+    files = Fido.fetch(*results)
     if not files:
-        msg = f"No GOES-{satellite} XRS archive data found between {start_time} and {end_time}"
-        raise RuntimeError(msg)
+        msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
+        raise DataNotReadyError(msg)
     data = TimeSeries(files, concatenate=True).to_dataframe()
     data.index = data.index.tz_localize("UTC")
     goes_df = pd.concat(
@@ -113,6 +104,8 @@ def fetch_goes_timeseries(end_time: datetime) -> pd.DataFrame:
 
     Raises
     ------
+    suntoday.DataNotReadyError
+        If the requested window has no GOES XRS data yet.
     ValueError
         If ``end_time`` is timezone-naive.
     """
@@ -124,4 +117,8 @@ def fetch_goes_timeseries(end_time: datetime) -> pd.DataFrame:
         goes_df = _reformat_goes_df(_read_goes_json(GOES_NRT_URL))
     else:
         goes_df = _fetch_archive_goes_timeseries(start_time, end_time)
-    return goes_df[(goes_df.index > pd.Timestamp(start_time)) & (goes_df.index <= pd.Timestamp(end_time))]
+    goes_df = goes_df[(goes_df.index > pd.Timestamp(start_time)) & (goes_df.index <= pd.Timestamp(end_time))]
+    if goes_df.empty:
+        msg = f"No GOES XRS data found between {start_time} and {end_time}"
+        raise DataNotReadyError(msg)
+    return goes_df

@@ -32,6 +32,7 @@ from suntoday.utils import sync_to_s3
 if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
+        ignore_errors=[DataNotReadyError],
     )
 
 
@@ -78,7 +79,11 @@ def _run_job_in_subprocess(job_func) -> None:
         logger.warning(f"Job {job_func.__name__} skipped: data not ready")
     elif process.exitcode != 0:
         logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}")
-    _alert_if_stale()
+    try:
+        _alert_if_stale()
+    # Staleness reporting must not be able to stop the scheduler.
+    except Exception as e:  # ruff:ignore[blind-except]
+        logger.exception(f"Error checking stale data: {e}")
 
 
 def _alert_if_stale() -> None:

@@ -149,6 +149,12 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     assert not any("_child_job_not_ready exited" in message for message in messages)
 
 
+def test_run_job_in_subprocess_ignores_staleness_alert_failure(mocker) -> None:
+    mocker.patch("suntoday.main._alert_if_stale", side_effect=RuntimeError("database unavailable"))
+
+    _run_job_in_subprocess(_child_job_ok)
+
+
 def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
     mocker.patch("suntoday.main.create_db")
     mocker.patch("suntoday.main.sessionmaker")
