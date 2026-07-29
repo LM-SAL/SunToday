@@ -71,7 +71,17 @@ def test_cli_date_formats(value, expected, mocker) -> None:
 
     cli()
 
-    main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None)
+    main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None, force=False)
+
+
+def test_cli_force_requires_date(mocker) -> None:
+    mocker.patch("sys.argv", ["suntoday", "--force"])
+    scheduled_mock = mocker.patch("suntoday.main.scheduled")
+
+    with pytest.raises(SystemExit):
+        cli()
+
+    scheduled_mock.assert_not_called()
 
 
 def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mocker) -> None:
@@ -163,3 +173,14 @@ def test_create_images_skips_recent_record(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path) == []
     create_sdo.assert_not_called()
+
+
+def test_create_images_force_overrides_recent_record(mocker, tmp_path) -> None:
+    requested_time = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    recent_record = mocker.Mock(updated_at=requested_time - timedelta(minutes=5))
+    mocker.patch("suntoday.main.get_record", return_value=recent_record)
+    image_file = tmp_path / "f171.jpg"
+    create_sdo = mocker.patch("suntoday.main.create_sdo_images", return_value=[image_file])
+
+    assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, force=True) == [image_file]
+    create_sdo.assert_called_once()
