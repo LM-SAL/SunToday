@@ -108,6 +108,18 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     return fig
 
 
+def test_draw_field_lines_without_connectivity(hmi_blos_test_file, pfss_field_lines):
+    hmi_map = create_hmi_map(hmi_blos_test_file)
+    _, fig = create_figure_from_map(hmi_map)
+    field_lines = pfss_field_lines.copy()
+    field_lines.info.meta = {}
+
+    _draw_field_lines(fig.axes[0], hmi_map, field_lines)
+
+    assert {line.get_color() for line in fig.axes[0].lines} == {"white"}
+    assert fig.axes[0].texts[-2].get_text() == "PFSS ADAPT                 - 2026-07-17 22:00:00"
+
+
 def test_save_figures_from_maps_aia(tmpdir) -> None:
     aia_304_map = create_aia_map(find_test_filepath("304"))
     aia_211_map = create_aia_map(find_test_filepath("211"))
