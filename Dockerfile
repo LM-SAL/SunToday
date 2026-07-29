@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Use the image's CPython; never let uv download a managed interpreter.
-ENV UV_NO_MANAGED_PYTHON=1
+ENV UV_NO_MANAGED_PYTHON=1 UV_LINK_MODE=copy
 
 RUN uv venv --python 3.13 /opt/venv
 
