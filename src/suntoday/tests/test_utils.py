@@ -14,7 +14,11 @@ def test_sync_to_s3(tmp_path, mocker) -> None:
 
     calls = {call.args[2]: call for call in s3_client.upload_file.call_args_list}
     assert set(calls) == {"2026/07/13/f171.jpg", "2026/07/13/aia171.fits"}
-    assert calls["2026/07/13/f171.jpg"].kwargs["ExtraArgs"] == {"ContentType": "image/jpeg"}
+    assert calls["2026/07/13/f171.jpg"].kwargs["ExtraArgs"] == {
+        "ContentType": "image/jpeg",
+        "CacheControl": "max-age=300, must-revalidate",
+    }
+    assert calls["2026/07/13/aia171.fits"].kwargs["ExtraArgs"] == {"ContentType": "image/fits"}
     assert calls["2026/07/13/f171.jpg"].args[1] == "my-bucket"
 
 

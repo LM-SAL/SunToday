@@ -99,6 +99,8 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
             key_directories.add(key_directory)
         content_type = mimetypes.guess_type(path.name)[0]
         extra_args = {"ContentType": content_type} if content_type else {}
+        if path.suffix.lower() in {".gif", ".jpg"}:
+            extra_args["CacheControl"] = "max-age=300, must-revalidate"
         s3_client.upload_file(str(path), bucket_name, key, ExtraArgs=extra_args)
     destinations = ", ".join(sorted(key_directories)) or prefix
     logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{destinations}")
