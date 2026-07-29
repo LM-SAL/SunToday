@@ -214,8 +214,8 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
 
     logger.info("Fetching AIA and GOES timeseries for the last 24 hours")
     aia_timeseries = fetch_aia_timeseries(end_time)
-    goes_primary_timeseries, _goes_secondary_timeseries = fetch_goes_timeseries()
-    fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
+    goes_timeseries = fetch_goes_timeseries(end_time)
+    fig = plot_lightcurve_from_timeseries(goes_timeseries, aia_timeseries)
     plot_path = save_directory / "aia_light_curves.gif"
     with atomic_save(plot_path) as tmp_path:
         # Legacy consumers expect a .gif name; the bytes are PNG (browsers
@@ -227,5 +227,5 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
         tmp_path.write_text(_format_aia_timeseries(aia_timeseries))
     goes_path = save_directory / "goes_light_curves.txt"
     with atomic_save(goes_path) as tmp_path:
-        goes_primary_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
+        goes_timeseries.to_csv(tmp_path, sep="\t", date_format="%Y-%m-%dT%H:%M:%SZ")
     return [plot_path, aia_path, goes_path]
