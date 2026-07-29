@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import sunpy.map as smap
 
-from suntoday.constants import AIA_193_IDL_NORM
+from suntoday.constants import AIA_SINGLE_NORMS
 from suntoday.data.test import find_test_filepath
 from suntoday.maps import (
     create_adapt_map,
@@ -22,7 +22,7 @@ def test_create_aia_171_map() -> None:
 
 
 def test_aia_193_idl_norm() -> None:
-    norm = AIA_193_IDL_NORM()
+    norm = AIA_SINGLE_NORMS["193"]()
     assert norm(norm.vmin) == 0
     assert norm(norm.vmax) == 1
     # clip=True: out-of-range pixels saturate instead of coming back masked.

@@ -30,7 +30,6 @@ from sunpy.coordinates import Heliocentric, SphericalScreen, propagate_with_sola
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import (
-    AIA_193_IDL_NORM,
     AIA_FITS_ONLY_WAVELENGTHS,
     AIA_SINGLE_NORMS,
     AIA_WAVELENGTHS,
@@ -306,7 +305,7 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
     ax.set_ylim(-0.5, n_y - 0.5)
 
 
-def create_figure_from_map(amap: smap.GenericMap, norm: colors.Normalize | None = None) -> tuple[str, plt.Figure]:
+def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     """
     Creates the final figure from the input AIA or HMI Map.
 
@@ -316,9 +315,6 @@ def create_figure_from_map(amap: smap.GenericMap, norm: colors.Normalize | None 
     ----------
     amap : sunpy.map.GenericMap
         Input Map to plot.
-    norm : `matplotlib.colors.Normalize`, optional
-        Fixed display norm to use instead of the default per-frame
-        percentile clip, e.g. the IDL-style 193 scaling.
 
     Returns
     -------
@@ -329,7 +325,8 @@ def create_figure_from_map(amap: smap.GenericMap, norm: colors.Normalize | None 
     """
     fig, ax = _create_canvas(projection=amap)
     is_aia = "AIA" in amap.instrument
-    if norm is None and is_aia:
+    norm = None
+    if is_aia:
         override = AIA_SINGLE_NORMS.get(f"{amap.wavelength.value:.0f}")
         norm = override() if override is not None else None
     clip_interval = AIA_CLIP_INTERVAL if is_aia and norm is None else None
@@ -577,8 +574,6 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
                 )
             if wavelength_key not in AIA_FITS_ONLY_WAVELENGTHS:
                 saved_paths.extend(_save_product(create_figure_from_map(aia_map), aia_map, field_lines, save_directory))
-                if wavelength_key == "193" and not pfss:
-                    saved_paths.append(_save_idl_193_figure(aia_map, save_directory))
             del aia_map
             gc.collect()
 
@@ -615,37 +610,6 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         del maps
         gc.collect()
     return saved_paths
-
-
-def _save_idl_193_figure(aia_map: smap.GenericMap, save_directory: Path) -> Path:
-    """
-    Save the 193 channel a second time with the old IDL pipeline scaling.
-
-    Only the full-resolution JPEG is written (``f0193i.jpg``); no small or
-    thumbnail variants.
-
-    Parameters
-    ----------
-    aia_map : `sunpy.map.GenericMap`
-        The 193 map.
-    save_directory : pathlib.Path
-        Save directory for the JPEG.
-
-    Returns
-    -------
-    pathlib.Path
-        Saved JPEG path.
-    """
-    settings = Settings()
-    wavelength, fig = create_figure_from_map(aia_map, norm=AIA_193_IDL_NORM())
-    full_path = save_directory / settings.sdo_fig_name_large.format(wavelength + "i")
-    try:
-        with atomic_save(full_path) as full_tmp:
-            fig.savefig(full_tmp, dpi=settings.fig_dpi, pil_kwargs=JPEG_SAVE_OPTIONS)
-    finally:
-        plt.close(fig)
-        gc.collect()
-    return full_path
 
 
 def _save_product(

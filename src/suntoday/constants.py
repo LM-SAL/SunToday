@@ -16,7 +16,6 @@ from astropy.visualization import (
 from matplotlib import colors
 
 __all__ = [
-    "AIA_193_IDL_NORM",
     "AIA_COLORS",
     "AIA_SINGLE_NORMS",
     "AIA_WAVELENGTHS",
@@ -36,15 +35,15 @@ HMI_NORM_GAUSS = 100
 # floor at the 50th percentile blacks out sky and bleed, and the linear
 # stretch spreads the plage network over the range instead of piling it at
 # white. Limits still autoscale per frame.
+# 193: the previous IDL pipeline's absolute log scaling, in
+# degradation-corrected DN/s:
+#   bytscl(alog10(image*(2.9995/exptime) > (120d/2.2) < (6000d/2.2)))
+# clip=True matches IDL's bytscl of a hard-clipped image.
 AIA_SINGLE_NORMS = {
     "1600": partial(ImageNormalize, interval=AsymmetricPercentileInterval(50, 99.99), stretch=LinearStretch()),
     "1700": partial(ImageNormalize, interval=AsymmetricPercentileInterval(50, 99.99), stretch=LinearStretch()),
+    "193": partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True),
 }
-# The extra full-resolution-only 193 product (f0193i.jpg) with the previous
-# IDL pipeline's absolute scaling, in degradation-corrected DN/s:
-#   bytscl(alog10(image*(2.9995/exptime) > (120d/2.2) < (6000d/2.2)))
-# clip=True matches IDL's bytscl of a hard-clipped image.
-AIA_193_IDL_NORM = partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True)
 AIA_COLORS = {
     "131": "blue",
     "1600": "green",

@@ -10,7 +10,6 @@ This includes:
   - 1700
   - 171
   - 193
-  - 193 with the old IDL pipeline scaling, full resolution only (`f0193i.jpg`)
   - 211
   - 211 - 193 - 171
   - 304
