@@ -90,14 +90,16 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
 
     bucket_name, _, prefix = bucket.removeprefix("s3://").strip("/").partition("/")
     s3_client = boto3.client("s3")
+    key_directories = set()
     for path in sorted(paths):
         key = path.relative_to(root_save_directory).as_posix()
         if prefix:
             key = f"{prefix}/{key}"
+        key_directories.add(key.rpartition("/")[0])
         content_type = mimetypes.guess_type(path.name)[0]
         extra_args = {"ContentType": content_type} if content_type else {}
         s3_client.upload_file(str(path), bucket_name, key, ExtraArgs=extra_args)
-    logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{prefix}")
+    logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{', '.join(sorted(key_directories))}")
 
 
 def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Path:

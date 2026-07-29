@@ -136,12 +136,32 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
     requested_time = datetime(2026, 7, 13, tzinfo=UTC)
     main_job(requested_time, tmp_path)
 
+    # An explicit --date backfill must not overwrite mostrecent/.
+    assert upload.mock_calls == [
+        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
+    ]
+    # Only the type that created files gets a record, and only after upload.
+    record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
+
+
+def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
+    settings = mocker.patch("suntoday.main.Settings").return_value
+    settings.s3_bucket = "my-bucket"
+    mocker.patch("suntoday.main.create_db")
+    mocker.patch("suntoday.main.sessionmaker")
+    created_file = tmp_path / "2026" / "07" / "13" / "f171.jpg"
+    mocker.patch("suntoday.main.create_images", side_effect=[[created_file], []])
+    mocker.patch("suntoday.main.write_or_update_record")
+    upload = mocker.patch("suntoday.main.sync_to_s3")
+    requested_time = datetime(2026, 7, 13, tzinfo=UTC)
+    mocker.patch("suntoday.main.find_latest_jsoc_times", return_value=(requested_time, requested_time))
+
+    main_job(root_save_directory=tmp_path)
+
     assert upload.mock_calls == [
         mocker.call([created_file], "my-bucket", tmp_path.resolve()),
         mocker.call([created_file], "my-bucket/mostrecent", tmp_path.resolve() / "2026" / "07" / "13"),
     ]
-    # Only the type that created files gets a record, and only after upload.
-    record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
 
 
 def test_pfss_job_records_adapt_epoch_after_upload(tmp_path, mocker) -> None:

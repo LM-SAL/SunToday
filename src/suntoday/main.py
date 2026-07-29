@@ -193,6 +193,7 @@ def _run_job(
     adapt_epoch: datetime.datetime | None = None,
     *,
     force: bool = False,
+    update_mostrecent: bool = True,
 ) -> None:
     """
     Shared job scaffolding: build the dated save directory, run the image
@@ -213,6 +214,10 @@ def _run_job(
     force : bool, optional
         Regenerate even when the database record says the images are
         already current.
+    update_mostrecent : bool, optional
+        Also mirror the files to the ``mostrecent/`` prefix. Disabled for
+        explicit ``--date`` backfills so old data never replaces the
+        latest images on the webpage.
     """
     settings = Settings()
     requested_time = requested_time.astimezone(datetime.UTC)
@@ -247,10 +252,11 @@ def _run_job(
         if settings.s3_bucket and created_files:
             logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
             sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
-            # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
-            # for the latest images. Keys are bare filenames (root is the dated
-            # directory), so each run overwrites the previous set.
-            sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
+            if update_mostrecent:
+                # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
+                # for the latest images. Keys are bare filenames (root is the dated
+                # directory), so each run overwrites the previous set.
+                sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
         # Records only after a successful upload: marking success first would
         # make the next run skip regeneration and leave S3 partially updated.
         for image_type in created_by_type:
@@ -287,12 +293,20 @@ def main_job(
     logger.info("Running main job to create SDO Images and lightcurve images")
     # Live scheduled runs use the freshest time each instrument has data
     # for; explicit backfill runs use the given time as-is for both.
+    is_live = requested_time is None
     if requested_time is None:
         requested_time, hmi_time = find_latest_jsoc_times()
     else:
         requested_time = requested_time.astimezone(datetime.UTC)
         hmi_time = None
-    _run_job(["images", "timeseries"], requested_time, root_save_directory, hmi_time=hmi_time, force=force)
+    _run_job(
+        ["images", "timeseries"],
+        requested_time,
+        root_save_directory,
+        hmi_time=hmi_time,
+        force=force,
+        update_mostrecent=is_live,
+    )
     logger.info("Main job completed")
 
 
@@ -310,9 +324,17 @@ def pfss_job(
     successful upload.
     """
     logger.info("Running PFSS job to create field line overlay images")
+    is_live = requested_time is None
     requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
     adapt_epoch = find_nearest_adapt_time(requested_time)
-    _run_job(["pfss"], requested_time, root_save_directory, adapt_epoch=adapt_epoch, force=force)
+    _run_job(
+        ["pfss"],
+        requested_time,
+        root_save_directory,
+        adapt_epoch=adapt_epoch,
+        force=force,
+        update_mostrecent=is_live,
+    )
     logger.info("PFSS job completed")
 
 
