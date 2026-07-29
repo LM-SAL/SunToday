@@ -8,6 +8,8 @@ def test_trace_field_lines(adapt_test_file) -> None:
     field_lines = trace_field_lines(create_adapt_map(adapt_test_file))
     assert field_lines.frame.name == "heliographic_carrington"
     radii = field_lines.spherical.distance.to_value("km")
+    is_open = field_lines.info.meta["is_open"]
+    assert is_open.shape == radii.shape
     # One NaN separator per kept line; boundary-grazing lines are dropped
     n_lines = np.isnan(radii).sum()
     assert 0 < n_lines <= N_SEEDS
@@ -26,3 +28,5 @@ def test_trace_field_lines(adapt_test_file) -> None:
     # Both populations exist: some closed and some open lines.
     assert (endpoint_radii < 1.05).any()
     assert (endpoint_radii > 2.4).any()
+    assert is_open[nan_indices].any()
+    assert (~is_open[nan_indices]).any()

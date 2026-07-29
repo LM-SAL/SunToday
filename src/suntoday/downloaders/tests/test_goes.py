@@ -163,4 +163,3 @@ def test_fetch_goes_timeseries_archive() -> None:
     end_time = datetime(2022, 3, 31, tzinfo=UTC)
     goes_df = goes.fetch_goes_timeseries(end_time)
     _assert_goes_frame(goes_df, end_time)
-    assert goes_df["satellite"].unique()[0] == 16

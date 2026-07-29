@@ -58,10 +58,9 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     boundary_map = boundary_map.resample(SOLVE_SHAPE * u.pix)
     boundary_map._data = np.nan_to_num(boundary_map.data)  # ruff:ignore[private-member-access]
     output = magex_pfss.pfss(magex_pfss.Input(boundary_map, N_RHO, SOURCE_SURFACE_RADIUS))
-    rng = np.random.default_rng(SEED_RNG)
     br = np.abs(boundary_map.data)
     pixel_y, pixel_x = np.unravel_index(
-        rng.choice(br.size, size=N_SEEDS, replace=False, p=br.ravel() / br.sum()), br.shape
+        np.random.default_rng(SEED_RNG).choice(br.size, size=N_SEEDS, replace=False, p=br.ravel() / br.sum()), br.shape
     )
     world = boundary_map.wcs.pixel_to_world(pixel_x, pixel_y)
     seeds = SkyCoord(world.lon, world.lat, SEED_RADIUS * R_sun, frame=boundary_map.coordinate_frame)
@@ -79,7 +78,7 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     type(output).bg.fget.cache_clear()
     type(output)._modbg.fget.cache_clear()  # ruff:ignore[private-member-access]
     ran_out = (np.asarray(tracer.tracer.ROT) == 1).reshape(len(field_lines), -1).any(axis=1)
-    longitudes, latitudes, radii = [], [], []
+    longitudes, latitudes, radii, is_open = [], [], [], []
     for field_line, dropped in zip(field_lines, ran_out, strict=True):
         if dropped:
             continue
@@ -87,9 +86,12 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
         longitudes.append(np.append(spherical.lon.to_value(u.deg), np.nan))
         latitudes.append(np.append(spherical.lat.to_value(u.deg), np.nan))
         radii.append(np.append(spherical.distance.to_value(u.km), np.nan))
-    return SkyCoord(
+        is_open.append(np.full(len(spherical.lon) + 1, field_line.is_open))
+    field_lines = SkyCoord(
         np.concatenate(longitudes) * u.deg,
         np.concatenate(latitudes) * u.deg,
         np.concatenate(radii) * u.km,
         frame=field_lines[0].coords.frame.replicate_without_data(),
     )
+    field_lines.info.meta = {"is_open": np.concatenate(is_open)}
+    return field_lines
