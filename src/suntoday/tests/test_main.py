@@ -74,13 +74,32 @@ def test_cli_date_formats(value, expected, mocker) -> None:
     main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None, force=False)
 
 
-def test_cli_force_requires_date(mocker) -> None:
+@pytest.mark.parametrize("job_name", ["main_job", "pfss_job"])
+def test_cli_force_wires_through_to_jobs(job_name, mocker) -> None:
+    argv = ["suntoday", "--date", "2026-02-04", "--force"]
+    if job_name == "pfss_job":
+        argv.append("--pfss")
+    mocker.patch("sys.argv", argv)
+    job_mock = mocker.patch(f"suntoday.main.{job_name}")
+
+    cli()
+
+    job_mock.assert_called_once_with(
+        requested_time=datetime(2026, 2, 4, tzinfo=UTC),
+        root_save_directory=None,
+        force=True,
+    )
+
+
+def test_cli_force_requires_date(mocker, capsys) -> None:
     mocker.patch("sys.argv", ["suntoday", "--force"])
     scheduled_mock = mocker.patch("suntoday.main.scheduled")
 
     with pytest.raises(SystemExit):
         cli()
 
+    # parser.error exits with the message on stderr, not in the exception.
+    assert "--force requires --date" in capsys.readouterr().err
     scheduled_mock.assert_not_called()
 
 
@@ -178,9 +197,11 @@ def test_create_images_skips_recent_record(mocker, tmp_path) -> None:
 def test_create_images_force_overrides_recent_record(mocker, tmp_path) -> None:
     requested_time = datetime(2026, 7, 13, 12, tzinfo=UTC)
     recent_record = mocker.Mock(updated_at=requested_time - timedelta(minutes=5))
-    mocker.patch("suntoday.main.get_record", return_value=recent_record)
+    get_record = mocker.patch("suntoday.main.get_record", return_value=recent_record)
     image_file = tmp_path / "f171.jpg"
     create_sdo = mocker.patch("suntoday.main.create_sdo_images", return_value=[image_file])
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, force=True) == [image_file]
     create_sdo.assert_called_once()
+    # force short-circuits the currency check entirely, no database query.
+    get_record.assert_not_called()

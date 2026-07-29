@@ -165,17 +165,18 @@ def create_images(
         msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
-    if image_type == "pfss" and adapt_epoch is not None:
-        latest_record = get_latest_record(database_session, image_type)
-        is_current = latest_record is not None and latest_record.adapt_epoch == adapt_epoch
-    else:
-        latest_record = get_record(database_session, image_type, requested_time.date())
-        is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
-            minutes=10
-        )
-    if is_current and not force:
-        logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
-        return []
+    if not force:
+        if image_type == "pfss" and adapt_epoch is not None:
+            latest_record = get_latest_record(database_session, image_type)
+            is_current = latest_record is not None and latest_record.adapt_epoch == adapt_epoch
+        else:
+            latest_record = get_record(database_session, image_type, requested_time.date())
+            is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
+                minutes=10
+            )
+        if is_current:
+            logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
+            return []
     if image_type in {"images", "pfss"}:
         created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time, pfss=image_type == "pfss")
     else:
