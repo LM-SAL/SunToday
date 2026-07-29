@@ -4,7 +4,6 @@ os.environ["SUNTODAY_TEST_ENV"] = "True"  # Has to be set before importing anyth
 
 from pathlib import Path
 from datetime import UTC, datetime
-from suntoday.conftest import aia_timeseries
 from suntoday.downloaders.jsoc import fetch_aia_timeseries
 from suntoday.downloaders.goes import fetch_goes_timeseries
 
