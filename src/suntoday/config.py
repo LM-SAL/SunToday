@@ -54,8 +54,8 @@ class Settings(BaseSettings):
     stale_alert_hours: float = 6
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
-    timeseries_fig_x_size: float = 1536 / fig_dpi  # pixels / dpi = inches
-    timeseries_fig_y_size: float = 4608 / fig_dpi  # pixels / dpi = inches
+    timeseries_fig_x_size: float = 1200 / fig_dpi  # pixels / dpi = inches
+    timeseries_fig_y_size: float = 2400 / fig_dpi  # pixels / dpi = inches
 
     @model_validator(mode="after")
     def _build_db_url(self) -> "Settings":
