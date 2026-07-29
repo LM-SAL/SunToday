@@ -83,6 +83,11 @@ def _build_args() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the PFSS overlay job instead of the main job (needs --date).",
     )
+    parser.add_argument(
+        "--force",
+        action="store_true",
+        help="Regenerate even if the database says the images are already current (needs --date).",
+    )
     return parser
 
 
@@ -97,11 +102,13 @@ def cli() -> None:
     if not args.requested_time:
         if args.pfss:
             parser.error("--pfss requires --date")
+        if args.force:
+            parser.error("--force requires --date")
         scheduled()
         return
     requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
     job = pfss_job if args.pfss else main_job
-    job(requested_time=requested_time, root_save_directory=root_save_directory)
+    job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
     return
 
 
@@ -114,6 +121,7 @@ def create_images(
     hmi_time: datetime.datetime | None = None,
     *,
     adapt_epoch: datetime.datetime | None = None,
+    force: bool = False,
 ) -> list[Path]:
     """
     Create images for the requested time.
@@ -139,6 +147,9 @@ def create_images(
     adapt_epoch : datetime.datetime, optional
         ADAPT map timestamp for a PFSS run. A matching persisted epoch skips
         regeneration, including after a container restart.
+    force : bool, optional
+        Regenerate even when the database record says the images are
+        already current.
 
     Returns
     -------
@@ -154,17 +165,18 @@ def create_images(
         msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
-    if image_type == "pfss" and adapt_epoch is not None:
-        latest_record = get_latest_record(database_session, image_type)
-        is_current = latest_record is not None and latest_record.adapt_epoch == adapt_epoch
-    else:
-        latest_record = get_record(database_session, image_type, requested_time.date())
-        is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
-            minutes=10
-        )
-    if is_current:
-        logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
-        return []
+    if not force:
+        if image_type == "pfss" and adapt_epoch is not None:
+            latest_record = get_latest_record(database_session, image_type)
+            is_current = latest_record is not None and latest_record.adapt_epoch == adapt_epoch
+        else:
+            latest_record = get_record(database_session, image_type, requested_time.date())
+            is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
+                minutes=10
+            )
+        if is_current:
+            logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
+            return []
     if image_type in {"images", "pfss"}:
         created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time, pfss=image_type == "pfss")
     else:
@@ -179,6 +191,8 @@ def _run_job(
     root_save_directory: Path | None,
     hmi_time: datetime.datetime | None = None,
     adapt_epoch: datetime.datetime | None = None,
+    *,
+    force: bool = False,
 ) -> None:
     """
     Shared job scaffolding: build the dated save directory, run the image
@@ -196,6 +210,9 @@ def _run_job(
         Datetime for the HMI data, only used by the "images" type.
     adapt_epoch : datetime.datetime, optional
         ADAPT map timestamp to persist after a successful PFSS upload.
+    force : bool, optional
+        Regenerate even when the database record says the images are
+        already current.
     """
     settings = Settings()
     requested_time = requested_time.astimezone(datetime.UTC)
@@ -222,6 +239,7 @@ def _run_job(
                 save_directory,
                 hmi_time=hmi_time,
                 adapt_epoch=adapt_epoch,
+                force=force,
             )
             if created:
                 created_by_type[image_type] = created
@@ -252,7 +270,12 @@ def _run_job(
         engine.dispose()
 
 
-def main_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
+def main_job(
+    requested_time: datetime.datetime | None = None,
+    root_save_directory: Path | None = None,
+    *,
+    force: bool = False,
+) -> None:
     """
     Main job to create SDO Images and lightcurve images.
 
@@ -269,11 +292,16 @@ def main_job(requested_time: datetime.datetime | None = None, root_save_director
     else:
         requested_time = requested_time.astimezone(datetime.UTC)
         hmi_time = None
-    _run_job(["images", "timeseries"], requested_time, root_save_directory, hmi_time=hmi_time)
+    _run_job(["images", "timeseries"], requested_time, root_save_directory, hmi_time=hmi_time, force=force)
     logger.info("Main job completed")
 
 
-def pfss_job(requested_time: datetime.datetime | None = None, root_save_directory: Path | None = None) -> None:
+def pfss_job(
+    requested_time: datetime.datetime | None = None,
+    root_save_directory: Path | None = None,
+    *,
+    force: bool = False,
+) -> None:
     """
     Job to create the matched-time PFSS overlay images.
 
@@ -284,7 +312,7 @@ def pfss_job(requested_time: datetime.datetime | None = None, root_save_director
     logger.info("Running PFSS job to create field line overlay images")
     requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
     adapt_epoch = find_nearest_adapt_time(requested_time)
-    _run_job(["pfss"], requested_time, root_save_directory, adapt_epoch=adapt_epoch)
+    _run_job(["pfss"], requested_time, root_save_directory, adapt_epoch=adapt_epoch, force=force)
     logger.info("PFSS job completed")
 
 

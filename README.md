@@ -152,6 +152,13 @@ Add `--pfss` to run the PFSS overlay job instead of the main job (requires `--da
 docker compose run --rm suntoday --date 2026-02-04 --pfss
 ```
 
+Add `--force` to regenerate even when the database says the images for that
+date are already current (requires `--date`):
+
+```bash
+docker compose run --rm suntoday --date 2026-02-04 --force
+```
+
 ## Tests
 
 Tests run via tox, which must be installed in your Python environment.
