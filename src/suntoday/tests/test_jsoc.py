@@ -8,9 +8,11 @@ from suntoday.downloaders.jsoc import (
     _get_latest_record_time,
     _get_urls,
     fetch_aia_fits,
+    fetch_aia_timeseries,
     find_latest_jsoc_times,
     find_latest_pfss_time,
     get_aia_urls,
+    get_hmi_urls,
 )
 
 
@@ -32,6 +34,17 @@ def test_get_urls_malformed_response_is_error(mocker) -> None:
 
     with pytest.raises(ValueError, match="returned with no data"):
         _get_urls("lm_jps.Ic_45s[2026.07.29_08:00:00_TAI]", "T_REC", "continuum")
+
+
+@pytest.mark.parametrize("fetch", [fetch_aia_timeseries, get_hmi_urls])
+def test_timeseries_and_hmi_zero_count_are_data_not_ready(fetch, mocker) -> None:
+    mocker.patch("suntoday.downloaders.jsoc._jsoc_auth", return_value=None)
+    response = mocker.Mock(status_code=200)
+    response.json.return_value = {"count": 0, "runtime": 0.011, "status": 0}
+    mocker.patch("suntoday.downloaders.jsoc.requests.get", return_value=response)
+
+    with pytest.raises(DataNotReadyError, match="JSOC has no records yet"):
+        fetch(datetime(2026, 7, 29, 8, tzinfo=UTC))
 
 
 def test_get_latest_record_time_parses_tai_format(mocker) -> None:

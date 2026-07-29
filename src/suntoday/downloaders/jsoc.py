@@ -64,7 +64,7 @@ def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
     return HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
 
 
-def _get_urls(query: str, keywords: str, segment: str) -> dict:
+def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
     """
     For a given query, keywords and segment query the JSOC.
 
@@ -74,7 +74,7 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
         Query to run.
     keywords : str
         Keywords to return.
-    segment : str
+    segment : str, optional
         Segment to return.
 
     Returns
@@ -97,19 +97,20 @@ def _get_urls(query: str, keywords: str, segment: str) -> dict:
         "ds": query,
         "op": "rs_list",
         "key": keywords,
-        "seg": segment,
     }
+    if segment is not None:
+        params["seg"] = segment
     response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
         msg = f"JSOC request for {query!r} failed with {response.status_code} and {response.text}."
         raise OSError(msg)
     json_response = response.json()
+    # A clean zero-count response means the JSOC has not exported the
+    # requested time yet; anything else is a malformed response.
+    if json_response.get("status") == 0 and json_response.get("count") == 0:
+        msg = f"JSOC has no records yet for {query!r}."
+        raise DataNotReadyError(msg)
     if not {"keywords", "segments"}.issubset(set(json_response.keys())):
-        # A clean zero-count response means the JSOC has not exported the
-        # requested time yet; anything else is a malformed response.
-        if json_response.get("status") == 0 and json_response.get("count") == 0:
-            msg = f"JSOC has no records yet for {query!r}."
-            raise DataNotReadyError(msg)
         msg = f"JSOC request for {query!r} returned with no data but with {json_response}."
         raise ValueError(msg)
     return json_response
@@ -183,34 +184,19 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
 
     Raises
     ------
-    OSError
-        If the network connection fails to the JSOC.
     ValueError
         If no data is returned.
     """
     settings = Settings()
-    auth = _jsoc_auth(settings)
     keyword_store = {"T_REC": [], "WAVELNTH": []}
     segment_store = {"URL": []}
     for query, segment in [("lm_jps.m45s_nrt[{}]", "magnetogram"), ("lm_jps.Ic_45s[{}]", "continuum")]:
-        params = {
-            "ds": query.format(requested_time.strftime(settings.jsoc_str_fmt)),
-            "op": "rs_list",
-            "key": "T_REC",
-            "seg": segment,
-        }
-        response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
-        if response.status_code != 200:
-            msg = f"JSOC request for {params['ds']!r} failed with {response.status_code} and {response.text}."
-            raise OSError(msg)
-        json_response = response.json()
-        if "keywords" not in json_response or "segments" not in json_response:
-            msg = f"JSOC request for {params['ds']!r} returned with no data but with {json_response}."
-            raise ValueError(msg)
+        request_query = query.format(requested_time.strftime(settings.jsoc_str_fmt))
+        json_response = _get_urls(request_query, "T_REC", segment)
         keywords = json_response["keywords"]
         segments = json_response["segments"]
         if len(keywords[0]["values"]) == 0:
-            msg = f"No data found for {params['ds']}."
+            msg = f"No data found for {request_query}."
             raise ValueError(msg)
         keywords = {ad["name"]: ad["values"] for ad in keywords}
         segments = {ad["name"]: ad["values"] for ad in segments}
@@ -333,27 +319,16 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
 
     Raises
     ------
-    OSError
-        If the network connection fails to the JSOC.
     ValueError
         If no data is returned.
     """
     settings = Settings()
     start_time = end_time - timedelta(days=1)
-    auth = _jsoc_auth(settings)
-    params = {
-        # Sampling does not work on this series.
-        "ds": f"aia_test.lev1p5[{start_time.strftime(settings.jsoc_str_fmt)}-{end_time.strftime(settings.jsoc_str_fmt)}]",
-        "op": "rs_list",
-        "key": "DATE-OBS,WAVELNTH,DATAMEAN,QUALITY,EXPTIME",
-    }
-    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
-    if response.status_code != 200:
-        msg = f"JSOC request for {params['ds']!r} failed with {response.status_code} and {response.text}."
-        raise OSError(msg)
-    keywords = response.json()["keywords"]
+    query = f"aia_test.lev1p5[{start_time.strftime(settings.jsoc_str_fmt)}-{end_time.strftime(settings.jsoc_str_fmt)}]"
+    response = _get_urls(query, "DATE-OBS,WAVELNTH,DATAMEAN,QUALITY,EXPTIME")
+    keywords = response["keywords"]
     if len(keywords[0]["values"]) == 0:
-        msg = f"No data found for {params['ds']}."
+        msg = f"No data found for {query}."
         raise ValueError(msg)
     keywords = {ad["name"]: ad["values"] for ad in keywords}
     aia_timeseries = pd.DataFrame.from_dict(keywords)
