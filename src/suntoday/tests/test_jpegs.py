@@ -11,7 +11,6 @@ from suntoday.data.test import find_test_filepath
 from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
     _draw_field_lines,
-    _save_idl_193_figure,
     _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -130,16 +129,6 @@ def test_save_figures_from_maps_aia(tmpdir) -> None:
         assert img.size == (256, 256)
 
 
-def test_save_idl_193_figure(tmp_path) -> None:
-    aia_map = create_aia_map(find_test_filepath("193"))
-    path = _save_idl_193_figure(aia_map, tmp_path)
-    assert path == tmp_path / "f0193i.jpg"
-    # 4k only: no small/thumbnail variants.
-    assert [file.name for file in tmp_path.iterdir()] == ["f0193i.jpg"]
-    with Image.open(str(path)) as img:
-        assert img.size == (4096, 4096)
-
-
 @pytest.mark.remote_data
 def test_create_sdo_images_live_smoke(mocker, tmp_path) -> None:
     for module in ["suntoday.jpegs", "suntoday.downloaders.jsoc"]:
@@ -207,10 +196,6 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "suntoday.jpegs._save_product",
         side_effect=lambda figure, _map, _lines, directory: [directory / f"{figure[0]}.jpg"],
     )
-    idl_193 = mocker.patch(
-        "suntoday.jpegs._save_idl_193_figure",
-        side_effect=lambda _map, directory: directory / "f0193i.jpg",
-    )
 
     files = create_sdo_images(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
 
@@ -224,7 +209,6 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "94.jpg",
         "171.jpg",
         "193.jpg",
-        "f0193i.jpg",
         "335.jpg",
         "magnetogram.jpg",
         "continuum.jpg",
@@ -234,7 +218,6 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
     assert [amap.label for amap in create_rgb.call_args.args[0]] == ["94", "335", "193"]
     assert [amap.label for amap in create_blend.call_args.args[0]] == ["magnetogram", "171"]
     assert all(product.args[2] is None for product in save_product.call_args_list)
-    assert idl_193.call_args.args[0].label == "193"
 
 
 def test_save_product_pfss(mocker, tmp_path) -> None:
@@ -278,12 +261,9 @@ def test_create_pfss_images_uses_field_lines(
     mocker.patch("suntoday.jpegs.create_blended_figure_from_maps", return_value=("blend", mocker.sentinel.figure))
     save_fits = mocker.patch("suntoday.jpegs.save_fits")
     save_product = mocker.patch("suntoday.jpegs._save_product", return_value=[])
-    idl_193 = mocker.patch("suntoday.jpegs._save_idl_193_figure")
 
     assert create_sdo_images(datetime.now(UTC), tmp_path, pfss=True) == []
     trace.assert_called_once_with(boundary)
     save_fits.assert_not_called()
-    # The IDL-scaled 193 file is a regular product only, never a PFSS one.
-    idl_193.assert_not_called()
     assert save_product.call_count == 4
     assert all(product.args[2] is field_lines for product in save_product.call_args_list)

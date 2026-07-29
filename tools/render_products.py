@@ -7,9 +7,9 @@ For eyeballing a scaling or layout change without waiting on a JSOC query:
 
 Reads ``src/suntoday/data/test`` and writes the JPEG products into
 ``rendered_products/`` at the repo root, exactly as ``create_sdo_images``
-would: the full/small/thumb set per product, the IDL-scaled ``f0193i.jpg``,
-and - when the ADAPT test file is present - the ``pfssnolines``/``pfss``
-pair per product instead of the plain one, matching a ``pfss=True`` run.
+would: the full/small/thumb set per product, and - when the ADAPT test file
+is present - the ``pfssnolines``/``pfss`` pair per product instead of the
+plain one, matching a ``pfss=True`` run.
 """
 
 import warnings
@@ -18,7 +18,6 @@ from pathlib import Path
 from suntoday.constants import AIA_WAVELENGTHS, RGB_COMBINATIONS
 from suntoday.data.test import TEST_DATA_ROOTDIR, find_test_filepath
 from suntoday.jpegs import (
-    _save_idl_193_figure,
     _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
@@ -62,9 +61,6 @@ for create, paths in ((create_aia_map, aia.values()), (create_hmi_map, hmi.value
     for path in paths:
         amap = create(path)
         write(create_figure_from_map(amap), amap)
-
-if "193" in aia:
-    print("wrote", _save_idl_193_figure(create_aia_map(aia["193"]), OUTPUT_DIRECTORY).name)
 
 for combination in RGB_COMBINATIONS:
     if all(wavelength in aia for wavelength in combination):
