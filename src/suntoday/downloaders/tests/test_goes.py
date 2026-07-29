@@ -103,9 +103,10 @@ def test_fetch_goes_timeseries_raises_when_window_is_empty(monkeypatch) -> None:
 
 def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None:
     import sunpy.net
+    from astropy.table import Table
 
     fido = Mock()
-    fido.search.return_value = Mock()
+    fido.search.return_value = [Table({"SatelliteNumber": [18]})]
     fido.fetch.return_value = []
     monkeypatch.setattr(sunpy.net, "Fido", fido)
 
@@ -113,15 +114,16 @@ def test_fetch_archive_goes_timeseries_raises_when_no_files(monkeypatch) -> None
         goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
             datetime(2022, 3, 30, tzinfo=UTC), datetime(2022, 3, 31, tzinfo=UTC)
         )
-    fido.fetch.assert_called_once_with(fido.search.return_value)
+    fido.fetch.assert_called_once()
 
 
 def test_fetch_archive_goes_timeseries_omits_unsupported_satellite_filter(monkeypatch) -> None:
     import sunpy.net
+    from astropy.table import Table
     from sunpy.net import attrs as a
 
     fido = Mock()
-    fido.search.return_value = Mock()
+    fido.search.return_value = [Table({"SatelliteNumber": [18]})]
     fido.fetch.return_value = []
     monkeypatch.setattr(sunpy.net, "Fido", fido)
 
@@ -131,6 +133,23 @@ def test_fetch_archive_goes_timeseries_omits_unsupported_satellite_filter(monkey
         )
 
     assert not any(isinstance(attr, a.goes.SatelliteNumber) for attr in fido.search.call_args.args)
+
+
+def test_fetch_archive_goes_timeseries_selects_latest_satellite(monkeypatch) -> None:
+    import sunpy.net
+    from astropy.table import Table
+
+    fido = Mock()
+    fido.search.return_value = [Table({"SatelliteNumber": [16, 18]})]
+    fido.fetch.return_value = []
+    monkeypatch.setattr(sunpy.net, "Fido", fido)
+
+    with pytest.raises(DataNotReadyError):
+        goes._fetch_archive_goes_timeseries(  # ruff:ignore[private-member-access]
+            datetime(2022, 3, 30, tzinfo=UTC), datetime(2022, 3, 31, tzinfo=UTC)
+        )
+
+    assert list(fido.fetch.call_args.args[0]["SatelliteNumber"]) == [18]
 
 
 @pytest.mark.remote_data

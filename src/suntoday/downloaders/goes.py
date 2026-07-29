@@ -64,11 +64,16 @@ def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> 
         a.Instrument("XRS"),
         a.Resolution("avg1m"),
     )
-    files = Fido.fetch(results)
+    satellite_numbers = {int(satellite) for response in results for satellite in response["SatelliteNumber"]}
+    if not satellite_numbers:
+        msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
+        raise DataNotReadyError(msg)
+    satellite = max(satellite_numbers)
+    results = [response[response["SatelliteNumber"] == satellite] for response in results]
+    files = Fido.fetch(*results)
     if not files:
         msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
         raise DataNotReadyError(msg)
-    satellite = int(results[0]["SatelliteNumber"][0])
     data = TimeSeries(files, concatenate=True).to_dataframe()
     data.index = data.index.tz_localize("UTC")
     goes_df = pd.concat(
