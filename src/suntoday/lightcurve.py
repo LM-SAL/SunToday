@@ -26,9 +26,11 @@ LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "
 # AIA lev1 QUALITY bits that mark a frame as unusable for a lightcurve:
 # 10-11 (>5%/>25% pixels missing), 12 (ACS not in science mode), 13 (eclipse),
 # 14 (no sun presence), 15 (safe mode), 16 (dark frame), 17 (ISS loop open,
-# set during calibration sequences where DATAMEAN drops to ~0), 21 (filter
+# set during calibration sequences where DATAMEAN drops to ~0), 18 and 20
+# (calibration-sequence frames with off-nominal exposures — a 5 ms exposure
+# turns into a ~1e6 DN/s spike once exposure-normalized), 21 (filter
 # wheel not nominal — frames mid-move have partially blocked flux).
-BAD_QUALITY_BITS = 0x23FC00
+BAD_QUALITY_BITS = 0x37FC00
 
 # Font sizes (points) for all text in the lightcurve figure.
 LABEL_FONTSIZE = 8
@@ -80,9 +82,14 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         if data.empty:
             logger.warning(f"No good-quality data for AIA-{wavelength} in the last 24 hours.")
             continue
-        values = (data["DATAMEAN"] / data["EXPTIME"]).ewm(span=5).mean()
+        values = data["DATAMEAN"] / data["EXPTIME"]
+        # Trim raw outliers before smoothing so one bad frame cannot smear
+        # into its neighbors; no upper trim — the top of the range is real
+        # flare signal and QUALITY filtering already drops bad frames.
+        values = values[values >= values.quantile(0.005)]
+        values = values.ewm(span=5).mean()
         ax.plot(
-            values[values.between(values.quantile(0.005), values.quantile(0.999))],
+            values,
             color=AIA_COLORS[wavelength],
             label=f"AIA-{wavelength}" + r"$\AA$",
             linewidth=2,

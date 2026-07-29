@@ -9,6 +9,7 @@ import argparse
 import datetime
 import functools
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -71,7 +72,10 @@ def _build_args() -> argparse.ArgumentParser:
         "--date",
         "--requested-time",
         dest="requested_time",
-        help="Date or datetime (YYYY-MM-DD or ISO-8601). If omitted, start the scheduler.",
+        help=(
+            "Date or datetime (YYYY-MM-DD or ISO-8601). A bare date uses the last "
+            "images of that day. If omitted, start the scheduler."
+        ),
     )
     parser.add_argument(
         "--root-save-directory",
@@ -81,7 +85,7 @@ def _build_args() -> argparse.ArgumentParser:
     parser.add_argument(
         "--pfss",
         action="store_true",
-        help="Run the PFSS overlay job instead of the main job (needs --date).",
+        help="Also run the PFSS overlay job after the main job (needs --date).",
     )
     parser.add_argument(
         "--force",
@@ -93,8 +97,8 @@ def _build_args() -> argparse.ArgumentParser:
 
 def cli() -> None:
     """
-    Parse the CLI arguments: run a one-off job when ``--date`` is given,
-    otherwise start the scheduler.
+    Parse the CLI arguments: run a one-off main job when ``--date`` is given
+    (plus the PFSS job with ``--pfss``), otherwise start the scheduler.
     """
     parser = _build_args()
     args = parser.parse_args()
@@ -106,9 +110,33 @@ def cli() -> None:
             parser.error("--force requires --date")
         scheduled()
         return
-    requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
-    job = pfss_job if args.pfss else main_job
-    job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
+    try:
+        # A bare date means the end state of that day: anchor to 23:57 so the
+        # 3-minute forward AIA fetch window stays inside the day and the
+        # 24-hour lightcurve covers the requested day, not the one before.
+        # Detected by parsing, not zeroed time components, so an explicit
+        # midnight datetime still means midnight.
+        bare_date = datetime.date.fromisoformat(args.requested_time.strip())
+        requested_time = datetime.datetime.combine(bare_date, datetime.time(23, 57), tzinfo=datetime.UTC)
+    except ValueError:
+        requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
+    # One download directory across both jobs: the PFSS pass reuses the
+    # AIA/HMI FITS files the main job already fetched for the same time.
+    with tempfile.TemporaryDirectory() as shared_downloads:
+        download_directory = Path(shared_downloads)
+        main_job(
+            requested_time=requested_time,
+            root_save_directory=root_save_directory,
+            force=args.force,
+            download_directory=download_directory,
+        )
+        if args.pfss:
+            pfss_job(
+                requested_time=requested_time,
+                root_save_directory=root_save_directory,
+                force=args.force,
+                download_directory=download_directory,
+            )
     return
 
 
@@ -122,6 +150,7 @@ def create_images(
     *,
     adapt_epoch: datetime.datetime | None = None,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> list[Path]:
     """
     Create images for the requested time.
@@ -150,6 +179,10 @@ def create_images(
     force : bool, optional
         Regenerate even when the database record says the images are
         already current.
+    download_directory : pathlib.Path, optional
+        Shared FITS download directory, passed through to
+        `~suntoday.jpegs.create_sdo_images` so consecutive jobs for the
+        same time fetch the data once.
 
     Returns
     -------
@@ -178,7 +211,13 @@ def create_images(
             logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
             return []
     if image_type in {"images", "pfss"}:
-        created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time, pfss=image_type == "pfss")
+        created_files = create_sdo_images(
+            requested_time,
+            save_directory,
+            hmi_time=hmi_time,
+            pfss=image_type == "pfss",
+            download_directory=download_directory,
+        )
     else:
         created_files = create_lightcurve_figure(requested_time, save_directory)
     logger.info(f"{image_type} creation completed")
@@ -193,6 +232,8 @@ def _run_job(
     adapt_epoch: datetime.datetime | None = None,
     *,
     force: bool = False,
+    update_mostrecent: bool = True,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Shared job scaffolding: build the dated save directory, run the image
@@ -213,6 +254,12 @@ def _run_job(
     force : bool, optional
         Regenerate even when the database record says the images are
         already current.
+    update_mostrecent : bool, optional
+        Also mirror the files to the ``mostrecent/`` prefix. Disabled for
+        explicit ``--date`` backfills so old data never replaces the
+        latest images on the webpage.
+    download_directory : pathlib.Path, optional
+        Shared FITS download directory for `create_images`.
     """
     settings = Settings()
     requested_time = requested_time.astimezone(datetime.UTC)
@@ -240,6 +287,7 @@ def _run_job(
                 hmi_time=hmi_time,
                 adapt_epoch=adapt_epoch,
                 force=force,
+                download_directory=download_directory,
             )
             if created:
                 created_by_type[image_type] = created
@@ -247,10 +295,11 @@ def _run_job(
         if settings.s3_bucket and created_files:
             logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
             sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
-            # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
-            # for the latest images. Keys are bare filenames (root is the dated
-            # directory), so each run overwrites the previous set.
-            sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
+            if update_mostrecent:
+                # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
+                # for the latest images. Keys are bare filenames (root is the dated
+                # directory), so each run overwrites the previous set.
+                sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
         # Records only after a successful upload: marking success first would
         # make the next run skip regeneration and leave S3 partially updated.
         for image_type in created_by_type:
@@ -275,6 +324,7 @@ def main_job(
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Main job to create SDO Images and lightcurve images.
@@ -287,12 +337,21 @@ def main_job(
     logger.info("Running main job to create SDO Images and lightcurve images")
     # Live scheduled runs use the freshest time each instrument has data
     # for; explicit backfill runs use the given time as-is for both.
+    is_live = requested_time is None
     if requested_time is None:
         requested_time, hmi_time = find_latest_jsoc_times()
     else:
         requested_time = requested_time.astimezone(datetime.UTC)
         hmi_time = None
-    _run_job(["images", "timeseries"], requested_time, root_save_directory, hmi_time=hmi_time, force=force)
+    _run_job(
+        ["images", "timeseries"],
+        requested_time,
+        root_save_directory,
+        hmi_time=hmi_time,
+        force=force,
+        update_mostrecent=is_live,
+        download_directory=download_directory,
+    )
     logger.info("Main job completed")
 
 
@@ -301,6 +360,7 @@ def pfss_job(
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Job to create the matched-time PFSS overlay images.
@@ -310,9 +370,18 @@ def pfss_job(
     successful upload.
     """
     logger.info("Running PFSS job to create field line overlay images")
+    is_live = requested_time is None
     requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
     adapt_epoch = find_nearest_adapt_time(requested_time)
-    _run_job(["pfss"], requested_time, root_save_directory, adapt_epoch=adapt_epoch, force=force)
+    _run_job(
+        ["pfss"],
+        requested_time,
+        root_save_directory,
+        adapt_epoch=adapt_epoch,
+        force=force,
+        update_mostrecent=is_live,
+        download_directory=download_directory,
+    )
     logger.info("PFSS job completed")
 
 

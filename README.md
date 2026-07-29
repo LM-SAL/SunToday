@@ -143,10 +143,15 @@ docker exec -it <container_name> python /app/src/suntoday/main.py --date 2026-02
 
 Accepted formats:
 
-- Date only: `YYYY-MM-DD` (interpreted as midnight UTC)
+- Date only: `YYYY-MM-DD` (interpreted as the end of that day, 23:57 UTC, so
+  the products represent the day's final state)
 - Datetime: ISO-8601, e.g. `2026-02-04T12:30:00Z`
 
-Add `--pfss` to run the PFSS overlay job instead of the main job (requires `--date`):
+One-off runs upload only to the dated S3 prefix; the `mostrecent/` mirror is
+updated by scheduled runs alone, so a backfill can never replace the latest
+images on the webpage.
+
+Add `--pfss` to also run the PFSS overlay job after the main job (requires `--date`):
 
 ```bash
 docker compose run --rm suntoday --date 2026-02-04 --pfss

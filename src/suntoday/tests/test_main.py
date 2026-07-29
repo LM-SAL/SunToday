@@ -61,7 +61,9 @@ def test_cli_pfss_requires_date(mocker) -> None:
 @pytest.mark.parametrize(
     ("value", "expected"),
     [
-        ("2026-02-04", datetime(2026, 2, 4, tzinfo=UTC)),
+        # A bare date anchors to the end of that day (23:57 keeps the
+        # 3-minute forward AIA fetch window inside the day).
+        ("2026-02-04", datetime(2026, 2, 4, 23, 57, tzinfo=UTC)),
         ("2026-02-04T12:30:00Z", datetime(2026, 2, 4, 12, 30, tzinfo=UTC)),
     ],
 )
@@ -71,24 +73,36 @@ def test_cli_date_formats(value, expected, mocker) -> None:
 
     cli()
 
-    main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None, force=False)
+    main_job_mock.assert_called_once_with(
+        requested_time=expected, root_save_directory=None, force=False, download_directory=mocker.ANY
+    )
 
 
-@pytest.mark.parametrize("job_name", ["main_job", "pfss_job"])
-def test_cli_force_wires_through_to_jobs(job_name, mocker) -> None:
+@pytest.mark.parametrize("with_pfss", [False, True])
+def test_cli_force_wires_through_to_jobs(with_pfss, mocker) -> None:
     argv = ["suntoday", "--date", "2026-02-04", "--force"]
-    if job_name == "pfss_job":
+    if with_pfss:
         argv.append("--pfss")
     mocker.patch("sys.argv", argv)
-    job_mock = mocker.patch(f"suntoday.main.{job_name}")
+    main_mock = mocker.patch("suntoday.main.main_job")
+    pfss_mock = mocker.patch("suntoday.main.pfss_job")
 
     cli()
 
-    job_mock.assert_called_once_with(
-        requested_time=datetime(2026, 2, 4, tzinfo=UTC),
-        root_save_directory=None,
-        force=True,
-    )
+    expected = {
+        "requested_time": datetime(2026, 2, 4, 23, 57, tzinfo=UTC),
+        "root_save_directory": None,
+        "force": True,
+        "download_directory": mocker.ANY,
+    }
+    main_mock.assert_called_once_with(**expected)
+    # --pfss runs the PFSS job in addition to the main job, not instead,
+    # and shares the download directory so the FITS files fetch once.
+    if with_pfss:
+        pfss_mock.assert_called_once_with(**expected)
+        assert pfss_mock.call_args.kwargs["download_directory"] == main_mock.call_args.kwargs["download_directory"]
+    else:
+        pfss_mock.assert_not_called()
 
 
 def test_cli_force_requires_date(mocker, capsys) -> None:
@@ -136,12 +150,32 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
     requested_time = datetime(2026, 7, 13, tzinfo=UTC)
     main_job(requested_time, tmp_path)
 
+    # An explicit --date backfill must not overwrite mostrecent/.
+    assert upload.mock_calls == [
+        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
+    ]
+    # Only the type that created files gets a record, and only after upload.
+    record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
+
+
+def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
+    settings = mocker.patch("suntoday.main.Settings").return_value
+    settings.s3_bucket = "my-bucket"
+    mocker.patch("suntoday.main.create_db")
+    mocker.patch("suntoday.main.sessionmaker")
+    created_file = tmp_path / "2026" / "07" / "13" / "f171.jpg"
+    mocker.patch("suntoday.main.create_images", side_effect=[[created_file], []])
+    mocker.patch("suntoday.main.write_or_update_record")
+    upload = mocker.patch("suntoday.main.sync_to_s3")
+    requested_time = datetime(2026, 7, 13, tzinfo=UTC)
+    mocker.patch("suntoday.main.find_latest_jsoc_times", return_value=(requested_time, requested_time))
+
+    main_job(root_save_directory=tmp_path)
+
     assert upload.mock_calls == [
         mocker.call([created_file], "my-bucket", tmp_path.resolve()),
         mocker.call([created_file], "my-bucket/mostrecent", tmp_path.resolve() / "2026" / "07" / "13"),
     ]
-    # Only the type that created files gets a record, and only after upload.
-    record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
 
 
 def test_pfss_job_records_adapt_epoch_after_upload(tmp_path, mocker) -> None:
@@ -180,7 +214,7 @@ def test_create_images_dispatches_by_type(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, hmi_time) == [image_file]
     assert create_images(mocker.sentinel.session, "timeseries", requested_time, tmp_path) == [lightcurve_file]
-    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False)
+    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False, download_directory=None)
     create_lightcurve.assert_called_once_with(requested_time, tmp_path)
 
 
