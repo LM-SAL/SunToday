@@ -99,10 +99,16 @@ def test_plot_lightcurve_from_timeseries(aia_timeseries, goes_primary_timeseries
 
 def test_plot_lightcurve_has_one_aia_y_label(aia_timeseries, goes_primary_timeseries) -> None:
     fig = plot_lightcurve_from_timeseries(goes_primary_timeseries, aia_timeseries)
-    aia_axes = fig.axes[1:-1]
+    aia_axes = sorted(
+        (axis for axis in fig.axes if any(line.get_label().startswith("AIA-") for line in axis.lines)),
+        key=lambda axis: axis.get_position().y0,
+        reverse=True,
+    )
+    goes_axis = next(axis for axis in fig.axes if any(line.get_label().startswith("GOES-") for line in axis.lines))
     assert [axis.get_ylabel() for axis in aia_axes].count(r"Data Mean (DN)") == 1
     assert aia_axes[len(aia_axes) // 2].get_ylabel() == r"Data Mean (DN)"
     assert all(axis.get_legend() is not None for axis in aia_axes)
+    assert goes_axis.get_ylabel() == r"Flux (Watts $\cdot$ m$^{-2}$)"
     plt.close(fig)
 
 
