@@ -514,6 +514,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     hmi_time: datetime.datetime | None = None,
     *,
     pfss: bool = False,
+    download_directory: Path | None = None,
 ) -> list[Path]:
     """
     Creates the full set of SDO images for the given datetime and saves it to
@@ -538,6 +539,11 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         planning FITS files are written. The caller should anchor
         ``requested_time`` to the matched GONG ADAPT file time and leave
         ``hmi_time`` unset so all the image timestamps match.
+    download_directory : pathlib.Path, optional
+        Directory to download the FITS files into. Files already present
+        are not re-downloaded, so passing the same directory to the main
+        and PFSS runs of a backfill fetches the data once. Defaults to a
+        per-call temporary directory.
 
     Returns
     -------
@@ -547,16 +553,17 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     # Looped per file to stay under the production VM's 4 GB of memory.
     saved_paths = []
     with tempfile.TemporaryDirectory() as temp_dir:
+        fits_directory = download_directory or Path(temp_dir)
         field_lines = None
         if pfss:
-            adapt_file = fetch_adapt_fits(requested_time, save_directory=Path(temp_dir))
+            adapt_file = fetch_adapt_fits(requested_time, save_directory=fits_directory)
             logger.info("Tracing PFSS field lines")
             field_lines = trace_field_lines(create_adapt_map(adapt_file))
 
-        aia_files = fetch_aia_fits(requested_time, save_directory=Path(temp_dir))
+        aia_files = fetch_aia_fits(requested_time, save_directory=fits_directory)
         aia_order = AIA_WAVELENGTHS + AIA_FITS_ONLY_WAVELENGTHS
         aia_files = sorted(aia_files, key=lambda x: aia_order.index(Path(x).stem.split("_")[-1]))
-        hmi_files = fetch_hmi_fits(hmi_time or requested_time, save_directory=Path(temp_dir))
+        hmi_files = fetch_hmi_fits(hmi_time or requested_time, save_directory=fits_directory)
         aia_files_by_wavelength = {}
         hmi_files_by_measurement = {}
 

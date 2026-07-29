@@ -73,7 +73,9 @@ def test_cli_date_formats(value, expected, mocker) -> None:
 
     cli()
 
-    main_job_mock.assert_called_once_with(requested_time=expected, root_save_directory=None, force=False)
+    main_job_mock.assert_called_once_with(
+        requested_time=expected, root_save_directory=None, force=False, download_directory=mocker.ANY
+    )
 
 
 @pytest.mark.parametrize("with_pfss", [False, True])
@@ -91,11 +93,16 @@ def test_cli_force_wires_through_to_jobs(with_pfss, mocker) -> None:
         "requested_time": datetime(2026, 2, 4, 23, 57, tzinfo=UTC),
         "root_save_directory": None,
         "force": True,
+        "download_directory": mocker.ANY,
     }
     main_mock.assert_called_once_with(**expected)
-    # --pfss runs the PFSS job in addition to the main job, not instead.
+    # --pfss runs the PFSS job in addition to the main job, not instead,
+    # and shares the download directory so the FITS files fetch once.
     if with_pfss:
         pfss_mock.assert_called_once_with(**expected)
+        assert (
+            pfss_mock.call_args.kwargs["download_directory"] == main_mock.call_args.kwargs["download_directory"]
+        )
     else:
         pfss_mock.assert_not_called()
 
@@ -209,7 +216,7 @@ def test_create_images_dispatches_by_type(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, hmi_time) == [image_file]
     assert create_images(mocker.sentinel.session, "timeseries", requested_time, tmp_path) == [lightcurve_file]
-    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False)
+    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False, download_directory=None)
     create_lightcurve.assert_called_once_with(requested_time, tmp_path)
 
 

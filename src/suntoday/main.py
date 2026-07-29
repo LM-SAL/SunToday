@@ -9,6 +9,7 @@ import argparse
 import datetime
 import functools
 import os
+import tempfile
 import time
 from pathlib import Path
 
@@ -115,9 +116,23 @@ def cli() -> None:
         # 3-minute forward AIA fetch window stays inside the day and the
         # 24-hour lightcurve covers the requested day, not the one before.
         requested_time = requested_time.replace(hour=23, minute=57, second=0)
-    main_job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
-    if args.pfss:
-        pfss_job(requested_time=requested_time, root_save_directory=root_save_directory, force=args.force)
+    # One download directory across both jobs: the PFSS pass reuses the
+    # AIA/HMI FITS files the main job already fetched for the same time.
+    with tempfile.TemporaryDirectory() as shared_downloads:
+        download_directory = Path(shared_downloads)
+        main_job(
+            requested_time=requested_time,
+            root_save_directory=root_save_directory,
+            force=args.force,
+            download_directory=download_directory,
+        )
+        if args.pfss:
+            pfss_job(
+                requested_time=requested_time,
+                root_save_directory=root_save_directory,
+                force=args.force,
+                download_directory=download_directory,
+            )
     return
 
 
@@ -131,6 +146,7 @@ def create_images(
     *,
     adapt_epoch: datetime.datetime | None = None,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> list[Path]:
     """
     Create images for the requested time.
@@ -159,6 +175,10 @@ def create_images(
     force : bool, optional
         Regenerate even when the database record says the images are
         already current.
+    download_directory : pathlib.Path, optional
+        Shared FITS download directory, passed through to
+        `~suntoday.jpegs.create_sdo_images` so consecutive jobs for the
+        same time fetch the data once.
 
     Returns
     -------
@@ -187,7 +207,13 @@ def create_images(
             logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
             return []
     if image_type in {"images", "pfss"}:
-        created_files = create_sdo_images(requested_time, save_directory, hmi_time=hmi_time, pfss=image_type == "pfss")
+        created_files = create_sdo_images(
+            requested_time,
+            save_directory,
+            hmi_time=hmi_time,
+            pfss=image_type == "pfss",
+            download_directory=download_directory,
+        )
     else:
         created_files = create_lightcurve_figure(requested_time, save_directory)
     logger.info(f"{image_type} creation completed")
@@ -203,6 +229,7 @@ def _run_job(
     *,
     force: bool = False,
     update_mostrecent: bool = True,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Shared job scaffolding: build the dated save directory, run the image
@@ -227,6 +254,8 @@ def _run_job(
         Also mirror the files to the ``mostrecent/`` prefix. Disabled for
         explicit ``--date`` backfills so old data never replaces the
         latest images on the webpage.
+    download_directory : pathlib.Path, optional
+        Shared FITS download directory for `create_images`.
     """
     settings = Settings()
     requested_time = requested_time.astimezone(datetime.UTC)
@@ -254,6 +283,7 @@ def _run_job(
                 hmi_time=hmi_time,
                 adapt_epoch=adapt_epoch,
                 force=force,
+                download_directory=download_directory,
             )
             if created:
                 created_by_type[image_type] = created
@@ -290,6 +320,7 @@ def main_job(
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Main job to create SDO Images and lightcurve images.
@@ -315,6 +346,7 @@ def main_job(
         hmi_time=hmi_time,
         force=force,
         update_mostrecent=is_live,
+        download_directory=download_directory,
     )
     logger.info("Main job completed")
 
@@ -324,6 +356,7 @@ def pfss_job(
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
+    download_directory: Path | None = None,
 ) -> None:
     """
     Job to create the matched-time PFSS overlay images.
@@ -343,6 +376,7 @@ def pfss_job(
         adapt_epoch=adapt_epoch,
         force=force,
         update_mostrecent=is_live,
+        download_directory=download_directory,
     )
     logger.info("PFSS job completed")
 
