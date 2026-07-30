@@ -15,6 +15,7 @@ from sunpy.net import attrs as a
 from sunpy.net.base_client import QueryResponseRow
 
 from suntoday import DataNotReadyError
+from suntoday.downloaders.downloader import format_download_errors
 
 __all__ = ["fetch_adapt_fits", "find_latest_adapt_time", "find_nearest_adapt_time"]
 
@@ -108,7 +109,7 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
     """
     files = Fido.fetch(_nearest_adapt_row(requested_time), path=str(save_directory / "{file}"), max_splits=1)
     if files.errors:
-        msg = f"Failed to download {files.errors}."
+        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
         raise OSError(msg)
     return Path(files[0])
 

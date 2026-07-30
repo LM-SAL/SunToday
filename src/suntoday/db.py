@@ -105,13 +105,8 @@ def create_db(uri=None, *, echo: bool = False):
     uri = uri or settings.db_url
     engine = create_engine(uri, echo=echo, connect_args={"options": "-c timezone=utc"})
     if not database_exists(engine.url):
-        msg = f"Creating database at {engine.url}"
-        logger.info(msg)
+        logger.info(f"Creating database at {engine.url}")
         create_database(url=engine.url)
-        msg = "Database created"
-    else:
-        msg = f"Database already exists at {engine.url}"
-        logger.info(msg)
     logger.info("Ensuring all tables are created in the database.")
     BASE.metadata.create_all(engine)
     return engine
