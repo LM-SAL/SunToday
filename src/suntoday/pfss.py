@@ -93,5 +93,8 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
         np.concatenate(radii) * u.km,
         frame=field_lines[0].coords.frame.replicate_without_data(),
     )
-    field_lines.info.meta = {"is_open": np.concatenate(is_open)}
+    field_lines.info.meta = {
+        "is_open": np.concatenate(is_open),
+        "adapt_realization": boundary_map.meta.get("adapt_realization", 0),
+    }
     return field_lines

@@ -9,6 +9,7 @@ def test_trace_field_lines(adapt_test_file) -> None:
     assert field_lines.frame.name == "heliographic_carrington"
     radii = field_lines.spherical.distance.to_value("km")
     is_open = field_lines.info.meta["is_open"]
+    assert field_lines.info.meta["adapt_realization"] == 0
     assert is_open.shape == radii.shape
     # One NaN separator per kept line; boundary-grazing lines are dropped
     n_lines = np.isnan(radii).sum()

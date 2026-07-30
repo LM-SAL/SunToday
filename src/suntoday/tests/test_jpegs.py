@@ -102,9 +102,9 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     hmi_map = create_hmi_map(hmi_blos_test_file)
     _, fig = create_figure_from_map(hmi_map)
     _draw_field_lines(fig.axes[0], hmi_map, pfss_field_lines)
-    assert {line.get_color() for line in fig.axes[0].lines} == {"cyan", "white"}
-    assert fig.axes[0].texts[-2].get_text() == "PFSS ADAPT                 - 2026-07-17 22:00:00"
-    assert fig.axes[0].texts[-1].get_text() == "PFSS: cyan=open, white=closed"
+    assert {line.get_color() for line in fig.axes[0].lines} == {"magenta", "white"}
+    assert fig.axes[0].texts[-2].get_text() == "ADAPT -       GONG R0       - 2026-07-17 22:00:00"
+    assert fig.axes[0].texts[-1].get_text() == "PFSS: magenta=open, white=closed"
     return fig
 
 
@@ -117,7 +117,7 @@ def test_draw_field_lines_without_connectivity(hmi_blos_test_file, pfss_field_li
     _draw_field_lines(fig.axes[0], hmi_map, field_lines)
 
     assert {line.get_color() for line in fig.axes[0].lines} == {"white"}
-    assert fig.axes[0].texts[-2].get_text() == "PFSS ADAPT                 - 2026-07-17 22:00:00"
+    assert fig.axes[0].texts[-2].get_text() == "ADAPT -       GONG R0       - 2026-07-17 22:00:00"
 
 
 def test_save_figures_from_maps_aia(tmpdir) -> None:
