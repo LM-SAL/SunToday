@@ -86,7 +86,9 @@ def create_adapt_map(file: Path, realization: int = 0) -> smap.GenericMap:
         warnings.filterwarnings("ignore", category=SunpyMetadataWarning, message="Missing metadata for observer")
         with fits.open(file, memmap=False) as hdul:
             adapt_map = smap.Map(hdul[0].data[realization], hdul[0].header)
-        return car_to_cea(adapt_map)
+        adapt_map = car_to_cea(adapt_map)
+        adapt_map.meta["adapt_realization"] = realization
+        return adapt_map
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:

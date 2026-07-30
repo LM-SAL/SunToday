@@ -109,10 +109,10 @@ AIA_CLIP_INTERVAL = (0.01, 99.99) * u.percent
 # optimize/progressive: with subsampling=0 they trigger a libjpeg
 # suspend-buffer bug ("OSError: broken data stream") on some real images.
 JPEG_SAVE_OPTIONS = {"quality": 90, "subsampling": 0}
-# Thin white closed lines match the historical LMSAL PFSS rendering; cyan
-# distinguishes open lines without obscuring the solar image beneath them.
+# Thin white closed lines match the historical LMSAL PFSS rendering; magenta
+# keeps open lines distinct against the solar image beneath them.
 FIELD_LINE_KWARGS = {"linewidth": 0.4, "alpha": 0.9}
-FIELD_LINE_COLORS = {False: "white", True: "cyan"}
+FIELD_LINE_COLORS = {False: "white", True: "magenta"}
 # The logo PNG is quite dim against the black corner; brighten it.
 LOGO_BRIGHTNESS = 1.25
 
@@ -288,7 +288,8 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
     pixel_x = np.asarray(pixel_x, dtype=float)
     pixel_y = np.asarray(pixel_y, dtype=float)
     pixel_x[occulted] = np.nan
-    is_open = (field_lines.info.meta or {}).get("is_open")
+    metadata = field_lines.info.meta or {}
+    is_open = metadata.get("is_open")
     if is_open is None:
         ax.plot(pixel_x, pixel_y, color=FIELD_LINE_COLORS[False], **FIELD_LINE_KWARGS)
     else:
@@ -307,12 +308,14 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
         if (match := re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", text.get_text()))
     ]
     prefix_width = max(date_starts, default=13) - 3
+    gong_label = f"GONG R{metadata.get('adapt_realization', 0)}"
+    adapt_label = f"ADAPT - {gong_label:^{prefix_width - 8}}"
     _draw_label(
         ax,
         len(ax.texts),
-        f"{'PFSS ADAPT':<{prefix_width}} - {field_lines.obstime.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"{adapt_label:<{prefix_width}} - {field_lines.obstime.strftime('%Y-%m-%d %H:%M:%S')}",
     )
-    _draw_label(ax, len(ax.texts), "PFSS: cyan=open, white=closed")
+    _draw_label(ax, len(ax.texts), "PFSS: magenta=open, white=closed")
     # The off-limb line points would otherwise autoscale the axes outwards.
     n_y, n_x = amap.data.shape
     ax.set_xlim(-0.5, n_x - 0.5)

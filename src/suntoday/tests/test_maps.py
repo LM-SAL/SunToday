@@ -37,8 +37,10 @@ def test_create_adapt_map(adapt_test_file) -> None:
     assert adapt_map.coordinate_frame.name == "heliographic_carrington"
     assert adapt_map.wcs.wcs.ctype[0] == "CRLN-CEA"
     assert adapt_map.wcs.wcs.ctype[1] == "CRLT-CEA"
+    assert adapt_map.meta["adapt_realization"] == 0
     # Picking a different realization should give different (but same-shape) data.
     other_realization = create_adapt_map(adapt_test_file, realization=1)
+    assert other_realization.meta["adapt_realization"] == 1
     assert other_realization.data.shape == adapt_map.data.shape
     assert not np.allclose(other_realization.data, adapt_map.data)
 
