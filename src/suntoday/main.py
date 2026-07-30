@@ -94,14 +94,15 @@ def _run_job_in_subprocess(job_func) -> None:
     elif process.exitcode != 0:
         suffix = f"\nChild traceback:\n{child_traceback.rstrip()}" if child_traceback else ""
         logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}{suffix}")
-    try:
-        _alert_if_stale()
-    # Staleness reporting must not be able to stop the scheduler.
-    except Exception as e:  # ruff:ignore[blind-except]
-        logger.exception(f"Error checking stale data: {e}")
+    if process.exitcode != 0:
+        try:
+            _alert_if_stale()
+        # A failed child has no reusable session, so check from the parent.
+        except Exception as e:  # ruff:ignore[blind-except]
+            logger.exception(f"Error checking stale data: {e}")
 
 
-def _alert_if_stale() -> None:
+def _alert_if_stale(session: Session | None = None) -> None:
     """
     Page once per incident when the newest data is older than the threshold.
 
@@ -110,9 +111,12 @@ def _alert_if_stale() -> None:
     breaches the threshold and alerts, so nothing has to distinguish
     "slow" from "broken" at run time.
     """
+    owns_session = session is None
+    if owns_session:
+        engine = create_db()
+        session = sessionmaker(bind=engine)()
+    logger.info("Checking data freshness")
     settings = Settings()
-    engine = create_db()
-    session = sessionmaker(bind=engine)()
     try:
         for image_type in ("images", "timeseries", "pfss"):
             record = get_latest_record(session, image_type)
@@ -129,9 +133,11 @@ def _alert_if_stale() -> None:
             # Static message so Sentry groups every occurrence into one issue
             # and alerts once per incident, not once per run.
             sentry_sdk.capture_message(f"SunToday {image_type} data is stale", level="error")
+        logger.info("Data freshness check completed")
     finally:
-        session.close()
-        engine.dispose()
+        if owns_session:
+            session.close()
+            engine.dispose()
 
 
 def _build_args() -> argparse.ArgumentParser:
@@ -394,6 +400,12 @@ def _run_job(
             else:
                 write_or_update_record(session, image_type, str(requested_time.date()), updated_at=str(requested_time))
     finally:
+        if session is not None:
+            try:
+                _alert_if_stale(session)
+            # Staleness reporting must not be able to stop the job.
+            except Exception as e:  # ruff:ignore[blind-except]
+                logger.exception(f"Error checking stale data: {e}")
         if session is not None:
             session.close()
         engine.dispose()

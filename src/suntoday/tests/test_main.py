@@ -178,10 +178,20 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     assert not any("_child_job_not_ready exited" in message for message in messages)
 
 
-def test_run_job_in_subprocess_ignores_staleness_alert_failure(mocker) -> None:
-    mocker.patch("suntoday.main._alert_if_stale", side_effect=RuntimeError("database unavailable"))
+def test_run_job_in_subprocess_leaves_staleness_to_child(mocker) -> None:
+    alert = mocker.patch("suntoday.main._alert_if_stale")
 
     _run_job_in_subprocess(_child_job_ok)
+
+    alert.assert_not_called()
+
+
+def test_run_job_in_subprocess_checks_staleness_after_child_failure(mocker) -> None:
+    alert = mocker.patch("suntoday.main._alert_if_stale")
+
+    _run_job_in_subprocess(_child_job_fails)
+
+    alert.assert_called_once_with()
 
 
 def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
@@ -199,6 +209,18 @@ def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
         mocker.call("SunToday timeseries data is stale", level="error"),
         mocker.call("SunToday pfss data is stale", level="error"),
     ]
+
+
+def test_alert_if_stale_reuses_job_session(mocker) -> None:
+    session = mocker.Mock()
+    create_db = mocker.patch("suntoday.main.create_db")
+    fresh = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=1))
+    mocker.patch("suntoday.main.get_latest_record", side_effect=[fresh, fresh, fresh])
+
+    _alert_if_stale(session)
+
+    create_db.assert_not_called()
+    session.close.assert_not_called()
 
 
 def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mocker) -> None:
