@@ -79,6 +79,23 @@ def test_cli_date_formats(value, expected, mocker) -> None:
     )
 
 
+def test_cli_data_not_ready_logs_below_sentry_threshold(mocker) -> None:
+    mocker.patch("sys.argv", ["suntoday", "--date", "2026-07-29"])
+    mocker.patch("suntoday.main.main_job", side_effect=DataNotReadyError("JSOC still exporting"))
+    records = []
+    sink_id = logger.add(lambda message: records.append(message.record), level="WARNING")
+    try:
+        with pytest.raises(SystemExit) as exc_info:
+            cli()
+    finally:
+        logger.remove(sink_id)
+
+    assert exc_info.value.code != 0
+    assert records[-1]["message"] == "Data not ready: JSOC still exporting"
+    # Sentry only makes events of ERROR and above; this path must stay quieter.
+    assert all(record["level"].name == "WARNING" for record in records)
+
+
 @pytest.mark.parametrize("with_pfss", [False, True])
 def test_cli_force_wires_through_to_jobs(with_pfss, mocker) -> None:
     argv = ["suntoday", "--date", "2026-02-04", "--force"]
@@ -126,6 +143,11 @@ def _child_job_fails() -> None:
     raise SystemExit(3)
 
 
+def _child_job_raises() -> None:
+    msg = "database connection failed"
+    raise RuntimeError(msg)
+
+
 def _child_job_not_ready() -> None:
     msg = "JSOC still exporting"
     raise DataNotReadyError(msg)
@@ -138,12 +160,19 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     try:
         # A dying child must not raise in the scheduler process, only log.
         _run_job_in_subprocess(_child_job_fails)
+        _run_job_in_subprocess(_child_job_raises)
         _run_job_in_subprocess(_child_job_ok)
         # Data-not-ready is a warning-level skip, never an error.
         _run_job_in_subprocess(_child_job_not_ready)
     finally:
         logger.remove(sink_id)
     assert any("_child_job_fails exited with code 3" in message for message in messages)
+    assert any(
+        "_child_job_raises exited with code 1" in message
+        and "Child traceback" in message
+        and "RuntimeError: database connection failed" in message
+        for message in messages
+    )
     assert not any("_child_job_ok" in message for message in messages)
     assert any("_child_job_not_ready skipped: data not ready" in message for message in messages)
     assert not any("_child_job_not_ready exited" in message for message in messages)

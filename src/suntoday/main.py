@@ -6,12 +6,14 @@ as the scheduled jobs for creating JPEG images and timeseries data.
 """
 
 import argparse
+import contextlib
 import datetime
 import functools
 import multiprocessing
 import os
 import tempfile
 import time
+import traceback
 from pathlib import Path
 
 import schedule
@@ -36,7 +38,7 @@ if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     )
 
 
-def _job_entrypoint(job_func) -> None:
+def _job_entrypoint(job_func, error_connection) -> None:
     """
     Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
     instead of crashing, so it never reaches Sentry; the staleness alert pages
@@ -52,6 +54,12 @@ def _job_entrypoint(job_func) -> None:
     except DataNotReadyError as e:
         logger.warning(f"Job {job_func.__name__} skipped, data not ready: {e}")
         raise SystemExit(os.EX_TEMPFAIL) from None
+    except Exception:
+        with contextlib.suppress(OSError):
+            error_connection.send(traceback.format_exc())
+        raise
+    finally:
+        error_connection.close()
 
 
 def _run_job_in_subprocess(job_func) -> None:
@@ -62,23 +70,30 @@ def _run_job_in_subprocess(job_func) -> None:
     jobs in the scheduler process ratchets its RSS up to the job peak
     forever; a child process hands the memory back when it exits. A
     dying job (OOM kill, segfault) also cannot take the scheduler loop
-    down.
+    down. Tracebacks from ordinary child exceptions are sent back over a
+    pipe so the parent can include them in the scheduled-job log.
     """
+    context = multiprocessing.get_context("spawn")
+    parent_connection, child_connection = context.Pipe(duplex=False)
     try:
-        process = multiprocessing.get_context("spawn").Process(
-            target=_job_entrypoint, args=(job_func,), name=job_func.__name__
-        )
+        process = context.Process(target=_job_entrypoint, args=(job_func, child_connection), name=job_func.__name__)
         process.start()
         process.join()
+        child_traceback = parent_connection.recv() if parent_connection.poll() else None
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
     except Exception as e:  # ruff:ignore[blind-except]
         logger.exception(f"Error occurred running job {job_func.__name__}: {e}")
         return
+    finally:
+        child_connection.close()
+        parent_connection.close()
+
     if process.exitcode == os.EX_TEMPFAIL:
         logger.warning(f"Job {job_func.__name__} skipped: data not ready")
     elif process.exitcode != 0:
-        logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}")
+        suffix = f"\nChild traceback:\n{child_traceback.rstrip()}" if child_traceback else ""
+        logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}{suffix}")
     try:
         _alert_if_stale()
     # Staleness reporting must not be able to stop the scheduler.
@@ -200,7 +215,7 @@ def cli() -> None:
         # A one-off backfill of a time the archives have no data for is not
         # a bug worth a Sentry event; report it on the exit code instead.
         except DataNotReadyError as e:
-            logger.error(f"Data not ready: {e}")
+            logger.warning(f"Data not ready: {e}")
             raise SystemExit(os.EX_TEMPFAIL) from None
     return
 

@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 
@@ -121,6 +122,27 @@ def test_fetch_aia_fits_uses_three_minute_window(mocker, tmp_path) -> None:
     fetch_aia_fits(requested_time, save_directory=tmp_path)
 
     get_aia_urls.assert_called_once_with(requested_time, time_span="180s")
+
+
+def test_fetch_aia_fits_reports_parfive_error_details(mocker, tmp_path) -> None:
+    get_aia_urls = mocker.patch("suntoday.downloaders.jsoc.get_aia_urls")
+    get_aia_urls.return_value.iterrows.return_value = []
+    downloader = mocker.patch("suntoday.downloaders.jsoc.create_downloader").return_value
+    partial_path = tmp_path / "image.fits.part"
+    downloader.download.return_value.errors = [
+        SimpleNamespace(
+            filepath_partial=str(partial_path),
+            url="http://example.test/image.fits",
+            exception=TimeoutError("download timed out"),
+        )
+    ]
+
+    with pytest.raises(OSError, match="download timed out") as exc_info:
+        fetch_aia_fits(datetime(2026, 7, 15, 12, 0, tzinfo=UTC), save_directory=tmp_path)
+
+    message = str(exc_info.value)
+    assert "http://example.test/image.fits" in message
+    assert str(partial_path) in message
 
 
 @pytest.mark.remote_data

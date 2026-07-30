@@ -19,7 +19,7 @@ from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.adapt import find_latest_adapt_time
-from suntoday.downloaders.downloader import create_downloader
+from suntoday.downloaders.downloader import create_downloader, format_download_errors
 
 __all__ = [
     "fetch_aia_fits",
@@ -375,7 +375,7 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_di
         )
     files = downloader.download()
     if files.errors:
-        msg = f"Failed to download {files.errors}."
+        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
         raise OSError(msg)
     return files
 
@@ -412,6 +412,6 @@ def fetch_hmi_fits(requested_time: datetime, save_directory: Path) -> Results:
         )
     files = downloader.download()
     if files.errors:
-        msg = f"Failed to download {files.errors}."
+        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
         raise OSError(msg)
     return files

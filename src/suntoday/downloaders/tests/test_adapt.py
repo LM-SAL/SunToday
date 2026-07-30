@@ -1,4 +1,5 @@
 from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
 
 import pytest
 from astropy.time import Time
@@ -27,10 +28,18 @@ def test_find_latest_adapt_time_online() -> None:
 
 def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:
     mocker.patch.object(adapt, "_nearest_adapt_row", return_value={"Start Time": Time("2026-07-20T12:00:00")})
-    mocker.patch.object(adapt.Fido, "fetch", return_value=mocker.Mock(errors=["connection reset"]))
+    partial_path = tmp_path / "adapt.fts.gz.part"
+    error = SimpleNamespace(
+        filepath_partial=str(partial_path),
+        url="http://example.test/adapt.fts.gz",
+        exception=ConnectionError("connection reset"),
+    )
+    mocker.patch.object(adapt.Fido, "fetch", return_value=mocker.Mock(errors=[error]))
 
-    with pytest.raises(OSError, match="Failed to download"):
+    with pytest.raises(OSError, match="connection reset") as exc_info:
         fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=tmp_path)
+    assert "http://example.test/adapt.fts.gz" in str(exc_info.value)
+    assert str(partial_path) in str(exc_info.value)
 
 
 def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:
