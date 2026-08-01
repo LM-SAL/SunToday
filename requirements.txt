@@ -1,21 +1,21 @@
 aiapy==0.12.1
-astropy==8.0.0
-boto3==1.43.47
-fsspec==2026.6.0
+astropy==8.0.1
+boto3==1.43.58
+fsspec==2026.7.0
 loguru==0.7.3
 # Bug with matplotlib 3.11.0 and mplcairo
-matplotlib~=3.10.9,!=3.11.0
+matplotlib~=3.11.1
 # This is max Python 3.13 at the moment
 mplcairo==0.6.1
-numpy==2.5.0
-pandas==3.0.3
+numpy==2.5.1
+pandas==3.0.5
 pillow==12.3.0
 psycopg2-binary==2.9.12
 pydantic-settings==2.14.2
 pydantic==2.13.4
 requests==2.34.2
 schedule==1.2.2
-sentry-sdk==2.64.0
+sentry-sdk==2.66.1
 sqlalchemy-utils==0.42.1
 sqlalchemy==2.0.51
 sunkit-magex==1.1.0
