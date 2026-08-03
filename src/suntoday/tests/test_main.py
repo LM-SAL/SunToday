@@ -198,7 +198,7 @@ def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
     mocker.patch("suntoday.main.create_db")
     mocker.patch("suntoday.main.sessionmaker")
     fresh = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=1))
-    stale = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=7))
+    stale = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=26))
     # images fresh, timeseries stale, pfss has no record at all.
     mocker.patch("suntoday.main.get_latest_record", side_effect=[fresh, stale, None])
     capture = mocker.patch("suntoday.main.sentry_sdk.capture_message")
