@@ -50,8 +50,8 @@ class Settings(BaseSettings):
     sdo_fig_name_small: str = "l{}.jpg"
     sdo_fig_name_thumb: str = "t{}.jpg"
     # Sentry pages when the newest record of any image type is older than
-    # this; transient JSOC/ADAPT lag below it stays a per-run warning.
-    stale_alert_hours: float = 6
+    # this; transient ADAPT lag below it stays a per-run warning.
+    stale_alert_hours: float = 24
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
     # 4:5 matches the legacy 1024x1280 plot, so the page layout is unchanged.
