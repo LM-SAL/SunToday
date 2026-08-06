@@ -49,64 +49,40 @@ The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_F
 
 ## Setup
 
-- Provision the EC2 instance.
-- Install Docker, the NFS client, and the Docker Compose plugin.
+- Provision the EC2 instance (t2.medium, Amazon Linux 2023).
+- Install git, clone the repository, and run the provisioning script:
 
 ```bash
-sudo yum update -y
-sudo yum install -y docker nfs-utils
-sudo systemctl start docker
-sudo systemctl enable docker
-sudo usermod -aG docker "$USER"
-sudo mkdir -p /usr/libexec/docker/cli-plugins
-BUILDX_VERSION=$(curl -s https://api.github.com/repos/docker/buildx/releases/latest | grep -oP '"tag_name": "\K[^"]+') sudo curl -Lo /usr/libexec/docker/cli-plugins/docker-buildx "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64"
-sudo chmod +x /usr/libexec/docker/cli-plugins/docker-buildx
-sudo curl -SL https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m) -o /usr/libexec/docker/cli-plugins/docker-compose
-sudo chmod +x /usr/libexec/docker/cli-plugins/docker-compose
-docker compose version
+sudo dnf install -y git
+git clone https://github.com/LM-SAL/SunToday.git
+cd SunToday
+sudo ./tools/setup_ec2.sh
 ```
 
-Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
+The script installs Docker, the buildx and compose CLI plugins, and the NFS client; adds you to the `docker` group; mounts the image share at `/opt/SunInTime` via `/etc/fstab`; and sets the `virt_use_nfs` SELinux boolean (AL2023 runs SELinux in permissive mode by default; the boolean keeps NFS writable if enforcing mode is ever enabled). It is safe to re-run. Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
 
 - Copy the relevant environment file to `.env` and update its values.
 - Set `HOST_UID`/`HOST_GID` in `.env` to a uid/gid that can write to the NFS share (e.g. `id -u ec2-user`); the default is 500, which owns the legacy date directories on the share.
 - Set `SUNTODAY_HOST_SAVE_DIRECTORY` to the host output directory; it defaults to `./images`. Compose mounts it at the fixed container path `/app/images`.
 - To upload generated files after each job, set `SUNTODAY_S3_BUCKET` (optionally including a key prefix, e.g. `s3://suntoday.lmsal.com/sdomedia/SunInTime`) plus `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` in `.env`. If temporary credentials are used, also set `AWS_SESSION_TOKEN`. Leave `SUNTODAY_S3_BUCKET` unset to skip uploads. Static keys are used for now; an EC2 IAM role can replace them later.
-- Configure the NFS drive to mount automatically at `/opt/SunInTime`. Add this line to `/etc/fstab`:
-
-```text
-nfs.aws.lmsal.com:/mnt/SunInTime /opt/SunInTime nfs defaults,_netdev 0 0
-```
-
-Then create and verify the mount:
-
-```bash
-sudo mkdir -p /opt/SunInTime
-sudo mount -a
-mountpoint /opt/SunInTime
-```
 
 Ensure the NFS export permissions allow the container to write. Changing permissions before mounting only changes the hidden local mount point.
 
-On SELinux-enabled systems, Compose uses `:Z` for local bind mounts. NFS also requires the appropriate host policy:
-
-```bash
-sudo setsebool -P virt_use_nfs 1
-```
-
 PostgreSQL uses a Docker-managed local volume; no host database directory or permission setup is required.
-An Adminer database browser is published on port 1234 (System: PostgreSQL, Server: db, User: suntoday_user, Database: suntoday, no password); the Postgres port itself is never exposed.
+The Postgres port is never exposed; the app reaches the DB over the internal compose network.
 
-- Build the images.
+- Build and start the containers:
 
 ```bash
-docker compose build
+docker compose up -d --build
 ```
 
-- Start the containers.
+### Updating
 
 ```bash
-docker compose up
+git pull
+docker compose up -d --build --remove-orphans
+docker image prune -f  # reclaim space from superseded build layers
 ```
 
 ### Database backup
