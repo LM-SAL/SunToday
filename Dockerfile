@@ -41,6 +41,9 @@ ENV PATH="/opt/venv/bin:${PATH}"
 RUN mkdir -p /app/images
 WORKDIR /app
 
+# Line-buffered logs so `docker logs` shows scheduler output in real time.
+ENV PYTHONUNBUFFERED=1
+
 # Fail a stalled JSOC/GOES download after 100 s instead of hanging the job
 # on aiohttp's defaults.
 ENV PARFIVE_TOTAL_TIMEOUT=100
