@@ -1,6 +1,14 @@
 services:
   suntoday:
     restart: always
+    # tini as PID 1: python has no signal handler, so `stop` is instant
+    # instead of a 10 s SIGKILL.
+    init: true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     # The save directory is an NFS share that squashes root, so the container
     # must run as a non-root uid that can write there. Set HOST_UID/HOST_GID in
     # .env per host (e.g. `id -u ec2-user` on the VM, `id -u` locally); the
@@ -16,7 +24,6 @@ services:
       context: ./
       dockerfile: Dockerfile
     volumes:
-      # This should be changed to point towards the final location for the images on the VM
       # The left side is the host path, the right side is the container path
       - ${SUNTODAY_HOST_SAVE_DIRECTORY:-./images}:/app/images:Z
     depends_on:
@@ -26,6 +33,11 @@ services:
   db:
     image: postgres:18.1
     restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     environment:
       POSTGRES_HOST_AUTH_METHOD: trust
       POSTGRES_USER: suntoday_user
@@ -39,20 +51,8 @@ services:
       start_period: 10s
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # No host port published: the app and adminer reach the DB over the internal
+    # No host port published: the app reaches the DB over the internal
     # compose network, so the raw trust-auth Postgres port is never exposed.
-
-  # DB browser. Reaches the DB internally (System: PostgreSQL, Server: db,
-  # User: suntoday_user, Database: suntoday, no password). Only its web UI is
-  # published, not the Postgres port.
-  adminer:
-    image: adminer
-    restart: always
-    depends_on:
-      db:
-        condition: service_healthy
-    ports:
-      - 1234:8080
 
 volumes:
   pgdata:
