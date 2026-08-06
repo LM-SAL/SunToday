@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Provision an Amazon Linux 2023 EC2 instance to run SunToday.
-# Usage: sudo ./tools/setup_ec2.sh
+# Usage: sudo [NFS_EXPORT=server:/path] ./tools/setup_ec2.sh
 # Safe to re-run.
 set -euo pipefail
 
@@ -18,24 +18,40 @@ systemctl is-enabled docker containerd
 DOCKER_USER="${SUDO_USER:-ec2-user}"
 usermod -aG docker "$DOCKER_USER"
 
-# AL2023's docker package ships no buildx/compose CLI plugins; fetch them.
+# AL2023's docker package ships no buildx/compose CLI plugins. Keep these
+# versions and SHA-256 digests pinned; update both from the upstream releases.
 PLUGIN_DIR=/usr/libexec/docker/cli-plugins
 mkdir -p "$PLUGIN_DIR"
+BUILDX_VERSION=v0.36.1
+BUILDX_SHA256=48af8a397ebd60178778bf63611dbcebe5f5e7a9be90eb9147b24b9587455778
+COMPOSE_VERSION=v5.4.0
+COMPOSE_SHA256=837fd1d35bf6a494f41b5b5988269a7be79de337cf1a1a6ff0e45ab51bb4e9be
 
-# buildx release assets are named linux-amd64; the target t2.medium is x86_64.
-BUILDX_VERSION=$(curl -fsSL https://api.github.com/repos/docker/buildx/releases/latest \
-    | grep -oP '"tag_name": "\K[^"]+')
-curl -fsSL -o "$PLUGIN_DIR/docker-buildx" \
-    "https://github.com/docker/buildx/releases/download/${BUILDX_VERSION}/buildx-${BUILDX_VERSION}.linux-amd64"
-curl -fsSL -o "$PLUGIN_DIR/docker-compose" \
-    "https://github.com/docker/compose/releases/latest/download/docker-compose-linux-$(uname -m)"
-chmod +x "$PLUGIN_DIR/docker-buildx" "$PLUGIN_DIR/docker-compose"
+if [ "$(uname -m)" != "x86_64" ]; then
+    echo "Unsupported architecture: $(uname -m); this host must be x86_64" >&2
+    exit 1
+fi
+
+install_plugin() {
+    local repo="$1" version="$2" asset="$3" destination="$4" checksum="$5" download
+    download="${destination}.download"
+    curl -fsSL -o "$download" "https://github.com/docker/${repo}/releases/download/${version}/${asset}"
+    printf '%s  %s\n' "$checksum" "$download" | sha256sum -c -
+    install -m 0755 "$download" "$destination"
+    rm -f "$download"
+}
+
+install_plugin buildx "$BUILDX_VERSION" "buildx-${BUILDX_VERSION}.linux-amd64" \
+    "$PLUGIN_DIR/docker-buildx" "$BUILDX_SHA256"
+install_plugin compose "$COMPOSE_VERSION" "docker-compose-linux-x86_64" \
+    "$PLUGIN_DIR/docker-compose" "$COMPOSE_SHA256"
 docker buildx version
 docker compose version
 
 # Mount the NFS image share now and at every boot.
+NFS_EXPORT="${NFS_EXPORT:-nfs.aws.lmsal.com:/mnt/SunInTime}"
 if ! grep -q '/opt/SunInTime' /etc/fstab; then
-    echo 'nfs.aws.lmsal.com:/mnt/SunInTime /opt/SunInTime nfs defaults,_netdev 0 0' >> /etc/fstab
+    echo "$NFS_EXPORT /opt/SunInTime nfs defaults,_netdev 0 0" >> /etc/fstab
 fi
 mkdir -p /opt/SunInTime
 mount -a

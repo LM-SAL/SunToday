@@ -60,7 +60,7 @@ cd SunToday
 sudo ./tools/setup_ec2.sh
 ```
 
-The script installs Docker, the buildx and compose CLI plugins, and the NFS client; adds you to the `docker` group; mounts the image share at `/opt/SunInTime` via `/etc/fstab`; and sets the `virt_use_nfs` SELinux boolean (AL2023 runs SELinux in permissive mode by default; the boolean keeps NFS writable if enforcing mode is ever enabled). It is safe to re-run. Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
+The script installs Docker, pinned and checksum-verified buildx and compose CLI plugins, and the NFS client; adds you to the `docker` group; mounts the image share at `/opt/SunInTime` via `/etc/fstab`; and sets the `virt_use_nfs` SELinux boolean (AL2023 runs SELinux in permissive mode by default; the boolean keeps NFS writable if enforcing mode is ever enabled). Override the default export on a new host with `sudo NFS_EXPORT=server:/path ./tools/setup_ec2.sh`. It is safe to re-run. Log out and back in, or run `newgrp docker`, before running Docker without `sudo`.
 
 - Copy the relevant environment file to `.env` and update its values.
 - Set `HOST_UID`/`HOST_GID` in `.env` to a uid/gid that can write to the NFS share (e.g. `id -u ec2-user`); the default is 500, which owns the legacy date directories on the share.
