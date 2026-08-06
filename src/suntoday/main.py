@@ -501,12 +501,14 @@ def scheduled() -> None:
     settings = Settings()
     scheduled_job = functools.partial(_run_job_in_subprocess, main_job, ("images", "timeseries"))
     scheduled_pfss = functools.partial(_run_job_in_subprocess, pfss_job, ("pfss",))
-    logger.info(f"Starting main job with cron frequency: {settings.cron_frequency} minutes")
+    logger.info(
+        f"Starting jobs with cron frequency: {settings.cron_frequency} minutes "
+        f"(pfss: {settings.pfss_cron_frequency} minutes)"
+    )
     schedule.every(settings.cron_frequency).minutes.do(scheduled_job)
-    schedule.every(settings.cron_frequency).minutes.do(scheduled_pfss)
+    schedule.every(settings.pfss_cron_frequency).minutes.do(scheduled_pfss)
     logger.info("Running first job immediately")
     scheduled_job()
-    scheduled_pfss()
     logger.info(f"Next job in {schedule.idle_seconds()} seconds")
     while True:
         schedule.run_pending()

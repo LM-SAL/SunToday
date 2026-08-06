@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         extra="forbid",
     )
     cron_frequency: int = 10  # minutes
+    # ADAPT publishes every 2 h
+    pfss_cron_frequency: int = 90  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_port: int = 5432

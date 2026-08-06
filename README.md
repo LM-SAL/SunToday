@@ -46,6 +46,7 @@ Future movie support will need to produce the following:
 This is set up to run in a Docker container.
 Mount points are configured by `docker-compose.yml`.
 The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
+The PFSS job runs on its own cadence, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90), since ADAPT only publishes a new map every 2 hours.
 
 ## Setup
 
