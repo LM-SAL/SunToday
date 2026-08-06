@@ -35,6 +35,8 @@ if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
         ignore_errors=[DataNotReadyError],
+        server_name="suntoday",
+        environment="production",
     )
 
 
@@ -55,6 +57,10 @@ def _job_entrypoint(job_func, error_connection) -> None:
         logger.warning(f"Job {job_func.__name__} skipped, data not ready: {e}")
         raise SystemExit(os.EX_TEMPFAIL) from None
     except Exception:
+        # multiprocessing catches the re-raise before sys.excepthook fires,
+        # so Sentry only sees the exception if captured here.
+        sentry_sdk.capture_exception()
+        sentry_sdk.flush()
         with contextlib.suppress(OSError):
             error_connection.send(traceback.format_exc())
         raise
@@ -62,7 +68,7 @@ def _job_entrypoint(job_func, error_connection) -> None:
         error_connection.close()
 
 
-def _run_job_in_subprocess(job_func) -> None:
+def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     """
     Run a scheduled job in a fresh spawned process.
 
@@ -93,16 +99,23 @@ def _run_job_in_subprocess(job_func) -> None:
         logger.warning(f"Job {job_func.__name__} skipped: data not ready")
     elif process.exitcode != 0:
         suffix = f"\nChild traceback:\n{child_traceback.rstrip()}" if child_traceback else ""
-        logger.error(f"Job {job_func.__name__} exited with code {process.exitcode}{suffix}")
+        # A received traceback means the child already sent the exception to
+        # Sentry; error level (a Sentry event) is reserved for abnormal deaths
+        # (OOM kill, segfault) that would otherwise go unreported.
+        log = logger.warning if child_traceback else logger.error
+        log(f"Job {job_func.__name__} exited with code {process.exitcode}{suffix}")
     if process.exitcode != 0:
         try:
-            _alert_if_stale()
+            _alert_if_stale(image_types=image_types)
         # A failed child has no reusable session, so check from the parent.
         except Exception as e:  # ruff:ignore[blind-except]
             logger.exception(f"Error checking stale data: {e}")
 
 
-def _alert_if_stale(session: Session | None = None) -> None:
+def _alert_if_stale(
+    session: Session | None = None,
+    image_types: list[str] | tuple[str, ...] = ("images", "timeseries", "pfss"),
+) -> None:
     """
     Page once per incident when the newest data is older than the threshold.
 
@@ -118,7 +131,7 @@ def _alert_if_stale(session: Session | None = None) -> None:
     logger.info("Checking data freshness")
     settings = Settings()
     try:
-        for image_type in ("images", "timeseries", "pfss"):
+        for image_type in image_types:
             record = get_latest_record(session, image_type)
             updated_at = record.updated_at if record is not None else None
             if updated_at is not None and updated_at.tzinfo is None:
@@ -127,9 +140,12 @@ def _alert_if_stale(session: Session | None = None) -> None:
                 age = datetime.datetime.now(datetime.UTC) - updated_at
                 if age <= datetime.timedelta(hours=settings.stale_alert_hours):
                     continue
-                logger.error(f"Stale data: newest {image_type} record is {age.total_seconds() / 3600:.1f}h old")
+                # Warning, not error: an error would be its own Sentry event
+                # with a different message every run; the static
+                # capture_message below is the single paging channel.
+                logger.warning(f"Stale data: newest {image_type} record is {age.total_seconds() / 3600:.1f}h old")
             else:
-                logger.error(f"Stale data: no {image_type} record exists")
+                logger.warning(f"Stale data: no {image_type} record exists")
             # Static message so Sentry groups every occurrence into one issue
             # and alerts once per incident, not once per run.
             sentry_sdk.capture_message(f"SunToday {image_type} data is stale", level="error")
@@ -402,7 +418,7 @@ def _run_job(
     finally:
         if session is not None:
             try:
-                _alert_if_stale(session)
+                _alert_if_stale(session, image_types)
             # Staleness reporting must not be able to stop the job.
             except Exception as e:  # ruff:ignore[blind-except]
                 logger.exception(f"Error checking stale data: {e}")
@@ -483,8 +499,8 @@ def scheduled() -> None:
     Main function to start the scheduled job.
     """
     settings = Settings()
-    scheduled_job = functools.partial(_run_job_in_subprocess, main_job)
-    scheduled_pfss = functools.partial(_run_job_in_subprocess, pfss_job)
+    scheduled_job = functools.partial(_run_job_in_subprocess, main_job, ("images", "timeseries"))
+    scheduled_pfss = functools.partial(_run_job_in_subprocess, pfss_job, ("pfss",))
     logger.info(f"Starting main job with cron frequency: {settings.cron_frequency} minutes")
     schedule.every(settings.cron_frequency).minutes.do(scheduled_job)
     schedule.every(settings.cron_frequency).minutes.do(scheduled_pfss)

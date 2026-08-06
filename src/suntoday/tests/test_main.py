@@ -159,11 +159,11 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     sink_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
     try:
         # A dying child must not raise in the scheduler process, only log.
-        _run_job_in_subprocess(_child_job_fails)
-        _run_job_in_subprocess(_child_job_raises)
-        _run_job_in_subprocess(_child_job_ok)
+        _run_job_in_subprocess(_child_job_fails, ("images",))
+        _run_job_in_subprocess(_child_job_raises, ("images",))
+        _run_job_in_subprocess(_child_job_ok, ("images",))
         # Data-not-ready is a warning-level skip, never an error.
-        _run_job_in_subprocess(_child_job_not_ready)
+        _run_job_in_subprocess(_child_job_not_ready, ("images",))
     finally:
         logger.remove(sink_id)
     assert any("_child_job_fails exited with code 3" in message for message in messages)
@@ -181,7 +181,7 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
 def test_run_job_in_subprocess_leaves_staleness_to_child(mocker) -> None:
     alert = mocker.patch("suntoday.main._alert_if_stale")
 
-    _run_job_in_subprocess(_child_job_ok)
+    _run_job_in_subprocess(_child_job_ok, ("images",))
 
     alert.assert_not_called()
 
@@ -189,9 +189,9 @@ def test_run_job_in_subprocess_leaves_staleness_to_child(mocker) -> None:
 def test_run_job_in_subprocess_checks_staleness_after_child_failure(mocker) -> None:
     alert = mocker.patch("suntoday.main._alert_if_stale")
 
-    _run_job_in_subprocess(_child_job_fails)
+    _run_job_in_subprocess(_child_job_fails, ("images",))
 
-    alert.assert_called_once_with()
+    alert.assert_called_once_with(image_types=("images",))
 
 
 def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
@@ -215,11 +215,12 @@ def test_alert_if_stale_reuses_job_session(mocker) -> None:
     session = mocker.Mock()
     create_db = mocker.patch("suntoday.main.create_db")
     fresh = mocker.Mock(updated_at=datetime.now(UTC) - timedelta(hours=1))
-    mocker.patch("suntoday.main.get_latest_record", side_effect=[fresh, fresh, fresh])
+    get_latest = mocker.patch("suntoday.main.get_latest_record", return_value=fresh)
 
-    _alert_if_stale(session)
+    _alert_if_stale(session, ("pfss",))
 
     create_db.assert_not_called()
+    get_latest.assert_called_once_with(session, "pfss")
     session.close.assert_not_called()
 
 
