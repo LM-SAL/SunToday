@@ -32,11 +32,12 @@ from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
 
 if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
+    settings = Settings()
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
         ignore_errors=[DataNotReadyError],
-        server_name="suntoday",
-        environment="production",
+        server_name=settings.sentry_server_name,
+        environment=settings.sentry_environment,
     )
 
 

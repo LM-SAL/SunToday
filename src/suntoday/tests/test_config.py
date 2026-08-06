@@ -25,6 +25,8 @@ def test_settings_no_env(monkeypatch) -> None:
 def test_settings_with_env(monkeypatch) -> None:
     monkeypatch.setenv("SUNTODAY_SAVE_DIRECTORY", "./YOLO")
     monkeypatch.setenv("SUNTODAY_JSOC_INFO_URL", "./VSO")
+    monkeypatch.setenv("SUNTODAY_SENTRY_ENVIRONMENT", "staging")
+    monkeypatch.setenv("SUNTODAY_SENTRY_SERVER_NAME", "suntoday-staging")
 
     from suntoday.config import Settings
 
@@ -32,14 +34,20 @@ def test_settings_with_env(monkeypatch) -> None:
     settings = Settings(_env_file=None)
     assert str(settings.save_directory) == str(Path("./YOLO"))
     assert settings.jsoc_info_url == "./VSO"
+    assert settings.sentry_environment == "staging"
+    assert settings.sentry_server_name == "suntoday-staging"
 
     monkeypatch.delenv("SUNTODAY_SAVE_DIRECTORY")
     monkeypatch.delenv("SUNTODAY_JSOC_INFO_URL")
+    monkeypatch.delenv("SUNTODAY_SENTRY_ENVIRONMENT")
+    monkeypatch.delenv("SUNTODAY_SENTRY_SERVER_NAME")
 
     # Test that the variables are back to normal
     settings = Settings(_env_file=None)
     assert str(settings.save_directory) == str(Path())
     assert settings.jsoc_info_url == "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
+    assert settings.sentry_environment == "production"
+    assert settings.sentry_server_name == "suntoday"
 
 
 def test_settings_allows_aws_dotenv_values(tmp_path) -> None:

@@ -51,6 +51,8 @@ class Settings(BaseSettings):
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"
     sdo_fig_name_thumb: str = "t{}.jpg"
+    sentry_environment: str = "production"
+    sentry_server_name: str = "suntoday"
     # Sentry pages when the newest record of any image type is older than
     # this; transient ADAPT lag below it stays a per-run warning.
     stale_alert_hours: float = 24
