@@ -1,4 +1,5 @@
 import os
+import sys
 
 import pandas as pd
 import pytest
@@ -12,6 +13,12 @@ from suntoday.data.test import find_test_filepath, get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"
+
+
+@pytest.fixture(autouse=True)
+def _fresh_adapt_search_cache():
+    if adapt := sys.modules.get("suntoday.downloaders.adapt"):
+        adapt._clear_search_cache()  # ruff:ignore[private-member-access]
 
 
 def latest_or_skip(find_latest):

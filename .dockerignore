@@ -1,6 +1,13 @@
 **/.*
 pgdata/
 images/
-src/suntoday/tests/
+**/tests/
 src/suntoday/data/test/
+**/conftest.py
 tools/
+figure_test_images/
+*.env
+*.log
+tox.ini
+pytest.ini
+ruff.toml

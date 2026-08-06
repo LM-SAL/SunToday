@@ -26,6 +26,8 @@ class Settings(BaseSettings):
         extra="forbid",
     )
     cron_frequency: int = 10  # minutes
+    # ADAPT publishes every 2 h
+    pfss_cron_frequency: int = 90  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
     db_port: int = 5432
@@ -49,6 +51,8 @@ class Settings(BaseSettings):
     sdo_fig_name_large: str = "f{}.jpg"
     sdo_fig_name_small: str = "l{}.jpg"
     sdo_fig_name_thumb: str = "t{}.jpg"
+    sentry_environment: str = "production"
+    sentry_server_name: str = "suntoday"
     # Sentry pages when the newest record of any image type is older than
     # this; transient ADAPT lag below it stays a per-run warning.
     stale_alert_hours: float = 24
