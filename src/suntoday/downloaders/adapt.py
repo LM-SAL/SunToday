@@ -24,15 +24,27 @@ _ADAPT_QUERY = (
     a.adapt.ADAPTFileType("4"),  # Public
     a.adapt.ADAPTLonType("0"),  # Carrington Fixed: full 0-360 longitude range
 )
+_NEAREST_WINDOW = timedelta(hours=4)
 
 
-def _adapt_rows(start: datetime, end: datetime):
+# Scheduled jobs run in fresh spawned processes, so one result is enough.
+_search_cache: dict[str, tuple[datetime, datetime, list[QueryResponseRow]]] = {}
+
+
+def _clear_search_cache() -> None:
+    _search_cache.clear()
+
+
+def _adapt_rows(start: datetime, end: datetime) -> list[QueryResponseRow]:
     """
     Query for the public GONG-input ADAPT maps in a time range.
 
+    Every search fetches NSO's full year listing regardless of the window,
+    so rows are reused when the requested window is inside a previous search.
+
     Returns
     -------
-    sunpy.net.base_client.QueryResponseTable
+    list[sunpy.net.base_client.QueryResponseRow]
         The matching rows, oldest first.
 
     Raises
@@ -40,11 +52,21 @@ def _adapt_rows(start: datetime, end: datetime):
     suntoday.DataNotReadyError
         If no map is found in the range.
     """
+    if "search" in _search_cache:
+        cached_start, cached_end, cached_rows = _search_cache["search"]
+        if start >= cached_start and end <= cached_end:
+            rows = [row for row in cached_rows if start <= _row_time(row) <= end]
+            if rows:
+                return rows
+            msg = f"No ADAPT map found between {start!r} and {end!r}."
+            raise DataNotReadyError(msg)
     result = Fido.search(a.Time(start, end), *_ADAPT_QUERY)
     if len(result) == 0 or len(result[0]) == 0:
         msg = f"No ADAPT map found between {start!r} and {end!r}."
         raise DataNotReadyError(msg)
-    return result[0]
+    rows = list(result[0])
+    _search_cache["search"] = (start, end, rows)
+    return rows
 
 
 def _row_time(row: QueryResponseRow) -> datetime:
@@ -57,17 +79,27 @@ def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -
 
     The window is a week, not hours: ADAPT generates a map every 2 hours
     but the public archive backfills with a publication lag that has been
-    observed to exceed 2 days.
+    observed to exceed 2 days. The search also covers the following nearest-map
+    window so the scheduled job can reuse the same NSO directory scrape.
 
     Returns
     -------
     QueryResponseRow
         The newest matching row.
+
+    Raises
+    ------
+    suntoday.DataNotReadyError
+        If no map is found at or before the requested time.
     """
-    return _adapt_rows(before - window, before)[-1]
+    rows = [row for row in _adapt_rows(before - window, before + _NEAREST_WINDOW) if _row_time(row) <= before]
+    if not rows:
+        msg = f"No ADAPT map found between {before - window!r} and {before!r}."
+        raise DataNotReadyError(msg)
+    return rows[-1]
 
 
-def _nearest_adapt_row(time: datetime, window: timedelta = timedelta(hours=4)) -> QueryResponseRow:
+def _nearest_adapt_row(time: datetime, window: timedelta = _NEAREST_WINDOW) -> QueryResponseRow:
     """
     The public GONG-input ADAPT map nearest to a time, either side.
 

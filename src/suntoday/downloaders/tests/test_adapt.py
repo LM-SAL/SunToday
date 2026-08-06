@@ -60,3 +60,26 @@ def test_nearest_adapt_row_raises_when_empty(mocker) -> None:
     mocker.patch.object(adapt.Fido, "search", return_value=[])
     with pytest.raises(DataNotReadyError, match="No ADAPT map found"):
         adapt._nearest_adapt_row(datetime(2026, 7, 20, 11, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
+
+
+def test_adapt_rows_reuses_first_search(mocker) -> None:
+    rows = [
+        {"Start Time": Time("2026-07-20T10:00:00")},
+        {"Start Time": Time("2026-07-20T12:00:00")},
+        {"Start Time": Time("2026-07-20T14:00:00")},
+    ]
+    search = mocker.patch.object(adapt.Fido, "search", return_value=[rows])
+    anchor = datetime(2026, 7, 20, 13, 50, tzinfo=UTC)
+
+    # The wide latest-style search scrapes once; the nearest-style windows
+    # inside it (including the download's) reuse that listing.
+    latest = adapt._latest_adapt_row(datetime(2026, 7, 20, 13, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
+    nearest = adapt._nearest_adapt_row(anchor)  # ruff:ignore[private-member-access]
+    adapt._nearest_adapt_row(anchor)  # ruff:ignore[private-member-access]
+    assert search.call_count == 1
+    assert latest["Start Time"] == Time("2026-07-20T12:00:00")
+    assert nearest["Start Time"] == Time("2026-07-20T14:00:00")
+
+    # A window outside the cached one forces a fresh search.
+    adapt._nearest_adapt_row(datetime(2026, 7, 10, 12, tzinfo=UTC))  # ruff:ignore[private-member-access]
+    assert search.call_count == 2
