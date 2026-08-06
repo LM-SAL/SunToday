@@ -1,5 +1,5 @@
 """
-Fido-based downloader for NSO ADAPT synchronic magnetograms.
+Downloader for NSO ADAPT synchronic magnetograms.
 
 ADAPT publishes a fresh full-Sun boundary map every 2 hours, built with
 an actual flux-transport model that evolves older/far-side data forward
@@ -7,44 +7,69 @@ to a common instant, rather than a JSOC-style time-composite that just
 freezes older longitude strips as they rotate out of view.
 """
 
-from datetime import UTC, datetime, timedelta
+import os
+import re
+import shutil
+from datetime import UTC, date, datetime, timedelta
+from http import HTTPStatus
+from operator import itemgetter
 from pathlib import Path
+from urllib.parse import urlencode
 
-from sunpy.net import Fido
-from sunpy.net import attrs as a
-from sunpy.net.base_client import QueryResponseRow
+import requests
 
 from suntoday import DataNotReadyError
-from suntoday.downloaders.downloader import format_download_errors
 
 __all__ = ["fetch_adapt_fits", "find_latest_adapt_time", "find_nearest_adapt_time"]
 
-_ADAPT_QUERY = (
-    a.Instrument("adapt"),
-    a.adapt.ADAPTFileType("4"),  # Public
-    a.adapt.ADAPTLonType("0"),  # Carrington Fixed: full 0-360 longitude range
-)
+_ADAPT_ROOT = "https://gong.nso.edu/adapt/maps/gong"
+_ADAPT_FILE = re.compile(r'href="(adapt40[^"/]*_(\d{12})_[^"/]*\.fts\.gz)"')
 _NEAREST_WINDOW = timedelta(hours=4)
+_TIMEOUT = 30
+_AdaptRow = tuple[datetime, str]
 
 
-# Scheduled jobs run in fresh spawned processes, so one result is enough.
-_search_cache: dict[str, tuple[datetime, datetime, list[QueryResponseRow]]] = {}
+# Scheduled jobs run in fresh spawned processes, so caching each month
+# listing for the process lifetime is enough.
+_month_cache: dict[date, list[_AdaptRow]] = {}
 
 
 def _clear_search_cache() -> None:
-    _search_cache.clear()
+    _month_cache.clear()
 
 
-def _adapt_rows(start: datetime, end: datetime) -> list[QueryResponseRow]:
+def _month_rows(month: date) -> list[_AdaptRow]:
+    """
+    All public GONG-input ADAPT maps in one month's directory listing.
+    """
+    if month not in _month_cache:
+        pattern = f"adapt40*_{month:%Y%m}*.fts.gz"
+        listing_url = f"{_ADAPT_ROOT}/{month.year}/?{urlencode({'P': pattern})}"
+        response = requests.get(listing_url, timeout=_TIMEOUT)
+        if response.status_code == HTTPStatus.NOT_FOUND:
+            # NSO creates year directories lazily, so a window crossing
+            # Jan 1 must treat the missing new year as empty, not an error.
+            listing = ""
+        else:
+            response.raise_for_status()
+            listing = response.text
+        _month_cache[month] = sorted(
+            (datetime.strptime(timestamp, "%Y%m%d%H%M").replace(tzinfo=UTC), f"{_ADAPT_ROOT}/{month.year}/{filename}")
+            for filename, timestamp in _ADAPT_FILE.findall(listing)
+        )
+    return _month_cache[month]
+
+
+def _adapt_rows(start: datetime, end: datetime) -> list[_AdaptRow]:
     """
     Query for the public GONG-input ADAPT maps in a time range.
 
-    Every search fetches NSO's full year listing regardless of the window,
-    so rows are reused when the requested window is inside a previous search.
+    Ask NSO's Apache index to return one month at a time; month listings are
+    cached so overlapping searches reuse them.
 
     Returns
     -------
-    list[sunpy.net.base_client.QueryResponseRow]
+    list[tuple[datetime.datetime, str]]
         The matching rows, oldest first.
 
     Raises
@@ -52,28 +77,24 @@ def _adapt_rows(start: datetime, end: datetime) -> list[QueryResponseRow]:
     suntoday.DataNotReadyError
         If no map is found in the range.
     """
-    if "search" in _search_cache:
-        cached_start, cached_end, cached_rows = _search_cache["search"]
-        if start >= cached_start and end <= cached_end:
-            rows = [row for row in cached_rows if start <= _row_time(row) <= end]
-            if rows:
-                return rows
-            msg = f"No ADAPT map found between {start!r} and {end!r}."
-            raise DataNotReadyError(msg)
-    result = Fido.search(a.Time(start, end), *_ADAPT_QUERY)
-    if len(result) == 0 or len(result[0]) == 0:
+    start = start.astimezone(UTC)
+    end = end.astimezone(UTC)
+    rows = []
+    month = start.date().replace(day=1)
+    last_month = end.date().replace(day=1)
+    while month <= last_month:
+        rows.extend(row for row in _month_rows(month) if start <= _row_time(row) <= end)
+        month = (month + timedelta(days=32)).replace(day=1)
+    if not rows:
         msg = f"No ADAPT map found between {start!r} and {end!r}."
         raise DataNotReadyError(msg)
-    rows = list(result[0])
-    _search_cache["search"] = (start, end, rows)
     return rows
 
 
-def _row_time(row: QueryResponseRow) -> datetime:
-    return row["Start Time"].to_datetime().replace(tzinfo=UTC)
+_row_time = itemgetter(0)
 
 
-def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -> QueryResponseRow:
+def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -> _AdaptRow:
     """
     The newest public GONG-input ADAPT map at or before a time.
 
@@ -84,7 +105,7 @@ def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -
 
     Returns
     -------
-    QueryResponseRow
+    tuple[datetime.datetime, str]
         The newest matching row.
 
     Raises
@@ -99,7 +120,7 @@ def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -
     return rows[-1]
 
 
-def _nearest_adapt_row(time: datetime, window: timedelta = _NEAREST_WINDOW) -> QueryResponseRow:
+def _nearest_adapt_row(time: datetime, window: timedelta = _NEAREST_WINDOW) -> _AdaptRow:
     """
     The public GONG-input ADAPT map nearest to a time, either side.
 
@@ -109,7 +130,7 @@ def _nearest_adapt_row(time: datetime, window: timedelta = _NEAREST_WINDOW) -> Q
 
     Returns
     -------
-    QueryResponseRow
+    tuple[datetime.datetime, str]
         The row whose start time is closest to ``time``.
     """
     return min(_adapt_rows(time - window, time + window), key=lambda row: abs(_row_time(row) - time))
@@ -137,13 +158,32 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
     Raises
     ------
     OSError
-        If parfive fails to download the file.
+        If the file cannot be downloaded.
     """
-    files = Fido.fetch(_nearest_adapt_row(requested_time), path=str(save_directory / "{file}"), max_splits=1)
-    if files.errors:
-        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
+    url = _nearest_adapt_row(requested_time)[1]
+    save_directory.mkdir(parents=True, exist_ok=True)
+    destination = save_directory / url.rsplit("/", 1)[-1]
+    if destination.exists():
+        return destination
+    # A pid-unique partial file keeps overlapping runs from interleaving
+    # writes; the atomic replace means the last finished download wins whole.
+    partial = destination.with_name(f"{destination.name}.{os.getpid()}.part")
+    try:
+        with requests.get(url, timeout=_TIMEOUT, stream=True) as response, partial.open("wb") as file:
+            response.raise_for_status()
+            shutil.copyfileobj(response.raw, file)
+    except Exception as error:
+        partial.unlink(missing_ok=True)
+        msg = f"Failed to download {url} to {partial}: {error}"
+        raise OSError(msg) from error
+    actual_size = partial.stat().st_size
+    expected_size = int(response.headers.get("Content-Length", 0))
+    if expected_size and actual_size != expected_size:
+        partial.unlink(missing_ok=True)
+        msg = f"Truncated download of {url}: got {actual_size} of {expected_size} bytes."
         raise OSError(msg)
-    return Path(files[0])
+    partial.replace(destination)
+    return destination
 
 
 def find_latest_adapt_time(before: datetime | None = None) -> datetime:

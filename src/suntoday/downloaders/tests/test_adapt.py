@@ -1,8 +1,8 @@
-from datetime import UTC, datetime, timedelta
-from types import SimpleNamespace
+import os
+from datetime import UTC, datetime, timedelta, timezone
+from io import BytesIO
 
 import pytest
-from astropy.time import Time
 
 from suntoday import DataNotReadyError
 from suntoday.conftest import latest_or_skip
@@ -10,76 +10,129 @@ from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 
+def _download_response(mocker, body: bytes, content_length: int):
+    response = mocker.MagicMock(raw=BytesIO(body), headers={"Content-Length": str(content_length)})
+    response.__enter__.return_value = response
+    return response
+
+
 @pytest.mark.remote_data
 def test_fetch_adapt_fits(tmp_path) -> None:
     latest = latest_or_skip(find_latest_adapt_time)
     file = fetch_adapt_fits(latest, save_directory=tmp_path)
     assert file.exists()
-
-
-@pytest.mark.remote_data
-def test_find_latest_adapt_time_online() -> None:
-    latest = latest_or_skip(find_latest_adapt_time)
-
     now = datetime.now(UTC)
     assert latest.tzinfo is not None
     assert now - timedelta(days=7) < latest < now
 
 
+def test_fetch_adapt_fits_downloads_and_caches(mocker, tmp_path) -> None:
+    url = "https://example.test/adapt.fts.gz"
+    mocker.patch.object(adapt, "_nearest_adapt_row", return_value=(datetime(2026, 7, 20, 12, tzinfo=UTC), url))
+    get = mocker.patch.object(adapt.requests, "get", return_value=_download_response(mocker, b"data", 4))
+    save_directory = tmp_path / "not-yet-created"
+
+    file = fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory)
+
+    assert file == save_directory / "adapt.fts.gz"
+    assert file.read_bytes() == b"data"
+    # A second call reuses the existing file without touching the network.
+    assert fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory) == file
+    assert get.call_count == 1
+
+
 def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:
-    mocker.patch.object(adapt, "_nearest_adapt_row", return_value={"Start Time": Time("2026-07-20T12:00:00")})
-    partial_path = tmp_path / "adapt.fts.gz.part"
-    error = SimpleNamespace(
-        filepath_partial=str(partial_path),
-        url="http://example.test/adapt.fts.gz",
-        exception=ConnectionError("connection reset"),
-    )
-    mocker.patch.object(adapt.Fido, "fetch", return_value=mocker.Mock(errors=[error]))
+    url = "https://example.test/adapt.fts.gz"
+    mocker.patch.object(adapt, "_nearest_adapt_row", return_value=(datetime(2026, 7, 20, 12, tzinfo=UTC), url))
+    mocker.patch.object(adapt.requests, "get", side_effect=ConnectionError("connection reset"))
 
     with pytest.raises(OSError, match="connection reset") as exc_info:
         fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=tmp_path)
-    assert "http://example.test/adapt.fts.gz" in str(exc_info.value)
-    assert str(partial_path) in str(exc_info.value)
+    assert url in str(exc_info.value)
+    assert f"adapt.fts.gz.{os.getpid()}.part" in str(exc_info.value)
+    assert list(tmp_path.iterdir()) == []
+
+
+def test_fetch_adapt_fits_rejects_truncated_download(mocker, tmp_path) -> None:
+    url = "https://example.test/adapt.fts.gz"
+    mocker.patch.object(adapt, "_nearest_adapt_row", return_value=(datetime(2026, 7, 20, 12, tzinfo=UTC), url))
+    mocker.patch.object(adapt.requests, "get", return_value=_download_response(mocker, b"data", 10))
+
+    with pytest.raises(OSError, match="got 4 of 10 bytes"):
+        fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=tmp_path)
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:
     # HMI-limited anchor at 11:59 with ADAPT epochs at 10:00 and 12:00:
     # only-before selection would pick the 2-hour-older map.
     rows = [
-        {"Start Time": Time("2026-07-20T10:00:00")},
-        {"Start Time": Time("2026-07-20T12:00:00")},
+        (datetime(2026, 7, 20, 10, tzinfo=UTC), "https://example.test/10.fts.gz"),
+        (datetime(2026, 7, 20, 12, tzinfo=UTC), "https://example.test/12.fts.gz"),
     ]
-    mocker.patch.object(adapt.Fido, "search", return_value=[rows])
+    mocker.patch.object(adapt, "_adapt_rows", return_value=rows)
 
     row = adapt._nearest_adapt_row(datetime(2026, 7, 20, 11, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
 
-    assert row["Start Time"] == Time("2026-07-20T12:00:00")
+    assert row == rows[1]
 
 
 def test_nearest_adapt_row_raises_when_empty(mocker) -> None:
-    mocker.patch.object(adapt.Fido, "search", return_value=[])
+    mocker.patch.object(adapt.requests, "get", return_value=mocker.Mock(status_code=200, text="<html></html>"))
     with pytest.raises(DataNotReadyError, match="No ADAPT map found"):
         adapt._nearest_adapt_row(datetime(2026, 7, 20, 11, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
 
 
 def test_adapt_rows_reuses_first_search(mocker) -> None:
-    rows = [
-        {"Start Time": Time("2026-07-20T10:00:00")},
-        {"Start Time": Time("2026-07-20T12:00:00")},
-        {"Start Time": Time("2026-07-20T14:00:00")},
-    ]
-    search = mocker.patch.object(adapt.Fido, "search", return_value=[rows])
+    listing = """<html>
+        <a href="adapt40311_044012_202607101200_i00005600n1.fts.gz">old</a>
+        <a href="adapt40311_044012_202607201000_i00005600n1.fts.gz">10</a>
+        <a href="adapt40311_044012_202607201200_i00005600n1.fts.gz">12</a>
+        <a href="adapt40311_044012_202607201400_i00005600n1.fts.gz">14</a>
+    </html>"""
+    search = mocker.patch.object(adapt.requests, "get", return_value=mocker.Mock(status_code=200, text=listing))
     anchor = datetime(2026, 7, 20, 13, 50, tzinfo=UTC)
 
-    # The wide latest-style search scrapes once; the nearest-style windows
-    # inside it (including the download's) reuse that listing.
+    # The wide latest-style search scrapes July once; every other window in
+    # the same month (including the download's) reuses that listing.
     latest = adapt._latest_adapt_row(datetime(2026, 7, 20, 13, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
     nearest = adapt._nearest_adapt_row(anchor)  # ruff:ignore[private-member-access]
     adapt._nearest_adapt_row(anchor)  # ruff:ignore[private-member-access]
-    assert search.call_count == 1
-    assert latest["Start Time"] == Time("2026-07-20T12:00:00")
-    assert nearest["Start Time"] == Time("2026-07-20T14:00:00")
-
-    # A window outside the cached one forces a fresh search.
     adapt._nearest_adapt_row(datetime(2026, 7, 10, 12, tzinfo=UTC))  # ruff:ignore[private-member-access]
+    assert search.call_count == 1
+    assert search.call_args.kwargs == {"timeout": 30}
+    assert "P=adapt40%2A_202607%2A.fts.gz" in search.call_args.args[0]
+    assert latest[0] == datetime(2026, 7, 20, 12, tzinfo=UTC)
+    assert nearest[0] == datetime(2026, 7, 20, 14, tzinfo=UTC)
+
+
+def test_adapt_rows_spans_months_and_skips_missing_year(mocker) -> None:
+    december = '<a href="adapt40311_044012_202612312000_i00005600n1.fts.gz">dec</a>'
+
+    def fake_get(url, timeout):  # ruff:ignore[unused-function-argument]
+        if "/2027/" in url:
+            return mocker.Mock(status_code=404)
+        assert "P=adapt40%2A_202612%2A.fts.gz" in url
+        return mocker.Mock(status_code=200, text=december)
+
+    search = mocker.patch.object(adapt.requests, "get", side_effect=fake_get)
+
+    # Dec 31 22:00 + 4h crosses into a 2027 directory NSO has not created yet:
+    # the December map must still be found instead of a 404 crash.
+    row = adapt._nearest_adapt_row(datetime(2026, 12, 31, 22, tzinfo=UTC))  # ruff:ignore[private-member-access]
+
+    assert row[0] == datetime(2026, 12, 31, 20, tzinfo=UTC)
     assert search.call_count == 2
+
+
+def test_adapt_rows_converts_search_window_to_utc(mocker) -> None:
+    listing = '<a href="adapt40311_044012_202612312000_i00005600n1.fts.gz">dec</a>'
+    search = mocker.patch.object(adapt.requests, "get", return_value=mocker.Mock(status_code=200, text=listing))
+
+    # Jan 1 01:00 +05:00 is Dec 31 20:00 UTC, so only December needs scraping.
+    end = datetime(2027, 1, 1, 1, tzinfo=timezone(timedelta(hours=5)))
+    rows = adapt._adapt_rows(end - timedelta(hours=4), end)  # ruff:ignore[private-member-access]
+
+    assert search.call_count == 1
+    assert "P=adapt40%2A_202612%2A.fts.gz" in search.call_args.args[0]
+    assert [adapt._row_time(row) for row in rows] == [datetime(2026, 12, 31, 20, tzinfo=UTC)]  # ruff:ignore[private-member-access]
