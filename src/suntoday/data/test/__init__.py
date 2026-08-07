@@ -25,7 +25,7 @@ def find_test_filepath(suffix):
     suffix : `str`
         Final underscore-separated part of the file name, e.g. an AIA
         wavelength (``"171"``) or ``"magnetogram"``, ``"continuum"``,
-        ``"adapt"``.
+        ``"gong"``.
 
     Returns
     -------

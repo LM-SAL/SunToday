@@ -36,14 +36,14 @@ def test_create_images_invalid_type(mocker) -> None:
 
 
 @pytest.mark.usefixtures("_clean_image_tables")
-def test_pfss_creation_skips_persisted_adapt_epoch(db_session, mocker, tmp_path) -> None:
+def test_pfss_creation_skips_persisted_gong_epoch(db_session, mocker, tmp_path) -> None:
     session = db_session()
     anchor = datetime(2026, 7, 20, 11, tzinfo=UTC)
-    adapt_epoch = datetime(2026, 7, 20, 12, tzinfo=UTC)
-    write_or_update_record(session, "pfss", str(anchor.date()), updated_at=str(anchor), adapt_epoch=adapt_epoch)
+    gong_epoch = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    write_or_update_record(session, "pfss", str(anchor.date()), updated_at=str(anchor), gong_epoch=gong_epoch)
     create = mocker.patch("suntoday.main.create_sdo_images")
 
-    assert create_images(session, "pfss", anchor, tmp_path, adapt_epoch=adapt_epoch) == []
+    assert create_images(session, "pfss", anchor, tmp_path, gong_epoch=gong_epoch) == []
     create.assert_not_called()
     session.close()
 
@@ -285,7 +285,7 @@ def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
     ]
 
 
-def test_pfss_job_records_adapt_epoch_after_upload(tmp_path, mocker) -> None:
+def test_pfss_job_records_gong_epoch_after_upload(tmp_path, mocker) -> None:
     settings = mocker.patch("suntoday.main.Settings").return_value
     settings.s3_bucket = "my-bucket"
     mocker.patch("suntoday.main.create_db")
@@ -294,8 +294,8 @@ def test_pfss_job_records_adapt_epoch_after_upload(tmp_path, mocker) -> None:
     mocker.patch("suntoday.main.create_images", return_value=[created_file])
     record = mocker.patch("suntoday.main.write_or_update_record")
     mocker.patch("suntoday.main.sync_to_s3")
-    adapt_epoch = datetime(2026, 7, 13, 12, tzinfo=UTC)
-    mocker.patch("suntoday.main.find_nearest_adapt_time", return_value=adapt_epoch)
+    gong_epoch = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    mocker.patch("suntoday.main.find_nearest_gong_time", return_value=gong_epoch)
     requested_time = datetime(2026, 7, 13, 11, tzinfo=UTC)
     mocker.patch("suntoday.main.find_latest_pfss_time", return_value=requested_time)
 
@@ -306,7 +306,7 @@ def test_pfss_job_records_adapt_epoch_after_upload(tmp_path, mocker) -> None:
         "pfss",
         "2026-07-13",
         updated_at=str(requested_time),
-        adapt_epoch=adapt_epoch,
+        gong_epoch=gong_epoch,
     )
 
 

@@ -16,9 +16,9 @@ os.environ["SUNTODAY_TEST_ENV"] = "True"
 
 
 @pytest.fixture(autouse=True)
-def _fresh_adapt_search_cache():
-    if adapt := sys.modules.get("suntoday.downloaders.adapt"):
-        adapt._clear_search_cache()  # ruff:ignore[private-member-access]
+def _fresh_gong_search_cache():
+    if gong := sys.modules.get("suntoday.downloaders.gong"):
+        gong._clear_search_cache()  # ruff:ignore[private-member-access]
 
 
 def latest_or_skip(find_latest):
@@ -114,8 +114,8 @@ def real_goes_primary_timeseries():
 
 
 @pytest.fixture(scope="session")
-def adapt_test_file():
-    return find_test_filepath("adapt")
+def gong_test_file():
+    return find_test_filepath("gong")
 
 
 @pytest.fixture

@@ -7,7 +7,7 @@ For eyeballing a scaling or layout change without waiting on a JSOC query:
 
 Reads ``src/suntoday/data/test`` and writes the JPEG products into
 ``rendered_products/`` at the repo root, exactly as ``create_sdo_images``
-would: the full/small/thumb set per product, and - when the ADAPT test file
+would: the full/small/thumb set per product, and - when the GONG test file
 is present - the ``pfssnolines``/``pfss`` pair per product instead of the
 plain one, matching a ``pfss=True`` run.
 """
@@ -23,7 +23,7 @@ from suntoday.jpegs import (
     create_figure_from_map,
     create_rgb_figure_from_maps,
 )
-from suntoday.maps import create_adapt_map, create_aia_map, create_hmi_map
+from suntoday.maps import create_aia_map, create_gong_map, create_hmi_map
 from suntoday.pfss import trace_field_lines
 
 warnings.simplefilter("ignore")
@@ -45,11 +45,11 @@ hmi = {measurement: path for measurement in ("magnetogram", "continuum") if (pat
 print(f"AIA {sorted(aia)} and HMI {sorted(hmi)} from {TEST_DATA_ROOTDIR}")
 
 field_lines = None
-if adapt := find("adapt"):
+if gong := find("gong"):
     print("tracing PFSS field lines")
-    field_lines = trace_field_lines(create_adapt_map(adapt))
+    field_lines = trace_field_lines(create_gong_map(gong))
 else:
-    print("skipping PFSS variants - no adapt file")
+    print("skipping PFSS variants - no GONG file")
 
 
 def write(name_and_figure, amap):

@@ -18,8 +18,8 @@ from requests.auth import HTTPBasicAuth
 from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
-from suntoday.downloaders.adapt import find_latest_adapt_time
 from suntoday.downloaders.downloader import create_downloader, format_download_errors
+from suntoday.downloaders.gong import find_latest_gong_time
 
 __all__ = [
     "fetch_aia_fits",
@@ -287,9 +287,7 @@ def find_latest_pfss_time() -> datetime:
     Find the anchor time for the PFSS job.
 
     The PFSS images must all carry the same timestamp as the field lines,
-    so the anchor is the minimum of the latest AIA, HMI, and ADAPT times. ADAPT
-    updates every 2 hours, so the record nearest the anchor (either side) is
-    then at most an hour away.
+    so the anchor is the minimum of the latest AIA, HMI, and GONG times.
 
     Returns
     -------
@@ -297,9 +295,9 @@ def find_latest_pfss_time() -> datetime:
         The newest time every PFSS data source has data for.
     """
     aia_time, hmi_time = find_latest_jsoc_times()
-    adapt_time = find_latest_adapt_time()
-    anchor = min(aia_time, hmi_time, adapt_time)
-    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, ADAPT {adapt_time})")
+    gong_time = find_latest_gong_time()
+    anchor = min(aia_time, hmi_time, gong_time)
+    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, GONG {gong_time})")
     return anchor
 
 

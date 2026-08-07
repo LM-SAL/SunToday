@@ -5,8 +5,8 @@ import sunpy.map as smap
 from suntoday.constants import AIA_SINGLE_NORMS
 from suntoday.data.test import find_test_filepath
 from suntoday.maps import (
-    create_adapt_map,
     create_aia_map,
+    create_gong_map,
     create_hmi_map,
 )
 
@@ -31,18 +31,13 @@ def test_aia_193_idl_norm() -> None:
     assert norm(np.sqrt(65.5 * 3021.0)) == pytest.approx(0.5)
 
 
-def test_create_adapt_map(adapt_test_file) -> None:
-    adapt_map = create_adapt_map(adapt_test_file)
-    assert isinstance(adapt_map, smap.GenericMap)
-    assert adapt_map.coordinate_frame.name == "heliographic_carrington"
-    assert adapt_map.wcs.wcs.ctype[0] == "CRLN-CEA"
-    assert adapt_map.wcs.wcs.ctype[1] == "CRLT-CEA"
-    assert adapt_map.meta["adapt_realization"] == 0
-    # Picking a different realization should give different (but same-shape) data.
-    other_realization = create_adapt_map(adapt_test_file, realization=1)
-    assert other_realization.meta["adapt_realization"] == 1
-    assert other_realization.data.shape == adapt_map.data.shape
-    assert not np.allclose(other_realization.data, adapt_map.data)
+def test_create_gong_map(gong_test_file) -> None:
+    gong_map = create_gong_map(gong_test_file)
+    assert isinstance(gong_map, smap.GenericMap)
+    assert gong_map.coordinate_frame.name == "heliographic_carrington"
+    assert list(gong_map.wcs.wcs.ctype) == ["CRLN-CEA", "CRLT-CEA"]
+    assert gong_map.data.shape == (180, 360)
+    assert gong_map.meta["boundary_source"] == "GONG"
 
 
 def test_create_hmi_cont_map(hmi_cont_test_file) -> None:

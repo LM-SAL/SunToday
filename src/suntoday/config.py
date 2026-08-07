@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         extra="forbid",
     )
     cron_frequency: int = 10  # minutes
-    # ADAPT publishes every 2 h
+    # PFSS is expensive; GONG itself updates roughly hourly.
     pfss_cron_frequency: int = 90  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"
@@ -54,7 +54,7 @@ class Settings(BaseSettings):
     sentry_environment: str = "production"
     sentry_server_name: str = "suntoday"
     # Sentry pages when the newest record of any image type is older than
-    # this; transient ADAPT lag below it stays a per-run warning.
+    # this; transient upstream lag below it stays a per-run warning.
     stale_alert_hours: float = 24
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels

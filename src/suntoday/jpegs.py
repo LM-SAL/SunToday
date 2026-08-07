@@ -38,12 +38,12 @@ from suntoday.constants import (
     RGB_MAX_PERCENTILE,
     RGB_RECIPES,
 )
-from suntoday.downloaders.adapt import fetch_adapt_fits
+from suntoday.downloaders.gong import fetch_gong_fits
 from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
 from suntoday.logos import PNG_IMAGE
 from suntoday.maps import (
-    create_adapt_map,
     create_aia_map,
+    create_gong_map,
     create_hmi_map,
 )
 from suntoday.pfss import trace_field_lines
@@ -308,12 +308,11 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
         if (match := re.search(r"\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$", text.get_text()))
     ]
     prefix_width = max(date_starts, default=13) - 3
-    gong_label = f"GONG R{metadata.get('adapt_realization', 0)}"
-    adapt_label = f"ADAPT - {gong_label:^{prefix_width - 8}}"
     _draw_label(
         ax,
         len(ax.texts),
-        f"{adapt_label:<{prefix_width}} - {field_lines.obstime.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"{metadata.get('boundary_source', 'GONG'):<{prefix_width}} - "
+        f"{field_lines.obstime.strftime('%Y-%m-%d %H:%M:%S')}",
     )
     _draw_label(ax, len(ax.texts), "PFSS: magenta=open, white=closed")
     # The off-limb line points would otherwise autoscale the axes outwards.
@@ -552,9 +551,9 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     pfss : bool, optional
         Create the matched-time PFSS variants instead of the regular
         products: every JPEG is saved twice (``pfssnolines`` base and
-        ``pfss`` field line overlay from an ADAPT boundary map) and no
+        ``pfss`` field line overlay from a GONG boundary map) and no
         planning FITS files are written. The caller should anchor
-        ``requested_time`` to the matched GONG ADAPT file time and leave
+        ``requested_time`` to the matched GONG file time and leave
         ``hmi_time`` unset so all the image timestamps match.
     download_directory : pathlib.Path, optional
         Directory to download the FITS files into. Files already present
@@ -573,9 +572,9 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         fits_directory = download_directory or Path(temp_dir)
         field_lines = None
         if pfss:
-            adapt_file = fetch_adapt_fits(requested_time, save_directory=fits_directory)
+            gong_file = fetch_gong_fits(requested_time, save_directory=fits_directory)
             logger.info("Tracing PFSS field lines")
-            field_lines = trace_field_lines(create_adapt_map(adapt_file))
+            field_lines = trace_field_lines(create_gong_map(gong_file))
 
         aia_files = fetch_aia_fits(requested_time, save_directory=fits_directory)
         aia_order = AIA_WAVELENGTHS + AIA_FITS_ONLY_WAVELENGTHS

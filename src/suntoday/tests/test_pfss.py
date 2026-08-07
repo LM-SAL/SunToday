@@ -1,15 +1,15 @@
 import numpy as np
 
-from suntoday.maps import create_adapt_map
+from suntoday.maps import create_gong_map
 from suntoday.pfss import N_SEEDS, trace_field_lines
 
 
-def test_trace_field_lines(adapt_test_file) -> None:
-    field_lines = trace_field_lines(create_adapt_map(adapt_test_file))
+def test_trace_field_lines(gong_test_file) -> None:
+    field_lines = trace_field_lines(create_gong_map(gong_test_file))
     assert field_lines.frame.name == "heliographic_carrington"
     radii = field_lines.spherical.distance.to_value("km")
     is_open = field_lines.info.meta["is_open"]
-    assert field_lines.info.meta["adapt_realization"] == 0
+    assert field_lines.info.meta["boundary_source"] == "GONG"
     assert is_open.shape == radii.shape
     # One NaN separator per kept line; boundary-grazing lines are dropped
     n_lines = np.isnan(radii).sum()

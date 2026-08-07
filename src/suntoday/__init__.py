@@ -11,7 +11,7 @@ class DataNotReadyError(Exception):
     The upstream archive has no data for the requested time yet.
 
     Raised on paths where an empty result means normal processing lag
-    (JSOC still exporting, ADAPT map not published) rather than a bug.
+    (JSOC still exporting, GONG map not published) rather than a bug.
     Scheduled jobs treat it as "skip this run and retry later"; the
     staleness alert pages if it keeps happening.
     """

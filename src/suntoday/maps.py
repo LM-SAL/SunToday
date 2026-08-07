@@ -6,7 +6,6 @@ import matplotlib as mpl
 
 mpl.use("module://mplcairo.base")
 
-import warnings
 from pathlib import Path
 
 import numpy as np
@@ -15,14 +14,12 @@ from aiapy.calibrate import correct_degradation
 from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from matplotlib import colors
-from sunkit_magex.pfss.utils import car_to_cea
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
-from sunpy.util.exceptions import SunpyMetadataWarning
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
 from suntoday.data import RESPONSE_TABLE_V10
 
-__all__ = ["create_adapt_map", "create_aia_map", "create_hmi_map"]
+__all__ = ["create_aia_map", "create_gong_map", "create_hmi_map"]
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:
@@ -58,37 +55,28 @@ def create_aia_map(file: Path) -> smap.GenericMap:
         return aia_map
 
 
-def create_adapt_map(file: Path, realization: int = 0) -> smap.GenericMap:
+def create_gong_map(file: Path) -> smap.GenericMap:
     """
-    Creates a full-Sun Carrington map from one realization of an ADAPT
-    synchronic magnetogram FITS file.
+    Creates a full-Sun Carrington map from a GONG synoptic magnetogram.
 
-    ADAPT's header is standard enough that sunpy recognizes it directly,
-    but the map ships in a plate-carree (CAR) projection; the PFSS solver
-    needs the equal-area (CEA) one, so it is reprojected here.
+    NOAA's zero-point-corrected GONG maps already use the equal-area CEA
+    projection required by the PFSS solver.
 
     Parameters
     ----------
     file : `pathlib.Path`
-        Path to the ADAPT FITS file written by
-        `suntoday.downloaders.adapt.fetch_adapt_fits`.
-    realization : int, optional
-        Which of the 12 model realizations to use (default the first).
+        Path to the GONG FITS file written by
+        `suntoday.downloaders.gong.fetch_gong_fits`.
 
     Returns
     -------
     `sunpy.map.GenericMap`
         Full-Sun magnetogram in the heliographic Carrington frame.
     """
-    with warnings.catch_warnings():
-        # ADAPT is a modeled composite with no observer keywords; the Earth
-        # fallback is correct. The warning fires lazily inside car_to_cea.
-        warnings.filterwarnings("ignore", category=SunpyMetadataWarning, message="Missing metadata for observer")
-        with fits.open(file, memmap=False) as hdul:
-            adapt_map = smap.Map(hdul[0].data[realization], hdul[0].header)
-        adapt_map = car_to_cea(adapt_map)
-        adapt_map.meta["adapt_realization"] = realization
-        return adapt_map
+    with fits.open(file, memmap=False) as hdul:
+        gong_map = smap.Map(hdul[0].data, hdul[0].header)
+    gong_map.meta["boundary_source"] = "GONG"
+    return gong_map
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:

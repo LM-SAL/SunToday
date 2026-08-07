@@ -21,7 +21,7 @@ This includes:
   - 171 - B_LOS
   - B_LOS
   - Continuum
-- PFSS variants of every JPEG above, anchored to the matched GONG ADAPT file time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
+- PFSS variants of every JPEG above, anchored to the matched NOAA-hosted GONG synoptic-map time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
 - Planning FITS files for every AIA channel (plus 4500, which is FITS-only) and the HMI B_LOS and continuum.
 - The combination of the AIA lightcurves with GOES.
 
@@ -46,7 +46,8 @@ Future movie support will need to produce the following:
 This is set up to run in a Docker container.
 Mount points are configured by `docker-compose.yml`.
 The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
-The PFSS job runs on its own cadence, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90), since ADAPT only publishes a new map every 2 hours.
+The PFSS job runs on its own cadence, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90).
+NOAA's GONG index covers only the latest three days, so older PFSS backfills are unavailable.
 
 ## Setup
 
