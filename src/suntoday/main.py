@@ -500,7 +500,19 @@ def scheduled() -> None:
     Main function to start the scheduled job.
     """
     settings = Settings()
-    scheduled_job = functools.partial(_run_job_in_subprocess, main_job, ("images", "timeseries"))
+    # Dead-man's-switch: Sentry pages when check-ins stop, i.e. when the
+    # container/host/scheduler is down for any reason. The check-in comes from
+    # the parent, so child job failures (already alerted) don't trip it.
+    scheduled_job = sentry_sdk.monitor(
+        monitor_slug="suntoday-scheduler",
+        monitor_config={
+            "schedule": {"type": "interval", "value": settings.cron_frequency, "unit": "minute"},
+            "checkin_margin": settings.cron_frequency * 2,
+            "max_runtime": 60,
+            "failure_issue_threshold": 1,
+            "recovery_threshold": 1,
+        },
+    )(functools.partial(_run_job_in_subprocess, main_job, ("images", "timeseries")))
     scheduled_pfss = functools.partial(_run_job_in_subprocess, pfss_job, ("pfss",))
     logger.info(
         f"Starting jobs with cron frequency: {settings.cron_frequency} minutes "
