@@ -3,14 +3,14 @@ from datetime import UTC, datetime, timedelta, timezone
 from io import BytesIO
 
 import pytest
+from astropy.io import fits
 
 from suntoday import DataNotReadyError
-from suntoday.conftest import latest_or_skip
 from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 
-def _download_response(mocker, body: bytes, content_length: int):
+def _download_response(mocker, body: bytes, content_length: int | str):
     response = mocker.MagicMock(raw=BytesIO(body), headers={"Content-Length": str(content_length)})
     response.__enter__.return_value = response
     return response
@@ -18,18 +18,19 @@ def _download_response(mocker, body: bytes, content_length: int):
 
 @pytest.mark.remote_data
 def test_fetch_adapt_fits(tmp_path) -> None:
-    latest = latest_or_skip(find_latest_adapt_time)
+    latest = find_latest_adapt_time()
     file = fetch_adapt_fits(latest, save_directory=tmp_path)
-    assert file.exists()
+    with fits.open(file) as hdul:
+        assert hdul[0].data.shape == (12, 180, 360)
     now = datetime.now(UTC)
     assert latest.tzinfo is not None
     assert now - timedelta(days=7) < latest < now
 
 
-def test_fetch_adapt_fits_downloads_and_caches(mocker, tmp_path) -> None:
+def test_fetch_adapt_fits_downloads_caches_and_ignores_malformed_size(mocker, tmp_path) -> None:
     url = "https://example.test/adapt.fts.gz"
     mocker.patch.object(adapt, "_nearest_adapt_row", return_value=(datetime(2026, 7, 20, 12, tzinfo=UTC), url))
-    get = mocker.patch.object(adapt.requests, "get", return_value=_download_response(mocker, b"data", 4))
+    get = mocker.patch.object(adapt.requests, "get", return_value=_download_response(mocker, b"data", "invalid"))
     save_directory = tmp_path / "not-yet-created"
 
     file = fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory)
@@ -39,6 +40,7 @@ def test_fetch_adapt_fits_downloads_and_caches(mocker, tmp_path) -> None:
     # A second call reuses the existing file without touching the network.
     assert fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory) == file
     assert get.call_count == 1
+    assert not list(save_directory.glob("adapt.fts.gz.*.part"))
 
 
 def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:
@@ -75,6 +77,17 @@ def test_nearest_adapt_row_prefers_map_just_after_anchor(mocker) -> None:
     row = adapt._nearest_adapt_row(datetime(2026, 7, 20, 11, 59, tzinfo=UTC))  # ruff:ignore[private-member-access]
 
     assert row == rows[1]
+
+
+def test_nearest_adapt_row_treats_naive_time_as_utc(mocker) -> None:
+    time = datetime(2026, 7, 20, 12)  # ruff:ignore[call-datetime-without-tzinfo]
+    row = (time.replace(tzinfo=UTC), "https://example.test/12.fts.gz")
+    rows = mocker.patch.object(adapt, "_adapt_rows", return_value=[row])
+
+    assert adapt._nearest_adapt_row(time) == row  # ruff:ignore[private-member-access]
+    rows.assert_called_once_with(
+        time.replace(tzinfo=UTC) - timedelta(hours=4), time.replace(tzinfo=UTC) + timedelta(hours=4)
+    )
 
 
 def test_nearest_adapt_row_raises_when_empty(mocker) -> None:

@@ -34,6 +34,10 @@ _AdaptRow = tuple[datetime, str]
 _month_cache: dict[date, list[_AdaptRow]] = {}
 
 
+def _as_utc(time: datetime) -> datetime:
+    return time.replace(tzinfo=UTC) if time.tzinfo is None else time.astimezone(UTC)
+
+
 def _clear_search_cache() -> None:
     _month_cache.clear()
 
@@ -77,8 +81,8 @@ def _adapt_rows(start: datetime, end: datetime) -> list[_AdaptRow]:
     suntoday.DataNotReadyError
         If no map is found in the range.
     """
-    start = start.astimezone(UTC)
-    end = end.astimezone(UTC)
+    start = _as_utc(start)
+    end = _as_utc(end)
     rows = []
     month = start.date().replace(day=1)
     last_month = end.date().replace(day=1)
@@ -113,6 +117,7 @@ def _latest_adapt_row(before: datetime, window: timedelta = timedelta(days=7)) -
     suntoday.DataNotReadyError
         If no map is found at or before the requested time.
     """
+    before = _as_utc(before)
     rows = [row for row in _adapt_rows(before - window, before + _NEAREST_WINDOW) if _row_time(row) <= before]
     if not rows:
         msg = f"No ADAPT map found between {before - window!r} and {before!r}."
@@ -133,6 +138,7 @@ def _nearest_adapt_row(time: datetime, window: timedelta = _NEAREST_WINDOW) -> _
     tuple[datetime.datetime, str]
         The row whose start time is closest to ``time``.
     """
+    time = _as_utc(time)
     return min(_adapt_rows(time - window, time + window), key=lambda row: abs(_row_time(row) - time))
 
 
@@ -144,7 +150,8 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
     ----------
     requested_time : datetime.datetime
         Time to find the nearest ADAPT map for, on either side. ADAPT
-        publishes every 2 hours, so the offset is at most ~1 hour.
+        publishes every 2 hours, so the offset is at most ~1 hour. Naive
+        values are interpreted as UTC.
     save_directory : pathlib.Path
         Directory to save the downloaded file to.
 
@@ -177,7 +184,10 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
         msg = f"Failed to download {url} to {partial}: {error}"
         raise OSError(msg) from error
     actual_size = partial.stat().st_size
-    expected_size = int(response.headers.get("Content-Length", 0))
+    try:
+        expected_size = max(int(response.headers.get("Content-Length", 0)), 0)
+    except (TypeError, ValueError):
+        expected_size = 0
     if expected_size and actual_size != expected_size:
         partial.unlink(missing_ok=True)
         msg = f"Truncated download of {url}: got {actual_size} of {expected_size} bytes."
@@ -193,7 +203,8 @@ def find_latest_adapt_time(before: datetime | None = None) -> datetime:
     Parameters
     ----------
     before : datetime.datetime, optional
-        Only consider maps at or before this time. Defaults to now.
+        Only consider maps at or before this time. Naive values are interpreted
+        as UTC. Defaults to now.
 
     Returns
     -------
@@ -214,7 +225,8 @@ def find_nearest_adapt_time(time: datetime) -> datetime:
     Parameters
     ----------
     time : datetime.datetime
-        Time to find the nearest ADAPT map for.
+        Time to find the nearest ADAPT map for. Naive values are interpreted as
+        UTC.
 
     Returns
     -------
