@@ -522,6 +522,7 @@ def scheduled() -> None:
     schedule.every(settings.pfss_cron_frequency).minutes.do(scheduled_pfss)
     logger.info("Running first job immediately")
     scheduled_job()
+    scheduled_pfss()
     logger.info(f"Next job in {schedule.idle_seconds()} seconds")
     while True:
         schedule.run_pending()
