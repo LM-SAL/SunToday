@@ -10,7 +10,7 @@ from suntoday.downloaders import adapt
 from suntoday.downloaders.adapt import fetch_adapt_fits, find_latest_adapt_time
 
 
-def _download_response(mocker, body: bytes, content_length: int | str):
+def _download_response(mocker, body: bytes, content_length: int):
     response = mocker.MagicMock(raw=BytesIO(body), headers={"Content-Length": str(content_length)})
     response.__enter__.return_value = response
     return response
@@ -27,20 +27,24 @@ def test_fetch_adapt_fits(tmp_path) -> None:
     assert now - timedelta(days=7) < latest < now
 
 
-def test_fetch_adapt_fits_downloads_caches_and_ignores_malformed_size(mocker, tmp_path) -> None:
-    url = "https://example.test/adapt.fts.gz"
-    mocker.patch.object(adapt, "_nearest_adapt_row", return_value=(datetime(2026, 7, 20, 12, tzinfo=UTC), url))
-    get = mocker.patch.object(adapt.requests, "get", return_value=_download_response(mocker, b"data", "invalid"))
+def test_fetch_adapt_fits_falls_back_to_ftp_and_caches(mocker, tmp_path) -> None:
+    filename = "adapt40311_044012_202607201200_i00005600n1.fts.gz"
+    listing = BytesIO(f"-rw-rw-r-- 1 500 500 4 Jul 20 12:00 {filename}\n".encode())
+    download = BytesIO(b"data")
+    download.headers = {"Content-Length": "invalid"}
+    get = mocker.patch.object(adapt.requests, "get", side_effect=adapt.requests.ConnectTimeout("timed out"))
+    ftp = mocker.patch.object(adapt, "urlopen", side_effect=[listing, download])
     save_directory = tmp_path / "not-yet-created"
 
     file = fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory)
 
-    assert file == save_directory / "adapt.fts.gz"
+    assert file == save_directory / filename
     assert file.read_bytes() == b"data"
     # A second call reuses the existing file without touching the network.
     assert fetch_adapt_fits(datetime(2026, 7, 20, 12, tzinfo=UTC), save_directory=save_directory) == file
     assert get.call_count == 1
-    assert not list(save_directory.glob("adapt.fts.gz.*.part"))
+    assert ftp.call_count == 2
+    assert not list(save_directory.glob(f"{filename}.*.part"))
 
 
 def test_fetch_adapt_fits_raises_on_download_error(mocker, tmp_path) -> None:

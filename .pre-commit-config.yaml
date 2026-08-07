@@ -21,6 +21,7 @@ repos:
     rev: v1.7.8
     hooks:
       - id: docformatter
+        additional_dependencies: ["tomli>=2,<3"]
         args: ["--make-summary-multi-line", "--pre-summary-newline", "-ri"]
   - repo: https://github.com/JoC0de/pre-commit-prettier
     rev: v3.9.6

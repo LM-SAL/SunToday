@@ -15,6 +15,7 @@ from http import HTTPStatus
 from operator import itemgetter
 from pathlib import Path
 from urllib.parse import urlencode
+from urllib.request import urlopen
 
 import requests
 
@@ -23,7 +24,9 @@ from suntoday import DataNotReadyError
 __all__ = ["fetch_adapt_fits", "find_latest_adapt_time", "find_nearest_adapt_time"]
 
 _ADAPT_ROOT = "https://gong.nso.edu/adapt/maps/gong"
+_ADAPT_FTP_ROOT = "ftp://gong2.nso.edu/adapt/maps/gong"
 _ADAPT_FILE = re.compile(r'href="(adapt40[^"/]*_(\d{12})_[^"/]*\.fts\.gz)"')
+_ADAPT_FTP_FILE = re.compile(r"\b(adapt40\S*_(\d{12})_\S*\.fts\.gz)\b")
 _NEAREST_WINDOW = timedelta(hours=4)
 _TIMEOUT = 30
 _AdaptRow = tuple[datetime, str]
@@ -49,17 +52,25 @@ def _month_rows(month: date) -> list[_AdaptRow]:
     if month not in _month_cache:
         pattern = f"adapt40*_{month:%Y%m}*.fts.gz"
         listing_url = f"{_ADAPT_ROOT}/{month.year}/?{urlencode({'P': pattern})}"
-        response = requests.get(listing_url, timeout=_TIMEOUT)
-        if response.status_code == HTTPStatus.NOT_FOUND:
-            # NSO creates year directories lazily, so a window crossing
-            # Jan 1 must treat the missing new year as empty, not an error.
-            listing = ""
-        else:
-            response.raise_for_status()
-            listing = response.text
+        root = _ADAPT_ROOT
+        try:  # ruff: ignore[too-many-statements-in-try-clause]
+            response = requests.get(listing_url, timeout=_TIMEOUT)
+            if response.status_code == HTTPStatus.NOT_FOUND:
+                # NSO creates year directories lazily, so a window crossing
+                # Jan 1 must treat the missing new year as empty, not an error.
+                listing = ""
+            else:
+                response.raise_for_status()
+                listing = response.text
+            matches = _ADAPT_FILE.findall(listing)
+        except requests.RequestException:
+            root = _ADAPT_FTP_ROOT
+            with urlopen(f"{root}/{month.year}/", timeout=_TIMEOUT) as response:  # ruff: ignore[suspicious-url-open-usage]
+                matches = _ADAPT_FTP_FILE.findall(response.read().decode())
         _month_cache[month] = sorted(
-            (datetime.strptime(timestamp, "%Y%m%d%H%M").replace(tzinfo=UTC), f"{_ADAPT_ROOT}/{month.year}/{filename}")
-            for filename, timestamp in _ADAPT_FILE.findall(listing)
+            (datetime.strptime(timestamp, "%Y%m%d%H%M").replace(tzinfo=UTC), f"{root}/{month.year}/{filename}")
+            for filename, timestamp in matches
+            if timestamp.startswith(f"{month:%Y%m}")
         )
     return _month_cache[month]
 
@@ -175,10 +186,14 @@ def fetch_adapt_fits(requested_time: datetime, save_directory: Path) -> Path:
     # A pid-unique partial file keeps overlapping runs from interleaving
     # writes; the atomic replace means the last finished download wins whole.
     partial = destination.with_name(f"{destination.name}.{os.getpid()}.part")
-    try:
-        with requests.get(url, timeout=_TIMEOUT, stream=True) as response, partial.open("wb") as file:
-            response.raise_for_status()
-            shutil.copyfileobj(response.raw, file)
+    try:  # ruff: ignore[too-many-statements-in-try-clause]
+        if url.startswith("ftp://"):
+            with urlopen(url, timeout=_TIMEOUT) as response, partial.open("wb") as file:  # ruff: ignore[suspicious-url-open-usage]
+                shutil.copyfileobj(response, file)
+        else:
+            with requests.get(url, timeout=_TIMEOUT, stream=True) as response, partial.open("wb") as file:
+                response.raise_for_status()
+                shutil.copyfileobj(response.raw, file)
     except Exception as error:
         partial.unlink(missing_ok=True)
         msg = f"Failed to download {url} to {partial}: {error}"
