@@ -48,6 +48,30 @@ def test_pfss_creation_skips_persisted_gong_epoch(db_session, mocker, tmp_path) 
     session.close()
 
 
+def test_pfss_currentness_includes_sdo_anchor(mocker, tmp_path) -> None:
+    requested_time = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    gong_epoch = datetime(2026, 7, 20, 11, tzinfo=UTC)
+    record = mocker.Mock(
+        updated_at=requested_time - timedelta(minutes=15),
+        gong_epoch=gong_epoch,
+    )
+    latest = mocker.patch("suntoday.main.get_latest_record", return_value=record)
+    expected = [tmp_path / "f0171pfss.jpg"]
+    create = mocker.patch("suntoday.main.create_sdo_images", return_value=expected)
+
+    files = create_images(
+        mocker.sentinel.session,
+        "pfss",
+        requested_time,
+        tmp_path,
+        gong_epoch=gong_epoch,
+    )
+
+    assert files == expected
+    create.assert_called_once()
+    latest.assert_called_once_with(mocker.sentinel.session, "pfss")
+
+
 def test_cli_pfss_requires_date(mocker) -> None:
     mocker.patch("sys.argv", ["suntoday", "--pfss"])
     scheduled_mock = mocker.patch("suntoday.main.scheduled")

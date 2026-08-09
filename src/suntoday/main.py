@@ -304,7 +304,11 @@ def create_images(
     if not force:
         if image_type == "pfss" and gong_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
-            is_current = latest_record is not None and latest_record.gong_epoch == gong_epoch
+            is_current = (
+                latest_record is not None
+                and latest_record.gong_epoch == gong_epoch
+                and latest_record.updated_at > requested_time - datetime.timedelta(minutes=10)
+            )
         else:
             latest_record = get_record(database_session, image_type, requested_time.date())
             is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
