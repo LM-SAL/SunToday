@@ -53,7 +53,35 @@ def atomic_save(final_path: Path) -> Iterator[Path]:
         tmp_path.unlink(missing_ok=True)
 
 
-def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) -> None:
+def _s3_key(path: Path, root: Path, prefix: str) -> str:
+    key = path.relative_to(root).as_posix()
+    return f"{prefix}/{key}" if prefix else key
+
+
+def _copy_to_mostrecent(
+    s3_client, paths: list[Path], bucket: str, prefix: str, upload_root: Path, mostrecent_root: Path
+) -> None:
+    """
+    Copy dated objects to their stable latest keys without re-uploading bytes.
+    """
+    for path in sorted(paths):
+        source_key = _s3_key(path, upload_root, prefix)
+        destination_key = _s3_key(path, mostrecent_root, f"{prefix}/mostrecent".strip("/"))
+        s3_client.copy_object(
+            Bucket=bucket,
+            CopySource={"Bucket": bucket, "Key": source_key},
+            Key=destination_key,
+            MetadataDirective="COPY",
+        )
+
+
+def sync_to_s3(
+    files: Iterable[Path],
+    bucket: str,
+    root_save_directory: Path,
+    *,
+    mostrecent_root: Path | None = None,
+) -> None:
     """
     Upload files to an S3 bucket.
 
@@ -73,6 +101,9 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         e.g. ``s3://suntoday.lmsal.com/sdomedia/SunInTime``.
     root_save_directory : pathlib.Path
         Root directory the object keys are made relative to.
+    mostrecent_root : pathlib.Path, optional
+        When set, copy the uploaded objects to ``mostrecent/`` using paths
+        relative to this directory.
 
     Raises
     ------
@@ -80,19 +111,21 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         If a file is outside ``root_save_directory``.
     """
     root_save_directory = root_save_directory.resolve()
+    mostrecent_root = mostrecent_root.resolve() if mostrecent_root is not None else None
     paths = [Path(path).resolve() for path in files]
     for path in paths:
         if not path.is_relative_to(root_save_directory):
             msg = f"Cannot upload {path}: file is outside root directory {root_save_directory}"
+            raise ValueError(msg)
+        if mostrecent_root is not None and not path.is_relative_to(mostrecent_root):
+            msg = f"Cannot copy {path}: file is outside mostrecent root {mostrecent_root}"
             raise ValueError(msg)
 
     bucket_name, _, prefix = bucket.removeprefix("s3://").strip("/").partition("/")
     s3_client = boto3.client("s3")
     key_directories = set()
     for path in sorted(paths):
-        key = path.relative_to(root_save_directory).as_posix()
-        if prefix:
-            key = f"{prefix}/{key}"
+        key = _s3_key(path, root_save_directory, prefix)
         if key_directory := key.rpartition("/")[0]:
             key_directories.add(key_directory)
         if path.name == "aia_light_curves.gif":
@@ -105,6 +138,8 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         if path.suffix.lower() in {".gif", ".jpg"}:
             extra_args["CacheControl"] = "max-age=300, must-revalidate"
         s3_client.upload_file(str(path), bucket_name, key, ExtraArgs=extra_args)
+    if mostrecent_root is not None:
+        _copy_to_mostrecent(s3_client, paths, bucket_name, prefix, root_save_directory, mostrecent_root)
     destinations = ", ".join(sorted(key_directories)) or prefix
     logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{destinations}")
 

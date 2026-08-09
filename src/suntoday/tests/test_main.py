@@ -237,7 +237,7 @@ def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mo
     with pytest.raises(RuntimeError, match="upload failed"):
         main_job(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
 
-    upload.assert_called_once_with([created_file], "my-bucket", tmp_path.resolve())
+    upload.assert_called_once()
     # No success record on a failed upload: the next run must regenerate.
     record.assert_not_called()
     session.close.assert_called_once()
@@ -259,7 +259,7 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
 
     # An explicit --date backfill must not overwrite mostrecent/.
     assert upload.mock_calls == [
-        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
+        mocker.call([created_file], "my-bucket", tmp_path.resolve(), mostrecent_root=None),
     ]
     # Only the type that created files gets a record, and only after upload.
     record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
@@ -280,8 +280,12 @@ def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
     main_job(root_save_directory=tmp_path)
 
     assert upload.mock_calls == [
-        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
-        mocker.call([created_file], "my-bucket/mostrecent", tmp_path.resolve() / "2026" / "07" / "13"),
+        mocker.call(
+            [created_file],
+            "my-bucket",
+            tmp_path.resolve(),
+            mostrecent_root=tmp_path.resolve() / "2026" / "07" / "13",
+        ),
     ]
 
 

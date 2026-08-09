@@ -17,37 +17,41 @@ def test_sync_to_s3(tmp_path, mocker) -> None:
     (day_directory / "aia171.fits").write_bytes(b"fits")
     (day_directory / "aia_light_curves.gif").write_bytes(b"png")
 
-    sync_to_s3(list(day_directory.iterdir()), "my-bucket", tmp_path)
+    sync_to_s3(
+        list(day_directory.iterdir()),
+        "s3://my-bucket/base",
+        tmp_path,
+        mostrecent_root=day_directory,
+    )
 
     calls = {call.args[2]: call for call in s3_client.upload_file.call_args_list}
     assert set(calls) == {
-        "2026/07/13/f171.jpg",
-        "2026/07/13/aia171.fits",
-        "2026/07/13/aia_light_curves.gif",
+        "base/2026/07/13/f171.jpg",
+        "base/2026/07/13/aia171.fits",
+        "base/2026/07/13/aia_light_curves.gif",
     }
-    assert calls["2026/07/13/f171.jpg"].kwargs["ExtraArgs"] == {
+    assert calls["base/2026/07/13/f171.jpg"].kwargs["ExtraArgs"] == {
         "ContentType": "image/jpeg",
         "CacheControl": "max-age=300, must-revalidate",
     }
-    assert calls["2026/07/13/aia171.fits"].kwargs["ExtraArgs"] == {"ContentType": "image/fits"}
-    assert calls["2026/07/13/aia_light_curves.gif"].kwargs["ExtraArgs"] == {
+    assert calls["base/2026/07/13/aia171.fits"].kwargs["ExtraArgs"] == {"ContentType": "image/fits"}
+    assert calls["base/2026/07/13/aia_light_curves.gif"].kwargs["ExtraArgs"] == {
         "ContentType": "image/png",
         "CacheControl": "max-age=300, must-revalidate",
     }
-    assert calls["2026/07/13/f171.jpg"].args[1] == "my-bucket"
-
-
-def test_sync_to_s3_with_prefix(tmp_path, mocker) -> None:
-    s3_client = mocker.patch("suntoday.utils.boto3.client").return_value
-    day_directory = tmp_path / "2026" / "07" / "13"
-    day_directory.mkdir(parents=True)
-    (day_directory / "f171.jpg").write_bytes(b"jpeg")
-
-    sync_to_s3([day_directory / "f171.jpg"], "s3://suntoday.lmsal.com/sdomedia/SunInTime/", tmp_path)
-
-    call = s3_client.upload_file.call_args
-    assert call.args[1] == "suntoday.lmsal.com"
-    assert call.args[2] == "sdomedia/SunInTime/2026/07/13/f171.jpg"
+    assert calls["base/2026/07/13/f171.jpg"].args[1] == "my-bucket"
+    copies = {call.kwargs["Key"]: call for call in s3_client.copy_object.call_args_list}
+    assert set(copies) == {
+        "base/mostrecent/f171.jpg",
+        "base/mostrecent/aia171.fits",
+        "base/mostrecent/aia_light_curves.gif",
+    }
+    assert copies["base/mostrecent/f171.jpg"].kwargs == {
+        "Bucket": "my-bucket",
+        "CopySource": {"Bucket": "my-bucket", "Key": "base/2026/07/13/f171.jpg"},
+        "Key": "base/mostrecent/f171.jpg",
+        "MetadataDirective": "COPY",
+    }
 
 
 def test_sync_to_s3_url_without_prefix(tmp_path, mocker) -> None:
