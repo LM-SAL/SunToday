@@ -14,12 +14,14 @@ from aiapy.calibrate import correct_degradation
 from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from matplotlib import colors
-from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
+from sunpy.map import coordinate_is_on_solar_disk
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
 from suntoday.data import RESPONSE_TABLE_V10
 
 __all__ = ["create_aia_map", "create_gong_map", "create_hmi_map"]
+
+_HMI_MASK_ROWS = 256
 
 
 def create_aia_map(file: Path) -> smap.GenericMap:
@@ -96,7 +98,12 @@ def create_hmi_map(file: Path) -> smap.GenericMap:
     with fits.open(file, memmap=False) as hdul:
         hmi_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
         fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
-        hmi_map.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(hmi_map))] = fill_value
+        for start in range(0, hmi_map.data.shape[0], _HMI_MASK_ROWS):
+            stop = min(start + _HMI_MASK_ROWS, hmi_map.data.shape[0])
+            pixel_y, pixel_x = np.indices((stop - start, hmi_map.data.shape[1]))
+            coordinates = hmi_map.wcs.pixel_to_world(pixel_x, pixel_y + start)
+            block = hmi_map.data[start:stop]
+            block[~coordinate_is_on_solar_disk(coordinates)] = fill_value
         if hmi_map.measurement == "magnetogram":
             hmi_map.plot_settings["norm"] = colors.Normalize(-HMI_NORM_GAUSS, HMI_NORM_GAUSS)
             hmi_map.plot_settings["cmap"] = mpl.colormaps.get_cmap("gray").with_extremes(bad="black")

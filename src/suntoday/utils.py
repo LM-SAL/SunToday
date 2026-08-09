@@ -4,7 +4,6 @@ Utility functions for image processing and visualization.
 
 import mimetypes
 import uuid
-import warnings
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,7 +12,6 @@ import boto3
 import numpy as np
 import sunpy.map as smap
 from astropy.io.fits import CompImageHDU
-from astropy.io.fits.verify import VerifyWarning
 
 from suntoday import logger
 
@@ -55,7 +53,35 @@ def atomic_save(final_path: Path) -> Iterator[Path]:
         tmp_path.unlink(missing_ok=True)
 
 
-def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) -> None:
+def _s3_key(path: Path, root: Path, prefix: str) -> str:
+    key = path.relative_to(root).as_posix()
+    return f"{prefix}/{key}" if prefix else key
+
+
+def _copy_to_mostrecent(
+    s3_client, paths: list[Path], bucket: str, prefix: str, upload_root: Path, mostrecent_root: Path
+) -> None:
+    """
+    Copy dated objects to their stable latest keys without re-uploading bytes.
+    """
+    for path in sorted(paths):
+        source_key = _s3_key(path, upload_root, prefix)
+        destination_key = _s3_key(path, mostrecent_root, f"{prefix}/mostrecent".strip("/"))
+        s3_client.copy_object(
+            Bucket=bucket,
+            CopySource={"Bucket": bucket, "Key": source_key},
+            Key=destination_key,
+            MetadataDirective="COPY",
+        )
+
+
+def sync_to_s3(
+    files: Iterable[Path],
+    bucket: str,
+    root_save_directory: Path,
+    *,
+    mostrecent_root: Path | None = None,
+) -> None:
     """
     Upload files to an S3 bucket.
 
@@ -75,6 +101,9 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         e.g. ``s3://suntoday.lmsal.com/sdomedia/SunInTime``.
     root_save_directory : pathlib.Path
         Root directory the object keys are made relative to.
+    mostrecent_root : pathlib.Path, optional
+        When set, copy the uploaded objects to ``mostrecent/`` using paths
+        relative to this directory.
 
     Raises
     ------
@@ -82,26 +111,35 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
         If a file is outside ``root_save_directory``.
     """
     root_save_directory = root_save_directory.resolve()
+    mostrecent_root = mostrecent_root.resolve() if mostrecent_root is not None else None
     paths = [Path(path).resolve() for path in files]
     for path in paths:
         if not path.is_relative_to(root_save_directory):
             msg = f"Cannot upload {path}: file is outside root directory {root_save_directory}"
+            raise ValueError(msg)
+        if mostrecent_root is not None and not path.is_relative_to(mostrecent_root):
+            msg = f"Cannot copy {path}: file is outside mostrecent root {mostrecent_root}"
             raise ValueError(msg)
 
     bucket_name, _, prefix = bucket.removeprefix("s3://").strip("/").partition("/")
     s3_client = boto3.client("s3")
     key_directories = set()
     for path in sorted(paths):
-        key = path.relative_to(root_save_directory).as_posix()
-        if prefix:
-            key = f"{prefix}/{key}"
+        key = _s3_key(path, root_save_directory, prefix)
         if key_directory := key.rpartition("/")[0]:
             key_directories.add(key_directory)
-        content_type = mimetypes.guess_type(path.name)[0]
+        if path.name == "aia_light_curves.gif":
+            content_type = "image/png"
+        elif path.suffix.lower() == ".fits":
+            content_type = "image/fits"
+        else:
+            content_type = mimetypes.guess_type(path.name)[0]
         extra_args = {"ContentType": content_type} if content_type else {}
         if path.suffix.lower() in {".gif", ".jpg"}:
             extra_args["CacheControl"] = "max-age=300, must-revalidate"
         s3_client.upload_file(str(path), bucket_name, key, ExtraArgs=extra_args)
+    if mostrecent_root is not None:
+        _copy_to_mostrecent(s3_client, paths, bucket_name, prefix, root_save_directory, mostrecent_root)
     destinations = ", ".join(sorted(key_directories)) or prefix
     logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{destinations}")
 
@@ -124,13 +162,10 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Pat
     pathlib.Path
         Saved FITS path.
     """
-    with warnings.catch_warnings():
-        # VerifyWarning: Invalid 'BLANK' keyword in header.
-        # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
-        warnings.simplefilter("ignore", category=VerifyWarning)
-        # Empty keyword somehow and it raises a warning we want to remove.
-        amap.meta.pop("", None)
-        with atomic_save(save_directory / filename) as tmp_path:
-            amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
-            amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
+    # Empty and integer-only keywords are invalid in the float output.
+    amap.meta.pop("", None)
+    amap.meta.pop("blank", None)
+    with atomic_save(save_directory / filename) as tmp_path:
+        amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
+        amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
     return save_directory / filename

@@ -1,6 +1,8 @@
 import numpy as np
 import pytest
 import sunpy.map as smap
+from astropy.io import fits
+from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
 from suntoday.constants import AIA_SINGLE_NORMS
 from suntoday.data.test import find_test_filepath
@@ -58,6 +60,16 @@ def test_create_hmi_blos_map(hmi_blos_test_file) -> None:
         hmi_map.rotation_matrix,
         np.array([[1, 0], [0, 1]]),
     )
+
+
+def test_hmi_row_mask_matches_full_map(hmi_blos_test_file) -> None:
+    with fits.open(hmi_blos_test_file, memmap=False) as hdul:
+        expected = smap.Map(hdul[1].data, hdul[1].header).rotate()
+    expected.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(expected))] = np.nan
+
+    actual = create_hmi_map(hmi_blos_test_file)
+
+    np.testing.assert_equal(actual.data, expected.data)
 
 
 def test_find_test_filepath_missing() -> None:

@@ -31,6 +31,10 @@ from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
 
+_MAIN_JOB_TIMEOUT_SECONDS = 10 * 60
+_PFSS_JOB_TIMEOUT_SECONDS = 75 * 60
+_PROCESS_STOP_GRACE_SECONDS = 5
+
 if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     settings = Settings()
     sentry_sdk.init(
@@ -80,12 +84,20 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     down. Tracebacks from ordinary child exceptions are sent back over a
     pipe so the parent can include them in the scheduled-job log.
     """
+    timeout = _PFSS_JOB_TIMEOUT_SECONDS if image_types == ("pfss",) else _MAIN_JOB_TIMEOUT_SECONDS
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=False)
-    try:
+    try:  # ruff:ignore[too-many-statements-in-try-clause]
         process = context.Process(target=_job_entrypoint, args=(job_func, child_connection), name=job_func.__name__)
         process.start()
-        process.join()
+        process.join(timeout)
+        timed_out = process.is_alive()
+        if timed_out:
+            process.terminate()
+            process.join(_PROCESS_STOP_GRACE_SECONDS)
+            if process.is_alive():
+                process.kill()
+                process.join()
         child_traceback = parent_connection.recv() if parent_connection.poll() else None
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
@@ -96,7 +108,9 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
         child_connection.close()
         parent_connection.close()
 
-    if process.exitcode == os.EX_TEMPFAIL:
+    if timed_out:
+        logger.error(f"Job {job_func.__name__} timed out after {timeout:g} seconds and was stopped")
+    elif process.exitcode == os.EX_TEMPFAIL:
         logger.warning(f"Job {job_func.__name__} skipped: data not ready")
     elif process.exitcode != 0:
         suffix = f"\nChild traceback:\n{child_traceback.rstrip()}" if child_traceback else ""
@@ -304,7 +318,11 @@ def create_images(
     if not force:
         if image_type == "pfss" and gong_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
-            is_current = latest_record is not None and latest_record.gong_epoch == gong_epoch
+            is_current = (
+                latest_record is not None
+                and latest_record.gong_epoch == gong_epoch
+                and latest_record.updated_at > requested_time - datetime.timedelta(minutes=10)
+            )
         else:
             latest_record = get_record(database_session, image_type, requested_time.date())
             is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
@@ -397,12 +415,12 @@ def _run_job(
         created_files = [file for files in created_by_type.values() for file in files]
         if settings.s3_bucket and created_files:
             logger.info(f"Uploading {len(created_files)} files to {settings.s3_bucket}")
-            sync_to_s3(created_files, settings.s3_bucket, root_save_directory)
-            if update_mostrecent:
-                # Mirror to a fixed mostrecent/ prefix so the webpage has stable URLs
-                # for the latest images. Keys are bare filenames (root is the dated
-                # directory), so each run overwrites the previous set.
-                sync_to_s3(created_files, f"{settings.s3_bucket.rstrip('/')}/mostrecent", save_directory)
+            sync_to_s3(
+                created_files,
+                settings.s3_bucket,
+                root_save_directory,
+                mostrecent_root=save_directory if update_mostrecent else None,
+            )
         # Records only after a successful upload: marking success first would
         # make the next run skip regeneration and leave S3 partially updated.
         for image_type in created_by_type:

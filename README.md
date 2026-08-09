@@ -22,7 +22,8 @@ This includes:
   - B_LOS
   - Continuum
 - PFSS variants of every JPEG above, anchored to the matched NOAA-hosted GONG synoptic-map time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
-- Planning FITS files for every AIA channel (plus 4500, which is FITS-only) and the HMI B_LOS and continuum.
+- Planning FITS files for every AIA image channel and the HMI B_LOS and continuum. AIA 4500 is FITS-only and is
+  written only when its hourly frame falls inside the query window.
 - The combination of the AIA lightcurves with GOES.
 
 Future movie support will need to produce the following:

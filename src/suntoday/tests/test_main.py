@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -46,6 +47,30 @@ def test_pfss_creation_skips_persisted_gong_epoch(db_session, mocker, tmp_path) 
     assert create_images(session, "pfss", anchor, tmp_path, gong_epoch=gong_epoch) == []
     create.assert_not_called()
     session.close()
+
+
+def test_pfss_currentness_includes_sdo_anchor(mocker, tmp_path) -> None:
+    requested_time = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    gong_epoch = datetime(2026, 7, 20, 11, tzinfo=UTC)
+    record = mocker.Mock(
+        updated_at=requested_time - timedelta(minutes=15),
+        gong_epoch=gong_epoch,
+    )
+    latest = mocker.patch("suntoday.main.get_latest_record", return_value=record)
+    expected = [tmp_path / "f0171pfss.jpg"]
+    create = mocker.patch("suntoday.main.create_sdo_images", return_value=expected)
+
+    files = create_images(
+        mocker.sentinel.session,
+        "pfss",
+        requested_time,
+        tmp_path,
+        gong_epoch=gong_epoch,
+    )
+
+    assert files == expected
+    create.assert_called_once()
+    latest.assert_called_once_with(mocker.sentinel.session, "pfss")
 
 
 def test_cli_pfss_requires_date(mocker) -> None:
@@ -153,6 +178,10 @@ def _child_job_not_ready() -> None:
     raise DataNotReadyError(msg)
 
 
+def _child_job_sleeps() -> None:
+    time.sleep(10)
+
+
 def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     mocker.patch("suntoday.main._alert_if_stale")
     messages = []
@@ -191,6 +220,21 @@ def test_run_job_in_subprocess_checks_staleness_after_child_failure(mocker) -> N
 
     _run_job_in_subprocess(_child_job_fails, ("images",))
 
+    alert.assert_called_once_with(image_types=("images",))
+
+
+def test_run_job_in_subprocess_stops_timeout(mocker) -> None:
+    mocker.patch("suntoday.main._MAIN_JOB_TIMEOUT_SECONDS", 0.1)
+    mocker.patch("suntoday.main._PROCESS_STOP_GRACE_SECONDS", 0.1)
+    alert = mocker.patch("suntoday.main._alert_if_stale")
+    messages = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        _run_job_in_subprocess(_child_job_sleeps, ("images",))
+    finally:
+        logger.remove(sink_id)
+
+    assert any("_child_job_sleeps timed out" in message for message in messages)
     alert.assert_called_once_with(image_types=("images",))
 
 
@@ -237,7 +281,7 @@ def test_main_job_uploads_only_created_files_and_propagates_failure(tmp_path, mo
     with pytest.raises(RuntimeError, match="upload failed"):
         main_job(datetime(2026, 7, 13, tzinfo=UTC), tmp_path)
 
-    upload.assert_called_once_with([created_file], "my-bucket", tmp_path.resolve())
+    upload.assert_called_once()
     # No success record on a failed upload: the next run must regenerate.
     record.assert_not_called()
     session.close.assert_called_once()
@@ -259,7 +303,7 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
 
     # An explicit --date backfill must not overwrite mostrecent/.
     assert upload.mock_calls == [
-        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
+        mocker.call([created_file], "my-bucket", tmp_path.resolve(), mostrecent_root=None),
     ]
     # Only the type that created files gets a record, and only after upload.
     record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
@@ -280,8 +324,12 @@ def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
     main_job(root_save_directory=tmp_path)
 
     assert upload.mock_calls == [
-        mocker.call([created_file], "my-bucket", tmp_path.resolve()),
-        mocker.call([created_file], "my-bucket/mostrecent", tmp_path.resolve() / "2026" / "07" / "13"),
+        mocker.call(
+            [created_file],
+            "my-bucket",
+            tmp_path.resolve(),
+            mostrecent_root=tmp_path.resolve() / "2026" / "07" / "13",
+        ),
     ]
 
 
