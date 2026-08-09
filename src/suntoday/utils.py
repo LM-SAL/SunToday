@@ -4,7 +4,6 @@ Utility functions for image processing and visualization.
 
 import mimetypes
 import uuid
-import warnings
 from collections.abc import Iterable, Iterator
 from contextlib import contextmanager
 from pathlib import Path
@@ -13,7 +12,6 @@ import boto3
 import numpy as np
 import sunpy.map as smap
 from astropy.io.fits import CompImageHDU
-from astropy.io.fits.verify import VerifyWarning
 
 from suntoday import logger
 
@@ -124,13 +122,10 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Pat
     pathlib.Path
         Saved FITS path.
     """
-    with warnings.catch_warnings():
-        # VerifyWarning: Invalid 'BLANK' keyword in header.
-        # The 'BLANK' keyword is only applicable to integer data, and will be ignored in this HDU.
-        warnings.simplefilter("ignore", category=VerifyWarning)
-        # Empty keyword somehow and it raises a warning we want to remove.
-        amap.meta.pop("", None)
-        with atomic_save(save_directory / filename) as tmp_path:
-            amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
-            amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
+    # Empty and integer-only keywords are invalid in the float output.
+    amap.meta.pop("", None)
+    amap.meta.pop("blank", None)
+    with atomic_save(save_directory / filename) as tmp_path:
+        amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
+        amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
     return save_directory / filename

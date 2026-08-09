@@ -1,6 +1,12 @@
-import pytest
+import warnings
 
-from suntoday.utils import sync_to_s3
+import pytest
+from astropy.io import fits
+from astropy.io.fits.verify import VerifyWarning
+
+from suntoday.data.test import find_test_filepath
+from suntoday.maps import create_aia_map
+from suntoday.utils import save_fits, sync_to_s3
 
 
 def test_sync_to_s3(tmp_path, mocker) -> None:
@@ -61,3 +67,14 @@ def test_sync_to_s3_rejects_files_outside_root(tmp_path, mocker) -> None:
         sync_to_s3([inside, outside], "my-bucket", root)
 
     s3_client.upload_file.assert_not_called()
+
+
+def test_save_fits_removes_blank(tmp_path) -> None:
+    amap = create_aia_map(find_test_filepath("171"))
+    amap.meta["blank"] = 0
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", VerifyWarning)
+        path = save_fits(amap, tmp_path, "f0171.fits")
+        with fits.open(path) as hdus:
+            assert "BLANK" not in hdus[1].header
