@@ -22,7 +22,8 @@ This includes:
   - B_LOS
   - Continuum
 - PFSS variants of every JPEG above, anchored to the matched NOAA-hosted GONG synoptic-map time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
-- Planning FITS files for every AIA channel (plus 4500, which is FITS-only) and the HMI B_LOS and continuum.
+- Planning FITS files for every AIA image channel and the HMI B_LOS and continuum. AIA 4500 is FITS-only and is
+  written only when its hourly frame falls inside the query window.
 - The combination of the AIA lightcurves with GOES.
 
 Future movie support will need to produce the following:
@@ -72,6 +73,16 @@ Ensure the NFS export permissions allow the container to write. Changing permiss
 
 PostgreSQL uses a Docker-managed local volume; no host database directory or permission setup is required.
 The Postgres port is never exposed; the app reaches the DB over the internal compose network.
+
+### Output retention
+
+- Current dated objects under `sdomedia/SunInTime/YYYY/MM/DD` are retained
+  indefinitely for the mission-long website date picker.
+- `sdomedia/SunInTime/mostrecent` is a stable latest-image mirror. The
+  application uploads each dated object once, then uses S3 server-side copies
+  for this mirror.
+- `/app/images` is the unchanged NFS-backed output mount. This application
+  adds no NFS cleanup, retention, or S3 lifecycle policy.
 
 - Build and start the containers:
 
