@@ -31,6 +31,10 @@ from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
 
+_MAIN_JOB_TIMEOUT_SECONDS = 10 * 60
+_PFSS_JOB_TIMEOUT_SECONDS = 75 * 60
+_PROCESS_STOP_GRACE_SECONDS = 5
+
 if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     settings = Settings()
     sentry_sdk.init(
@@ -80,12 +84,20 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     down. Tracebacks from ordinary child exceptions are sent back over a
     pipe so the parent can include them in the scheduled-job log.
     """
+    timeout = _PFSS_JOB_TIMEOUT_SECONDS if image_types == ("pfss",) else _MAIN_JOB_TIMEOUT_SECONDS
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=False)
-    try:
+    try:  # ruff:ignore[too-many-statements-in-try-clause]
         process = context.Process(target=_job_entrypoint, args=(job_func, child_connection), name=job_func.__name__)
         process.start()
-        process.join()
+        process.join(timeout)
+        timed_out = process.is_alive()
+        if timed_out:
+            process.terminate()
+            process.join(_PROCESS_STOP_GRACE_SECONDS)
+            if process.is_alive():
+                process.kill()
+                process.join()
         child_traceback = parent_connection.recv() if parent_connection.poll() else None
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
@@ -96,7 +108,9 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
         child_connection.close()
         parent_connection.close()
 
-    if process.exitcode == os.EX_TEMPFAIL:
+    if timed_out:
+        logger.error(f"Job {job_func.__name__} timed out after {timeout:g} seconds and was stopped")
+    elif process.exitcode == os.EX_TEMPFAIL:
         logger.warning(f"Job {job_func.__name__} skipped: data not ready")
     elif process.exitcode != 0:
         suffix = f"\nChild traceback:\n{child_traceback.rstrip()}" if child_traceback else ""

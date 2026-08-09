@@ -1,3 +1,4 @@
+import time
 from datetime import UTC, datetime, timedelta
 
 import pytest
@@ -177,6 +178,10 @@ def _child_job_not_ready() -> None:
     raise DataNotReadyError(msg)
 
 
+def _child_job_sleeps() -> None:
+    time.sleep(10)
+
+
 def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     mocker.patch("suntoday.main._alert_if_stale")
     messages = []
@@ -215,6 +220,21 @@ def test_run_job_in_subprocess_checks_staleness_after_child_failure(mocker) -> N
 
     _run_job_in_subprocess(_child_job_fails, ("images",))
 
+    alert.assert_called_once_with(image_types=("images",))
+
+
+def test_run_job_in_subprocess_stops_timeout(mocker) -> None:
+    mocker.patch("suntoday.main._MAIN_JOB_TIMEOUT_SECONDS", 0.1)
+    mocker.patch("suntoday.main._PROCESS_STOP_GRACE_SECONDS", 0.1)
+    alert = mocker.patch("suntoday.main._alert_if_stale")
+    messages = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        _run_job_in_subprocess(_child_job_sleeps, ("images",))
+    finally:
+        logger.remove(sink_id)
+
+    assert any("_child_job_sleeps timed out" in message for message in messages)
     alert.assert_called_once_with(image_types=("images",))
 
 
