@@ -74,16 +74,6 @@ Ensure the NFS export permissions allow the container to write. Changing permiss
 PostgreSQL uses a Docker-managed local volume; no host database directory or permission setup is required.
 The Postgres port is never exposed; the app reaches the DB over the internal compose network.
 
-### Output retention
-
-- Current dated objects under `sdomedia/SunInTime/YYYY/MM/DD` are retained
-  indefinitely for the mission-long website date picker.
-- `sdomedia/SunInTime/mostrecent` is a stable latest-image mirror. The
-  application uploads each dated object once, then uses S3 server-side copies
-  for this mirror.
-- `/app/images` is the unchanged NFS-backed output mount. This application
-  adds no NFS cleanup, retention, or S3 lifecycle policy.
-
 - Build and start the containers:
 
 ```bash
