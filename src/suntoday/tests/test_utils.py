@@ -15,16 +15,25 @@ def test_sync_to_s3(tmp_path, mocker) -> None:
     day_directory.mkdir(parents=True)
     (day_directory / "f171.jpg").write_bytes(b"jpeg")
     (day_directory / "aia171.fits").write_bytes(b"fits")
+    (day_directory / "aia_light_curves.gif").write_bytes(b"png")
 
     sync_to_s3(list(day_directory.iterdir()), "my-bucket", tmp_path)
 
     calls = {call.args[2]: call for call in s3_client.upload_file.call_args_list}
-    assert set(calls) == {"2026/07/13/f171.jpg", "2026/07/13/aia171.fits"}
+    assert set(calls) == {
+        "2026/07/13/f171.jpg",
+        "2026/07/13/aia171.fits",
+        "2026/07/13/aia_light_curves.gif",
+    }
     assert calls["2026/07/13/f171.jpg"].kwargs["ExtraArgs"] == {
         "ContentType": "image/jpeg",
         "CacheControl": "max-age=300, must-revalidate",
     }
     assert calls["2026/07/13/aia171.fits"].kwargs["ExtraArgs"] == {"ContentType": "image/fits"}
+    assert calls["2026/07/13/aia_light_curves.gif"].kwargs["ExtraArgs"] == {
+        "ContentType": "image/png",
+        "CacheControl": "max-age=300, must-revalidate",
+    }
     assert calls["2026/07/13/f171.jpg"].args[1] == "my-bucket"
 
 

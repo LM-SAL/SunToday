@@ -95,7 +95,12 @@ def sync_to_s3(files: Iterable[Path], bucket: str, root_save_directory: Path) ->
             key = f"{prefix}/{key}"
         if key_directory := key.rpartition("/")[0]:
             key_directories.add(key_directory)
-        content_type = mimetypes.guess_type(path.name)[0]
+        if path.name == "aia_light_curves.gif":
+            content_type = "image/png"
+        elif path.suffix.lower() == ".fits":
+            content_type = "image/fits"
+        else:
+            content_type = mimetypes.guess_type(path.name)[0]
         extra_args = {"ContentType": content_type} if content_type else {}
         if path.suffix.lower() in {".gif", ".jpg"}:
             extra_args["CacheControl"] = "max-age=300, must-revalidate"
