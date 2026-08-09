@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from astropy.time import Time
 from parfive import Results
 from requests.auth import HTTPBasicAuth
 
@@ -62,6 +63,26 @@ def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
         raise ValueError(msg)
     logger.warning("Using test environment credentials for JSOC.")
     return HTTPBasicAuth(settings.jsoc_user, settings.jsoc_password)
+
+
+def _format_jsoc_time(value: datetime) -> str:
+    """
+    Format a UTC datetime as the equivalent JSOC TAI record time.
+    """
+    if value.tzinfo is None:
+        value = value.replace(tzinfo=UTC)
+    return Time(value.astimezone(UTC), scale="utc").tai.strftime(Settings().jsoc_str_fmt)
+
+
+def _parse_jsoc_time(value: str) -> datetime:
+    """
+    Parse JSOC TAI records and ISO observation times as UTC.
+    """
+    value = str(value)
+    if value.endswith("_TAI"):
+        return Time.strptime(value, Settings().jsoc_str_fmt, scale="tai").utc.to_datetime(timezone=UTC)
+    parsed = pd.to_datetime(value, format="mixed", utc=True).to_pydatetime()
+    return parsed.astimezone(UTC)
 
 
 def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
@@ -142,7 +163,7 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
         If the JSOC response has missing wavelengths.
     """
     settings = Settings()
-    query = f"aia_test.lev1p5[{requested_time.strftime(settings.jsoc_str_fmt)}/{time_span}]"
+    query = f"aia_test.lev1p5[{_format_jsoc_time(requested_time)}/{time_span}]"
     response = _get_urls(query, "DATE-OBS,WAVELNTH,EXPTIME", "image_lev1p5")
     keywords = response["keywords"]
     segments = response["segments"]
@@ -154,7 +175,7 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
     segments["image_lev1p5"] = [f"{settings.jsoc_base_url}{value}" for value in segments["image_lev1p5"]]
     aia_urls = pd.DataFrame.from_dict(keywords | segments)
     aia_urls = aia_urls.set_index("DATE-OBS")
-    aia_urls.index = pd.to_datetime(aia_urls.index, format="mixed")
+    aia_urls.index = pd.to_datetime(aia_urls.index, format="mixed", utc=True)
     # Keep only channels the pipeline knows: the nine plotted wavelengths are
     # required, the FITS-only ones (e.g. hourly 4500) are a bonus when they
     # happen to fall inside the window.
@@ -191,7 +212,7 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
     keyword_store = {"T_REC": [], "WAVELNTH": []}
     segment_store = {"URL": []}
     for query, segment in [("lm_jps.m45s_nrt[{}]", "magnetogram"), ("lm_jps.Ic_45s[{}]", "continuum")]:
-        request_query = query.format(requested_time.strftime(settings.jsoc_str_fmt))
+        request_query = query.format(_format_jsoc_time(requested_time))
         json_response = _get_urls(request_query, "T_REC", segment)
         keywords = json_response["keywords"]
         segments = json_response["segments"]
@@ -204,12 +225,10 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
         keyword_store["T_REC"].extend(keywords["T_REC"])
         keyword_store["WAVELNTH"].append(segment)
         segment_store["URL"].extend(segments[segment])
-    keyword_store["T_REC"] = [
-        datetime.strptime(str(value), settings.jsoc_str_fmt).astimezone() for value in keyword_store["T_REC"]
-    ]
+    keyword_store["T_REC"] = [_parse_jsoc_time(value) for value in keyword_store["T_REC"]]
     hmi_urls = pd.DataFrame.from_dict(keyword_store | segment_store)
     hmi_urls = hmi_urls.set_index("T_REC")
-    hmi_urls.index = pd.to_datetime(hmi_urls.index, format="mixed")
+    hmi_urls.index = pd.to_datetime(hmi_urls.index, format="mixed", utc=True)
     return hmi_urls
 
 
@@ -240,7 +259,6 @@ def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime
     ValueError
         If the series returns no records.
     """
-    settings = Settings()
     response = _get_urls(f"{series}[$]", keyword, segment)
     keywords = {ad["name"]: ad["values"] for ad in response["keywords"]}
     values = keywords.get(keyword, [])
@@ -248,11 +266,7 @@ def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime
         msg = f"No records returned for {series}[$]."
         raise ValueError(msg)
     value = str(values[-1])
-    try:
-        parsed = datetime.strptime(value, settings.jsoc_str_fmt).replace(tzinfo=UTC)
-    except ValueError:
-        parsed = pd.to_datetime(value, format="mixed").to_pydatetime()
-    return parsed.astimezone(UTC) if parsed.tzinfo else parsed.replace(tzinfo=UTC)
+    return _parse_jsoc_time(value)
 
 
 def find_latest_jsoc_times() -> tuple[datetime, datetime]:
@@ -320,9 +334,8 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     ValueError
         If no data is returned.
     """
-    settings = Settings()
     start_time = end_time - timedelta(days=1)
-    query = f"aia_test.lev1p5[{start_time.strftime(settings.jsoc_str_fmt)}-{end_time.strftime(settings.jsoc_str_fmt)}]"
+    query = f"aia_test.lev1p5[{_format_jsoc_time(start_time)}-{_format_jsoc_time(end_time)}]"
     response = _get_urls(query, "DATE-OBS,WAVELNTH,DATAMEAN,QUALITY,EXPTIME")
     keywords = response["keywords"]
     if len(keywords[0]["values"]) == 0:
@@ -331,7 +344,7 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     keywords = {ad["name"]: ad["values"] for ad in keywords}
     aia_timeseries = pd.DataFrame.from_dict(keywords)
     aia_timeseries = aia_timeseries.set_index("DATE-OBS")
-    aia_timeseries.index = pd.to_datetime(aia_timeseries.index, format="mixed")
+    aia_timeseries.index = pd.to_datetime(aia_timeseries.index, format="mixed", utc=True)
     aia_timeseries = aia_timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
     # The series interleaves hourly 4500 A planning frames; they are never
     # plotted and only pollute the saved txt with ~2500 DN spikes.

@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from suntoday import DataNotReadyError
@@ -59,7 +60,7 @@ def test_get_latest_record_time_parses_tai_format(mocker) -> None:
 
     latest = _get_latest_record_time("lm_jps.m45s_nrt", "T_REC", "magnetogram")
 
-    assert latest == datetime(2026, 7, 14, 12, 0, tzinfo=UTC)
+    assert latest == datetime(2026, 7, 14, 11, 59, 23, tzinfo=UTC)
 
 
 def test_get_latest_record_time_no_records(mocker) -> None:
@@ -91,7 +92,7 @@ def _aia_urls_response(wavelengths):
 def test_get_aia_urls_keeps_fits_only_and_drops_unknown(mocker) -> None:
     # 4500 is a FITS-only bonus channel: kept when present, while anything the
     # pipeline does not know is dropped instead of crashing the sort downstream.
-    mocker.patch(
+    get_urls = mocker.patch(
         "suntoday.downloaders.jsoc._get_urls",
         return_value=_aia_urls_response([*AIA_WAVELENGTHS, "4500", "9999"]),
     )
@@ -99,6 +100,31 @@ def test_get_aia_urls_keeps_fits_only_and_drops_unknown(mocker) -> None:
     aia_urls = get_aia_urls(datetime(2026, 7, 15, 12, 0, tzinfo=UTC))
 
     assert set(aia_urls["WAVELNTH"]) == {*AIA_WAVELENGTHS, "4500"}
+    assert get_urls.call_args.args[0] == "aia_test.lev1p5[2026.07.15_12:00:37_TAI/60s]"
+
+
+def test_get_hmi_urls_formats_query_and_parses_tai(mocker) -> None:
+    def response(segment):
+        return {
+            "keywords": [{"name": "T_REC", "values": ["2026.07.15_12:00:00_TAI"]}],
+            "segments": [{"name": segment, "values": [f"/{segment}.fits"]}],
+        }
+
+    get_urls = mocker.patch(
+        "suntoday.downloaders.jsoc._get_urls",
+        side_effect=[response("magnetogram"), response("continuum")],
+    )
+
+    urls = get_hmi_urls(datetime(2026, 7, 15, 12, tzinfo=UTC))
+
+    assert urls.index.tolist() == [
+        pd.Timestamp("2026-07-15T11:59:23Z"),
+        pd.Timestamp("2026-07-15T11:59:23Z"),
+    ]
+    assert [call.args[0] for call in get_urls.call_args_list] == [
+        "lm_jps.m45s_nrt[2026.07.15_12:00:37_TAI]",
+        "lm_jps.Ic_45s[2026.07.15_12:00:37_TAI]",
+    ]
 
 
 def test_get_aia_urls_does_not_require_fits_only_channels(mocker) -> None:
@@ -122,6 +148,15 @@ def test_fetch_aia_fits_uses_three_minute_window(mocker, tmp_path) -> None:
     fetch_aia_fits(requested_time, save_directory=tmp_path)
 
     get_aia_urls.assert_called_once_with(requested_time, time_span="180s")
+
+
+def test_fetch_aia_timeseries_formats_explicit_backfill_as_tai(mocker) -> None:
+    get_urls = mocker.patch("suntoday.downloaders.jsoc._get_urls", return_value={"keywords": [{"values": []}]})
+
+    with pytest.raises(ValueError, match="No data found"):
+        fetch_aia_timeseries(datetime(2026, 7, 15, 12, tzinfo=UTC))
+
+    assert get_urls.call_args.args[0] == ("aia_test.lev1p5[2026.07.14_12:00:37_TAI-2026.07.15_12:00:37_TAI]")
 
 
 def test_fetch_aia_fits_reports_parfive_error_details(mocker, tmp_path) -> None:
