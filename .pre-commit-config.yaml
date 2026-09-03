@@ -1,7 +1,7 @@
 exclude: ".*(.csv|.fits|.fts|.fit|.header|.jpg|.jpeg|.json|.png|.svg)$"
 repos:
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.3
+    rev: v2.4.0
     hooks:
       - id: autoflake
         args:
@@ -11,7 +11,7 @@ repos:
             "--remove-unused-variable",
           ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.16.1"
+    rev: "v0.16.5"
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--preview"]
@@ -45,7 +45,7 @@ repos:
         args: ["--fix=lf"]
       - id: trailing-whitespace
   - repo: https://github.com/adhtruong/mirrors-typos
-    rev: v1.49.0
+    rev: v1.50.1
     hooks:
       - id: typos
 ci:

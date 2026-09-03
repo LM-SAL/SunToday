@@ -12,7 +12,7 @@ aiosignal==1.4.0
     # via aiohttp
 annotated-types==0.7.0
     # via pydantic
-astropy==8.0.0
+astropy==8.0.1
     # via
     #   -r requirements.txt
     #   aiapy
@@ -30,9 +30,9 @@ attrs==25.4.0
     #   zeep
 beautifulsoup4==4.14.3
     # via sunpy
-boto3==1.43.47
+boto3==1.43.83
     # via -r requirements.txt
-botocore==1.43.47
+botocore==1.43.87
     # via
     #   boto3
     #   s3transfer
@@ -70,7 +70,7 @@ frozenlist==1.8.0
     # via
     #   aiohttp
     #   aiosignal
-fsspec==2026.6.0
+fsspec==2026.7.0
     # via
     #   -r requirements.txt
     #   dask
@@ -78,8 +78,6 @@ fsspec==2026.6.0
     #   sunpy
 google-crc32c==1.8.0
     # via zarr
-greenlet==3.5.3
-    # via sqlalchemy
 h5netcdf==1.8.1
     # via sunpy
 h5py==3.16.0
@@ -128,7 +126,7 @@ networkx==3.6.1
     # via scikit-image
 numcodecs==0.16.5
     # via zarr
-numpy==2.5.0
+numpy==2.5.2
     # via
     #   -r requirements.txt
     #   aiapy
@@ -169,7 +167,7 @@ packaging==26.0
     #   streamtracer
     #   sunpy
     #   zarr
-pandas==3.0.3
+pandas==3.0.5
     # via
     #   -r requirements.txt
     #   dask
@@ -204,13 +202,13 @@ pyavm==0.9.8
     # via reproject
 pycairo==1.29.0
     # via mplcairo
-pydantic==2.13.4
+pydantic==2.13.5
     # via
     #   -r requirements.txt
     #   pydantic-settings
-pydantic-core==2.46.4
+pydantic-core==2.46.5
     # via pydantic
-pydantic-settings==2.14.2
+pydantic-settings==2.15.0
     # via -r requirements.txt
 pyerfa==2.0.1.5
     # via
@@ -259,7 +257,7 @@ scipy==1.17.0
     #   scikit-image
     #   sunkit-magex
     #   sunpy
-sentry-sdk==2.64.0
+sentry-sdk==2.68.1
     # via -r requirements.txt
 six==1.17.0
     # via python-dateutil
@@ -267,7 +265,7 @@ slicerator==1.1.0
     # via pims
 soupsieve==2.8.3
     # via beautifulsoup4
-sqlalchemy==2.0.51
+sqlalchemy==2.0.52
     # via
     #   -r requirements.txt
     #   sqlalchemy-utils

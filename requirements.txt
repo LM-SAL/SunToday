@@ -4,7 +4,7 @@ boto3==1.43.83
 fsspec==2026.7.0
 loguru==0.7.3
 # Bug with matplotlib 3.11.0 and mplcairo
-matplotlib~=3.11.1
+matplotlib==3.10.9,<3.11.0
 # This is max Python 3.13 at the moment
 mplcairo==0.6.1
 numpy==2.5.2
