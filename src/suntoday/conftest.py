@@ -15,7 +15,7 @@ from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 os.environ["SUNTODAY_TEST_ENV"] = "True"
 
 
-@pytest.fixture(autouse=True)
+@pytest.fixture
 def _fresh_gong_search_cache():
     if gong := sys.modules.get("suntoday.downloaders.gong"):
         gong._clear_search_cache()  # ruff:ignore[private-member-access]
@@ -50,9 +50,7 @@ def db_session(test_db):
     pg_user = test_db.user
     pg_password = test_db.password
     pg_db = test_db.dbname
-    with DatabaseJanitor(
-        user=pg_user, host=pg_host, port=pg_port, dbname=pg_db, version=test_db.version, password=pg_password
-    ):
+    with DatabaseJanitor(user=pg_user, host=pg_host, port=pg_port, dbname=pg_db, password=pg_password):
         connection_str = f"postgresql+psycopg2://{pg_user}:@{pg_host}:{pg_port}/{pg_db}"
         engine = create_engine(connection_str, echo=False, connect_args={"options": "-c timezone=utc"})
         BASE.metadata.create_all(engine)
