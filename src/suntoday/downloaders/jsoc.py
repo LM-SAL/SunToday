@@ -91,7 +91,7 @@ def _parse_jsoc_time(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _get_urls(query: str, keywords: str, segment: str | None = None, *, public: bool = False) -> dict:
+def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
     """
     For a given query, keywords and segment query the JSOC.
 
@@ -103,8 +103,6 @@ def _get_urls(query: str, keywords: str, segment: str | None = None, *, public: 
         Keywords to return.
     segment : str, optional
         Segment to return.
-    public : bool, optional
-        Query the public JSOC server without test-series authentication.
 
     Returns
     -------
@@ -121,7 +119,7 @@ def _get_urls(query: str, keywords: str, segment: str | None = None, *, public: 
         If the JSOC response has missing required keys.
     """
     settings = Settings()
-    auth = None if public else _jsoc_auth(settings)
+    auth = _jsoc_auth(settings)
     params = {
         "ds": query,
         "op": "rs_list",
@@ -129,8 +127,7 @@ def _get_urls(query: str, keywords: str, segment: str | None = None, *, public: 
     }
     if segment is not None:
         params["seg"] = segment
-    url = f"{settings.jsoc_base_url}/cgi-bin/ajax/jsoc_info" if public else settings.jsoc_info_url
-    response = requests.get(url, params=params, auth=auth, timeout=60)
+    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
         msg = f"JSOC request for {query!r} failed with {response.status_code} and {response.text}."
         raise OSError(msg)
@@ -342,7 +339,7 @@ def _get_hmi_synoptic_record(requested_time: datetime) -> tuple[dict, str]:
     """
     start = _format_jsoc_time(requested_time - timedelta(days=2))
     end = _format_jsoc_time(requested_time)
-    response = _get_urls(f"{HMI_SYNOPTIC_SERIES}[{start}-{end}]", _SYNOPTIC_KEYS, "data", public=True)
+    response = _get_urls(f"{HMI_SYNOPTIC_SERIES}[{start}-{end}]", _SYNOPTIC_KEYS, "data")
     keywords = {item["name"]: item["values"] for item in response["keywords"]}
     segments = {item["name"]: item["values"] for item in response["segments"]}
     # Records without a data file or with MISSING keywords are unusable.

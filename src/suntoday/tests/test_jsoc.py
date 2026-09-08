@@ -234,7 +234,6 @@ def test_hmi_synoptic_selection_skips_unusable_records(mocker) -> None:
     time = datetime(2026, 7, 17, 22, 30, tzinfo=UTC)
     assert find_hmi_synoptic_time(time) == datetime(2026, 7, 17, 20, 23, 23, tzinfo=UTC)
     assert query.call_args.args[0] == "hmi.Mrdailysynframe_720s_nrt[2026.07.15_22:30:37_TAI-2026.07.17_22:30:37_TAI]"
-    assert query.call_args.kwargs == {"public": True}
     query.return_value["segments"][0]["values"] = ["InvalidSegName"] * 3
     with pytest.raises(DataNotReadyError, match="No available HMI"):
         _get_hmi_synoptic_record(time)
@@ -260,14 +259,3 @@ def test_fetch_hmi_synoptic_restores_header_and_caches(mocker, tmp_path) -> None
     assert header["T_OBS"] == metadata["T_OBS"]
     assert fetch_hmi_synoptic_fits(time, tmp_path) == file
     assert downloader.download.call_count == 1
-
-
-def test_public_jsoc_query_does_not_use_test_credentials(mocker):
-    auth = mocker.patch("suntoday.downloaders.jsoc._jsoc_auth")
-    response = mocker.Mock(status_code=200)
-    response.json.return_value = {"keywords": [], "segments": []}
-    get = mocker.patch("suntoday.downloaders.jsoc.requests.get", return_value=response)
-    _get_urls("hmi.Mrdailysynframe_720s_nrt[$]", "T_REC", "data", public=True)
-    auth.assert_not_called()
-    assert get.call_args.kwargs["auth"] is None
-    assert get.call_args.args[0] == "http://jsoc.stanford.edu/cgi-bin/ajax/jsoc_info"
