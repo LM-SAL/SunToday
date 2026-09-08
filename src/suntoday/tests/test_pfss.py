@@ -10,6 +10,9 @@ def test_trace_field_lines(gong_test_file) -> None:
     radii = field_lines.spherical.distance.to_value("km")
     is_open = field_lines.info.meta["is_open"]
     assert field_lines.info.meta["boundary_source"] == "GONG"
+    polarity = field_lines.info.meta["polarity"]
+    assert set(polarity) == {-1, 0, 1}
+    np.testing.assert_array_equal(is_open, polarity != 0)
     assert is_open.shape == radii.shape
     # One NaN separator per kept line; boundary-grazing lines are dropped
     n_lines = np.isnan(radii).sum()

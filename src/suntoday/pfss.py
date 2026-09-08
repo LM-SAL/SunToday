@@ -78,7 +78,7 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     type(output).bg.fget.cache_clear()
     type(output)._modbg.fget.cache_clear()  # ruff:ignore[private-member-access]
     ran_out = (np.asarray(tracer.tracer.ROT) == 1).reshape(len(field_lines), -1).any(axis=1)
-    longitudes, latitudes, radii, is_open = [], [], [], []
+    longitudes, latitudes, radii, polarities = [], [], [], []
     for field_line, dropped in zip(field_lines, ran_out, strict=True):
         if dropped:
             continue
@@ -86,15 +86,17 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
         longitudes.append(np.append(spherical.lon.to_value(u.deg), np.nan))
         latitudes.append(np.append(spherical.lat.to_value(u.deg), np.nan))
         radii.append(np.append(spherical.distance.to_value(u.km), np.nan))
-        is_open.append(np.full(len(spherical.lon) + 1, field_line.is_open))
+        polarities.append(np.full(len(spherical.lon) + 1, field_line.polarity, dtype=np.int8))
     field_lines = SkyCoord(
         np.concatenate(longitudes) * u.deg,
         np.concatenate(latitudes) * u.deg,
         np.concatenate(radii) * u.km,
         frame=field_lines[0].coords.frame.replicate_without_data(),
     )
+    polarities = np.concatenate(polarities)
     field_lines.info.meta = {
-        "is_open": np.concatenate(is_open),
+        "polarity": polarities,
+        "is_open": polarities != 0,
         "boundary_source": boundary_map.meta.get("boundary_source", "GONG"),
     }
     return field_lines
