@@ -11,6 +11,7 @@ import datetime
 import functools
 import multiprocessing
 import os
+import signal
 import tempfile
 import time
 import traceback
@@ -55,6 +56,13 @@ def _job_entrypoint(job_func, error_connection) -> None:
     SystemExit
         With ``os.EX_TEMPFAIL`` when the upstream data is not ready.
     """
+
+    # The parent's timeout terminate() must unwind the job so the FITS
+    # TemporaryDirectory is deleted; SIGTERM's default action skips that.
+    def _exit_on_sigterm(signum, _frame) -> None:
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     try:
         job_func()
     except DataNotReadyError as e:
