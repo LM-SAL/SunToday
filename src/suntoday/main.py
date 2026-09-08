@@ -291,7 +291,9 @@ def create_images(
         defaults to ``requested_time``.
     boundary_epoch : datetime.datetime, optional
         Boundary-map timestamp for a PFSS run. A matching persisted epoch skips
-        regeneration, including after a container restart.
+        regeneration, including after a container restart. The same epoch
+        pins the boundary download so the rendered lines and the record
+        never describe different HMI frames.
     force : bool, optional
         Regenerate even when the database record says the images are
         already current.
@@ -336,6 +338,7 @@ def create_images(
             save_directory,
             hmi_time=hmi_time,
             pfss=image_type == "pfss",
+            boundary_time=boundary_epoch,
             download_directory=download_directory,
         )
     else:

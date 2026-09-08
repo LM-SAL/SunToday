@@ -255,7 +255,7 @@ def test_create_pfss_images_uses_field_lines(
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
     mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=aia_files)
     mocker.patch("suntoday.jpegs.fetch_hmi_fits", return_value=[hmi_file])
-    mocker.patch("suntoday.jpegs.fetch_hmi_synoptic_fits", return_value=synoptic_file)
+    fetch_synoptic = mocker.patch("suntoday.jpegs.fetch_hmi_synoptic_fits", return_value=synoptic_file)
     boundary = mocker.patch("suntoday.jpegs.create_hmi_synoptic_map").return_value
     trace = mocker.patch("suntoday.jpegs.trace_field_lines", return_value=field_lines)
     mocker.patch("suntoday.jpegs.create_aia_map", return_value=aia_map)
@@ -265,7 +265,9 @@ def test_create_pfss_images_uses_field_lines(
     save_fits = mocker.patch("suntoday.jpegs.save_fits")
     save_product = mocker.patch("suntoday.jpegs._save_product", return_value=[])
 
-    assert create_sdo_images(datetime.now(UTC), tmp_path, pfss=True) == []
+    boundary_time = datetime(2026, 7, 17, 20, 23, 23, tzinfo=UTC)
+    assert create_sdo_images(datetime.now(UTC), tmp_path, pfss=True, boundary_time=boundary_time) == []
+    assert fetch_synoptic.call_args.args[0] == boundary_time
     trace.assert_called_once_with(boundary)
     save_fits.assert_not_called()
     assert save_product.call_count == 4

@@ -524,6 +524,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     hmi_time: datetime.datetime | None = None,
     *,
     pfss: bool = False,
+    boundary_time: datetime.datetime | None = None,
     download_directory: Path | None = None,
 ) -> list[Path]:
     """
@@ -547,8 +548,12 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         products: every JPEG is saved twice (``pfssnolines`` base and
         ``pfss`` field line overlay from an HMI radial synoptic frame) and no
         planning FITS files are written. The latest boundary preceding
-        ``requested_time`` is used and its date is labeled separately. Leave
+        ``boundary_time`` is used and its date is labeled separately. Leave
         ``hmi_time`` unset so the SDO image timestamps match.
+    boundary_time : datetime.datetime, optional
+        Latest acceptable HMI synoptic boundary record time. Pass the epoch
+        already selected by the job so the traced boundary is the one it
+        persists. Defaults to ``requested_time``.
     download_directory : pathlib.Path, optional
         Directory to download the FITS files into. Files already present
         are not re-downloaded, so passing the same directory to the main
@@ -566,7 +571,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         fits_directory = download_directory or Path(temp_dir)
         field_lines = None
         if pfss:
-            synoptic_file = fetch_hmi_synoptic_fits(requested_time, save_directory=fits_directory)
+            synoptic_file = fetch_hmi_synoptic_fits(boundary_time or requested_time, save_directory=fits_directory)
             logger.info("Tracing PFSS field lines")
             field_lines = trace_field_lines(create_hmi_synoptic_map(synoptic_file))
 

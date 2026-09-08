@@ -70,6 +70,7 @@ def test_pfss_currentness_includes_sdo_anchor(mocker, tmp_path) -> None:
 
     assert files == expected
     create.assert_called_once()
+    assert create.call_args.kwargs["boundary_time"] == boundary_epoch
     latest.assert_called_once_with(mocker.sentinel.session, "pfss")
 
 
@@ -369,7 +370,9 @@ def test_create_images_dispatches_by_type(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, hmi_time) == [image_file]
     assert create_images(mocker.sentinel.session, "timeseries", requested_time, tmp_path) == [lightcurve_file]
-    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False, download_directory=None)
+    create_sdo.assert_called_once_with(
+        requested_time, tmp_path, hmi_time=hmi_time, pfss=False, boundary_time=None, download_directory=None
+    )
     create_lightcurve.assert_called_once_with(requested_time, tmp_path)
 
 
