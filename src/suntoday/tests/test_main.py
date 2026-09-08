@@ -1,5 +1,8 @@
+import os
+import signal
 import time
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import pytest
 import sentry_sdk
@@ -161,26 +164,32 @@ def test_cli_force_requires_date(mocker, capsys) -> None:
     scheduled_mock.assert_not_called()
 
 
-def _child_job_ok() -> None:
+def _child_job_ok(**_kwargs) -> None:
     pass
 
 
-def _child_job_fails() -> None:
+def _child_job_fails(**_kwargs) -> None:
     raise SystemExit(3)
 
 
-def _child_job_raises() -> None:
+def _child_job_raises(**_kwargs) -> None:
     msg = "database connection failed"
     raise RuntimeError(msg)
 
 
-def _child_job_not_ready() -> None:
+def _child_job_not_ready(**_kwargs) -> None:
     msg = "JSOC still exporting"
     raise DataNotReadyError(msg)
 
 
-def _child_job_sleeps() -> None:
+def _child_job_sleeps(**_kwargs) -> None:
     time.sleep(10)
+
+
+def _child_job_killed(download_directory: Path) -> None:
+    (download_directory / "leaked.fits").write_bytes(b"0")
+    Path(os.environ["SUNTODAY_TEST_MARKER"]).write_text(str(download_directory), encoding="utf-8")
+    os.kill(os.getpid(), signal.SIGKILL)
 
 
 def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
@@ -237,6 +246,19 @@ def test_run_job_in_subprocess_stops_timeout(mocker) -> None:
 
     assert any("_child_job_sleeps timed out" in message for message in messages)
     alert.assert_called_once_with(image_types=("images",))
+
+
+def test_run_job_in_subprocess_removes_downloads_after_kill(mocker, monkeypatch, tmp_path) -> None:
+    # A SIGKILLed (e.g. OOM-killed) child never runs its own cleanup, so
+    # the parent must own the download directory.
+    marker = tmp_path / "download_directory"
+    monkeypatch.setenv("SUNTODAY_TEST_MARKER", str(marker))
+    mocker.patch("suntoday.main._alert_if_stale")
+
+    _run_job_in_subprocess(_child_job_killed, ("images",))
+
+    download_directory = Path(marker.read_text(encoding="utf-8"))
+    assert not download_directory.exists()
 
 
 def test_alert_if_stale_pages_only_beyond_threshold(mocker) -> None:
