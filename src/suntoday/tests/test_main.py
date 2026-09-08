@@ -37,24 +37,24 @@ def test_create_images_invalid_type(mocker) -> None:
 
 
 @pytest.mark.usefixtures("_clean_image_tables")
-def test_pfss_creation_skips_persisted_gong_epoch(db_session, mocker, tmp_path) -> None:
+def test_pfss_creation_skips_persisted_boundary_epoch(db_session, mocker, tmp_path) -> None:
     session = db_session()
     anchor = datetime(2026, 7, 20, 11, tzinfo=UTC)
-    gong_epoch = datetime(2026, 7, 20, 12, tzinfo=UTC)
-    write_or_update_record(session, "pfss", str(anchor.date()), updated_at=str(anchor), gong_epoch=gong_epoch)
+    boundary_epoch = datetime(2026, 7, 20, 12, tzinfo=UTC)
+    write_or_update_record(session, "pfss", str(anchor.date()), updated_at=str(anchor), boundary_epoch=boundary_epoch)
     create = mocker.patch("suntoday.main.create_sdo_images")
 
-    assert create_images(session, "pfss", anchor, tmp_path, gong_epoch=gong_epoch) == []
+    assert create_images(session, "pfss", anchor, tmp_path, boundary_epoch=boundary_epoch) == []
     create.assert_not_called()
     session.close()
 
 
 def test_pfss_currentness_includes_sdo_anchor(mocker, tmp_path) -> None:
     requested_time = datetime(2026, 7, 20, 12, tzinfo=UTC)
-    gong_epoch = datetime(2026, 7, 20, 11, tzinfo=UTC)
+    boundary_epoch = datetime(2026, 7, 20, 11, tzinfo=UTC)
     record = mocker.Mock(
         updated_at=requested_time - timedelta(minutes=15),
-        gong_epoch=gong_epoch,
+        boundary_epoch=boundary_epoch,
     )
     latest = mocker.patch("suntoday.main.get_latest_record", return_value=record)
     expected = [tmp_path / "f0171pfss.jpg"]
@@ -65,11 +65,12 @@ def test_pfss_currentness_includes_sdo_anchor(mocker, tmp_path) -> None:
         "pfss",
         requested_time,
         tmp_path,
-        gong_epoch=gong_epoch,
+        boundary_epoch=boundary_epoch,
     )
 
     assert files == expected
     create.assert_called_once()
+    assert create.call_args.kwargs["boundary_time"] == boundary_epoch
     latest.assert_called_once_with(mocker.sentinel.session, "pfss")
 
 
@@ -333,7 +334,7 @@ def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
     ]
 
 
-def test_pfss_job_records_gong_epoch_after_upload(tmp_path, mocker) -> None:
+def test_pfss_job_records_boundary_epoch_after_upload(tmp_path, mocker) -> None:
     settings = mocker.patch("suntoday.main.Settings").return_value
     settings.s3_bucket = "my-bucket"
     mocker.patch("suntoday.main.create_db")
@@ -342,8 +343,8 @@ def test_pfss_job_records_gong_epoch_after_upload(tmp_path, mocker) -> None:
     mocker.patch("suntoday.main.create_images", return_value=[created_file])
     record = mocker.patch("suntoday.main.write_or_update_record")
     mocker.patch("suntoday.main.sync_to_s3")
-    gong_epoch = datetime(2026, 7, 13, 12, tzinfo=UTC)
-    mocker.patch("suntoday.main.find_nearest_gong_time", return_value=gong_epoch)
+    boundary_epoch = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    mocker.patch("suntoday.main.find_hmi_synoptic_time", return_value=boundary_epoch)
     requested_time = datetime(2026, 7, 13, 11, tzinfo=UTC)
     mocker.patch("suntoday.main.find_latest_pfss_time", return_value=requested_time)
 
@@ -354,7 +355,7 @@ def test_pfss_job_records_gong_epoch_after_upload(tmp_path, mocker) -> None:
         "pfss",
         "2026-07-13",
         updated_at=str(requested_time),
-        gong_epoch=gong_epoch,
+        boundary_epoch=boundary_epoch,
     )
 
 
@@ -369,7 +370,9 @@ def test_create_images_dispatches_by_type(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path, hmi_time) == [image_file]
     assert create_images(mocker.sentinel.session, "timeseries", requested_time, tmp_path) == [lightcurve_file]
-    create_sdo.assert_called_once_with(requested_time, tmp_path, hmi_time=hmi_time, pfss=False, download_directory=None)
+    create_sdo.assert_called_once_with(
+        requested_time, tmp_path, hmi_time=hmi_time, pfss=False, boundary_time=None, download_directory=None
+    )
     create_lightcurve.assert_called_once_with(requested_time, tmp_path)
 
 

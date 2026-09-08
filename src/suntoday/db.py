@@ -69,7 +69,7 @@ class PFSSImages(BASE):
         Primary key - The observation date of the image
     updated_at : datetime
         Timestamp of when the record was last updated
-    gong_epoch : datetime
+    boundary_epoch : datetime
         Boundary-map timestamp used for the last successful PFSS render. The
         legacy column name is retained for database compatibility.
     """
@@ -77,7 +77,7 @@ class PFSSImages(BASE):
     __tablename__ = "PFSSImages"
     obs_date = Column(Date(), primary_key=True)
     updated_at = Column(DateTime(timezone=True))
-    gong_epoch = Column("adapt_epoch", DateTime(timezone=True))
+    boundary_epoch = Column("adapt_epoch", DateTime(timezone=True))
 
 
 VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages, "pfss": PFSSImages}
@@ -216,7 +216,7 @@ def write_or_update_record(
     obs_date: str,
     *,
     updated_at: str,
-    gong_epoch: datetime.datetime | None = None,
+    boundary_epoch: datetime.datetime | None = None,
 ):
     """
     Write a new record to the database or update an existing one based on the
@@ -232,7 +232,7 @@ def write_or_update_record(
         Observation date for the record.
     updated_at : str
         Timestamp for when the record was updated
-    gong_epoch : datetime.datetime, optional
+    boundary_epoch : datetime.datetime, optional
         Boundary-map timestamp used for a PFSS render.
 
     Raises
@@ -244,21 +244,21 @@ def write_or_update_record(
     if model_class is None:
         msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
         raise ValueError(msg)
-    if gong_epoch is not None and model_class is not PFSSImages:
-        msg = "gong_epoch is only valid for PFSS records"
+    if boundary_epoch is not None and model_class is not PFSSImages:
+        msg = "boundary_epoch is only valid for PFSS records"
         raise ValueError(msg)
     try:  # ruff:ignore[too-many-statements-in-try-clause]
         existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
         if existing_record:
             existing_record.updated_at = updated_at
-            if gong_epoch is not None:
-                existing_record.gong_epoch = gong_epoch
+            if boundary_epoch is not None:
+                existing_record.boundary_epoch = boundary_epoch
             session.commit()
             logger.info(f"Updated existing {model_type} record for {obs_date} with updated_at: {updated_at}")
         else:
             new_record = model_class(obs_date=obs_date, updated_at=updated_at)
-            if gong_epoch is not None:
-                new_record.gong_epoch = gong_epoch
+            if boundary_epoch is not None:
+                new_record.boundary_epoch = boundary_epoch
             session.add(new_record)
             session.commit()
             logger.info(f"Created new {model_type} record for {obs_date}")

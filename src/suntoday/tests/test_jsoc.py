@@ -1,18 +1,23 @@
 from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
+import numpy as np
 import pandas as pd
 import pytest
+from astropy.io import fits
+from parfive import Results
 
 from suntoday import DataNotReadyError
 from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.downloaders.jsoc import (
+    _get_hmi_synoptic_record,
     _get_latest_record_time,
     _get_urls,
     fetch_aia_fits,
     fetch_aia_timeseries,
+    fetch_hmi_synoptic_fits,
+    find_hmi_synoptic_time,
     find_latest_jsoc_times,
-    find_latest_pfss_time,
     get_aia_urls,
     get_hmi_urls,
 )
@@ -212,11 +217,45 @@ def test_find_latest_jsoc_times_per_instrument(mocker) -> None:
     assert hmi_time == cont_latest
 
 
-def test_find_latest_pfss_time_uses_oldest_source(mocker) -> None:
-    aia_time = datetime(2026, 7, 14, 11, 50, tzinfo=UTC)
-    hmi_time = datetime(2026, 7, 14, 12, 0, tzinfo=UTC)
-    gong_time = datetime(2026, 7, 14, 12, 10, tzinfo=UTC)
-    mocker.patch("suntoday.downloaders.jsoc.find_latest_jsoc_times", return_value=(aia_time, hmi_time))
-    mocker.patch("suntoday.downloaders.jsoc.find_latest_gong_time", return_value=gong_time)
+def test_hmi_synoptic_selection_skips_unusable_records(mocker) -> None:
+    query = mocker.patch(
+        "suntoday.downloaders.jsoc._get_urls",
+        return_value={
+            "keywords": [
+                {
+                    "name": "T_REC",
+                    "values": ["2026.07.17_20:24:00_TAI", "2026.07.17_21:24:00_TAI", "2026.07.17_22:24:00_TAI"],
+                },
+                {"name": "CRVAL1", "values": ["832352.8", "832353.3", "MISSING"]},
+            ],
+            "segments": [{"name": "data", "values": ["/available.fits", "NoDataFile", "/missing_keys.fits"]}],
+        },
+    )
+    time = datetime(2026, 7, 17, 22, 30, tzinfo=UTC)
+    assert find_hmi_synoptic_time(time) == datetime(2026, 7, 17, 20, 23, 23, tzinfo=UTC)
+    assert query.call_args.args[0] == "hmi.Mrdailysynframe_720s_nrt[2026.07.15_22:30:37_TAI-2026.07.17_22:30:37_TAI]"
+    query.return_value["segments"][0]["values"] = ["InvalidSegName"] * 3
+    with pytest.raises(DataNotReadyError, match="No available HMI"):
+        _get_hmi_synoptic_record(time)
 
-    assert find_latest_pfss_time() == aia_time
+
+def test_fetch_hmi_synoptic_restores_header_and_caches(mocker, tmp_path) -> None:
+    metadata = {"T_REC": "2026.07.17_21:24:00_TAI", "T_OBS": "2026.07.17_21:00:08_TAI", "CRVAL1": "832353.299997"}
+    mocker.patch("suntoday.downloaders.jsoc._get_hmi_synoptic_record", return_value=(metadata, "/raw.fits"))
+    downloader = mocker.patch("suntoday.downloaders.jsoc.create_downloader").return_value
+
+    def download():
+        queued = downloader.enqueue_file.call_args.kwargs
+        path = queued["path"] / queued["filename"]
+        fits.writeto(path, np.ones((4, 8)))
+        return Results([str(path)])
+
+    downloader.download.side_effect = download
+    time = datetime(2026, 7, 17, 22, tzinfo=UTC)
+    file = fetch_hmi_synoptic_fits(time, tmp_path)
+    assert file.name == "20260717_212323_synoptic.fits"
+    header = fits.getheader(file)
+    assert header["CRVAL1"] == pytest.approx(832353.299997)
+    assert header["T_OBS"] == metadata["T_OBS"]
+    assert fetch_hmi_synoptic_fits(time, tmp_path) == file
+    assert downloader.download.call_count == 1

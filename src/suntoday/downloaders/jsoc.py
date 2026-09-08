@@ -12,6 +12,7 @@ from pathlib import Path
 
 import pandas as pd
 import requests
+from astropy.io import fits
 from astropy.time import Time
 from parfive import Results
 from requests.auth import HTTPBasicAuth
@@ -20,17 +21,22 @@ from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader, format_download_errors
-from suntoday.downloaders.gong import find_latest_gong_time
+from suntoday.utils import atomic_save
 
 __all__ = [
     "fetch_aia_fits",
     "fetch_aia_timeseries",
     "fetch_hmi_fits",
+    "fetch_hmi_synoptic_fits",
+    "find_hmi_synoptic_time",
     "find_latest_jsoc_times",
     "find_latest_pfss_time",
     "get_aia_urls",
     "get_hmi_urls",
 ]
+
+HMI_SYNOPTIC_SERIES = "hmi.Mrdailysynframe_720s_nrt"
+_SYNOPTIC_KEYS = "T_REC,T_OBS,CRVAL1,CRVAL2,CRPIX1,CRPIX2,CDELT1"
 
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
@@ -300,19 +306,105 @@ def find_latest_pfss_time() -> datetime:
     """
     Find the anchor time for the PFSS job.
 
-    The PFSS images must all carry the same timestamp as the field lines,
-    so the anchor is the minimum of the latest AIA, HMI, and GONG times.
+    Use the newest common AIA/HMI disk time. The preceding HMI synoptic
+    boundary has its own timestamp, displayed separately on the images.
 
     Returns
     -------
     datetime.datetime
-        The newest time every PFSS data source has data for.
+        The newest common SDO image time.
     """
     aia_time, hmi_time = find_latest_jsoc_times()
-    gong_time = find_latest_gong_time()
-    anchor = min(aia_time, hmi_time, gong_time)
-    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, GONG {gong_time})")
+    anchor = min(aia_time, hmi_time)
+    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time})")
     return anchor
+
+
+def _get_hmi_synoptic_record(requested_time: datetime) -> tuple[dict, str]:
+    """
+    Select the newest available HMI radial boundary at or before a time.
+
+    A two-day window tolerates a missed daily update without silently using
+    an arbitrarily old boundary. NRT currently supplies hourly records.
+
+    Returns
+    -------
+    tuple of dict and str
+        Record metadata and raw FITS segment path.
+
+    Raises
+    ------
+    DataNotReadyError
+        No downloadable boundary exists in the search window.
+    """
+    start = _format_jsoc_time(requested_time - timedelta(days=2))
+    end = _format_jsoc_time(requested_time)
+    response = _get_urls(f"{HMI_SYNOPTIC_SERIES}[{start}-{end}]", _SYNOPTIC_KEYS, "data")
+    keywords = {item["name"]: item["values"] for item in response["keywords"]}
+    segments = {item["name"]: item["values"] for item in response["segments"]}
+    # Records without a data file or with MISSING keywords are unusable.
+    records = [
+        (metadata, path)
+        for metadata, path in zip(pd.DataFrame(keywords).to_dict("records"), segments["data"], strict=True)
+        if path.startswith("/") and "MISSING" not in metadata.values()
+    ]
+    if not records:
+        msg = f"No available HMI synoptic frame in the two days before {requested_time}."
+        raise DataNotReadyError(msg)
+    return max(records, key=lambda record: _parse_jsoc_time(record[0]["T_REC"]))
+
+
+def find_hmi_synoptic_time(requested_time: datetime) -> datetime:
+    """
+    Return the selected HMI boundary record time in UTC.
+    """
+    metadata, _ = _get_hmi_synoptic_record(requested_time)
+    return _parse_jsoc_time(metadata["T_REC"])
+
+
+def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> Path:
+    """
+    Download the preceding HMI radial synoptic frame with its JSOC metadata.
+
+    Direct JSOC segments contain only the image array, so copy the record's
+    coordinate and time keywords into the FITS header before publishing it
+    to the local cache.
+
+    Parameters
+    ----------
+    requested_time : datetime.datetime
+        Latest acceptable boundary record time.
+    save_directory : pathlib.Path
+        Local FITS cache directory.
+
+    Returns
+    -------
+    pathlib.Path
+        Downloaded FITS file with its original JSOC coordinate metadata.
+
+    Raises
+    ------
+    OSError
+        The FITS download fails.
+    """
+    metadata, segment = _get_hmi_synoptic_record(requested_time)
+    epoch = _parse_jsoc_time(metadata["T_REC"])
+    destination = save_directory / f"{epoch:%Y%m%d_%H%M%S}_synoptic.fits"
+    if destination.exists():
+        return destination
+    save_directory.mkdir(parents=True, exist_ok=True)
+    with atomic_save(destination) as staging:
+        downloader = create_downloader()
+        downloader.enqueue_file(f"{Settings().jsoc_base_url}{segment}", path=save_directory, filename=staging.name)
+        files = downloader.download()
+        if files.errors:
+            msg = f"Failed to download:\n{format_download_errors(files.errors)}"
+            raise OSError(msg)
+        with fits.open(staging, mode="update", memmap=False) as hdul:
+            for key, value in metadata.items():
+                hdul[0].header[key] = value if key.startswith("T_") else float(value)
+            hdul[0].header["BUNIT"] = "G"
+    return destination
 
 
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:

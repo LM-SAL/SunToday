@@ -1,5 +1,4 @@
 import os
-import sys
 
 import pandas as pd
 import pytest
@@ -13,12 +12,6 @@ from suntoday.data.test import find_test_filepath, get_test_filepath
 from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"
-
-
-@pytest.fixture
-def _fresh_gong_search_cache():
-    if gong := sys.modules.get("suntoday.downloaders.gong"):
-        gong._clear_search_cache()  # ruff:ignore[private-member-access]
 
 
 def latest_or_skip(find_latest):
@@ -112,8 +105,8 @@ def real_goes_primary_timeseries():
 
 
 @pytest.fixture(scope="session")
-def gong_test_file():
-    return find_test_filepath("gong")
+def hmi_synoptic_test_file():
+    return find_test_filepath("synoptic")
 
 
 @pytest.fixture

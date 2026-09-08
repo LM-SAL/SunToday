@@ -26,7 +26,7 @@ class Settings(BaseSettings):
         extra="forbid",
     )
     cron_frequency: int = 10  # minutes
-    # PFSS is expensive; GONG itself updates roughly hourly.
+    # PFSS is expensive; the HMI NRT boundary updates roughly hourly.
     pfss_cron_frequency: int = 90  # minutes
     db_host: str = "db"
     db_name: str = "suntoday"

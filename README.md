@@ -21,7 +21,7 @@ This includes:
   - 171 - B_LOS
   - B_LOS
   - Continuum
-- PFSS variants of every JPEG above, anchored to the matched NOAA-hosted GONG synoptic-map time and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`).
+- PFSS variants of every JPEG above, using the preceding HMI radial synoptic frame (`hmi.Mrdailysynframe_720s_nrt`), with its observation date labeled separately and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`). Open field lines are magenta for positive polarity and cyan for negative polarity; closed lines are white.
 - Planning FITS files for every AIA image channel and the HMI B_LOS and continuum. AIA 4500 is FITS-only and is
   written only when its hourly frame falls inside the query window.
 - The combination of the AIA lightcurves with GOES.
@@ -48,7 +48,7 @@ This is set up to run in a Docker container.
 Mount points are configured by `docker-compose.yml`.
 The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
 The PFSS job runs on its own cadence, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90).
-NOAA's GONG index covers only the latest three days, so older PFSS backfills are unavailable.
+PFSS backfills use the HMI archive, selecting an available boundary within the two days preceding the requested time.
 
 ## Setup
 
