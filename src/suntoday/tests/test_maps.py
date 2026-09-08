@@ -1,15 +1,18 @@
+import astropy.units as u
 import numpy as np
 import pytest
 import sunpy.map as smap
 from astropy.io import fits
+from scipy.ndimage import map_coordinates
+from sunpy.coordinates import propagate_with_solar_surface
 from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 
 from suntoday.constants import AIA_SINGLE_NORMS
 from suntoday.data.test import find_test_filepath
 from suntoday.maps import (
     create_aia_map,
-    create_gong_map,
     create_hmi_map,
+    create_hmi_synoptic_map,
 )
 
 
@@ -33,13 +36,31 @@ def test_aia_193_idl_norm() -> None:
     assert norm(np.sqrt(65.5 * 3021.0)) == pytest.approx(0.5)
 
 
-def test_create_gong_map(gong_test_file) -> None:
-    gong_map = create_gong_map(gong_test_file)
-    assert isinstance(gong_map, smap.GenericMap)
-    assert gong_map.coordinate_frame.name == "heliographic_carrington"
-    assert list(gong_map.wcs.wcs.ctype) == ["CRLN-CEA", "CRLT-CEA"]
-    assert gong_map.data.shape == (180, 360)
-    assert gong_map.meta["boundary_source"] == "GONG"
+def test_hmi_synoptic_coordinates_and_disk_alignment(hmi_synoptic_test_file, hmi_blos_test_file) -> None:
+    boundary = create_hmi_synoptic_map(hmi_synoptic_test_file)
+    np.testing.assert_array_equal(boundary.data, fits.getdata(hmi_synoptic_test_file))
+    assert boundary.date.utc.isot == "2026-07-17T20:59:31.000"
+    assert boundary.reference_date == boundary.date
+    assert boundary.meta["boundary_source"] == "HMI synoptic"
+    assert boundary.reference_pixel.x.value == pytest.approx((boundary.data.shape[1] - 1) / 2)
+    assert boundary.reference_coordinate.lon.deg == pytest.approx(326.750003)
+    assert boundary.scale.axis1.value == pytest.approx(0.1)
+    assert boundary.scale.axis2.value == pytest.approx(180 / np.pi * 2 / boundary.data.shape[0], rel=1e-4)
+
+    # Compare independent disk observations with the corrected boundary.
+    # A sign error or a 180-degree shift decorrelates the active regions.
+    with fits.open(hmi_blos_test_file) as hdul:
+        disk = smap.Map(hdul[1].data, hdul[1].header).resample([512, 512] * u.pix)
+    y, x = np.indices(disk.data.shape)
+    world = disk.pixel_to_world(x * u.pix, y * u.pix)
+    central_disk = np.hypot(world.Tx, world.Ty) < disk.rsun_obs * 0.7
+    with propagate_with_solar_surface():
+        carrington = world[central_disk].transform_to(boundary.coordinate_frame)
+    bx, by = boundary.wcs.world_to_pixel(carrington)
+    sampled = map_coordinates(boundary.data, [by, bx], order=1, mode="grid-wrap")
+    observed = disk.data[central_disk]
+    valid = np.isfinite(sampled) & np.isfinite(observed)
+    assert np.corrcoef(sampled[valid], observed[valid])[0, 1] > 0.5
 
 
 def test_create_hmi_cont_map(hmi_cont_test_file) -> None:

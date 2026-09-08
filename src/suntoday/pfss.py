@@ -46,7 +46,7 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     ----------
     boundary_map : `sunpy.map.GenericMap`
         Full-Sun Carrington magnetogram from
-        `suntoday.maps.create_gong_map`.
+        `suntoday.maps.create_hmi_synoptic_map`.
 
     Returns
     -------
@@ -97,6 +97,7 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     field_lines.info.meta = {
         "polarity": polarities,
         "is_open": polarities != 0,
-        "boundary_source": boundary_map.meta.get("boundary_source", "GONG"),
+        "boundary_source": boundary_map.meta.get("boundary_source", "HMI synoptic"),
+        "boundary_date": boundary_map.date,
     }
     return field_lines

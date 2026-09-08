@@ -38,13 +38,12 @@ from suntoday.constants import (
     RGB_MAX_PERCENTILE,
     RGB_RECIPES,
 )
-from suntoday.downloaders.gong import fetch_gong_fits
-from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits
+from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits, fetch_hmi_synoptic_fits
 from suntoday.logos import PNG_IMAGE
 from suntoday.maps import (
     create_aia_map,
-    create_gong_map,
     create_hmi_map,
+    create_hmi_synoptic_map,
 )
 from suntoday.pfss import trace_field_lines
 from suntoday.utils import atomic_save, save_fits
@@ -311,8 +310,8 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
     _draw_label(
         ax,
         len(ax.texts),
-        f"{metadata.get('boundary_source', 'GONG'):<{prefix_width}} - "
-        f"{field_lines.obstime.strftime('%Y-%m-%d %H:%M:%S')}",
+        f"{metadata.get('boundary_source', 'HMI synoptic'):<{prefix_width}} - "
+        f"{metadata.get('boundary_date', field_lines.obstime).strftime('%Y-%m-%d %H:%M:%S')}",
     )
     _draw_label(ax, len(ax.texts), "PFSS: magenta=open (+), cyan=open (-), white=closed")
     # The off-limb line points would otherwise autoscale the axes outwards.
@@ -551,10 +550,10 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     pfss : bool, optional
         Create the matched-time PFSS variants instead of the regular
         products: every JPEG is saved twice (``pfssnolines`` base and
-        ``pfss`` field line overlay from a GONG boundary map) and no
-        planning FITS files are written. The caller should anchor
-        ``requested_time`` to the matched GONG file time and leave
-        ``hmi_time`` unset so all the image timestamps match.
+        ``pfss`` field line overlay from an HMI radial synchronic map) and no
+        planning FITS files are written. The latest boundary preceding
+        ``requested_time`` is used and its date is labeled separately. Leave
+        ``hmi_time`` unset so the SDO image timestamps match.
     download_directory : pathlib.Path, optional
         Directory to download the FITS files into. Files already present
         are not re-downloaded, so passing the same directory to the main
@@ -572,9 +571,9 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
         fits_directory = download_directory or Path(temp_dir)
         field_lines = None
         if pfss:
-            gong_file = fetch_gong_fits(requested_time, save_directory=fits_directory)
+            synoptic_file = fetch_hmi_synoptic_fits(requested_time, save_directory=fits_directory)
             logger.info("Tracing PFSS field lines")
-            field_lines = trace_field_lines(create_gong_map(gong_file))
+            field_lines = trace_field_lines(create_hmi_synoptic_map(synoptic_file))
 
         aia_files = fetch_aia_fits(requested_time, save_directory=fits_directory)
         aia_order = AIA_WAVELENGTHS + AIA_FITS_ONLY_WAVELENGTHS

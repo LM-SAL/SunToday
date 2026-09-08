@@ -25,8 +25,7 @@ from sunpy.time import parse_time
 from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.db import create_db, get_latest_record, get_record, write_or_update_record
-from suntoday.downloaders.gong import find_nearest_gong_time
-from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
+from suntoday.downloaders.jsoc import find_hmi_synoptic_time, find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import create_sdo_images
 from suntoday.lightcurve import create_lightcurve_figure
 from suntoday.utils import sync_to_s3
@@ -134,8 +133,8 @@ def _alert_if_stale(
     """
     Page once per incident when the newest data is older than the threshold.
 
-    Per-run "no data yet" skips stay silent because transient JSOC/GONG
-    lag self-heals; data that stops updating for any reason eventually
+    Per-run "no data yet" skips stay silent because transient JSOC lag
+    self-heals; data that stops updating for any reason eventually
     breaches the threshold and alerts, so nothing has to distinguish
     "slow" from "broken" at run time.
     """
@@ -265,7 +264,7 @@ def create_images(
     save_directory: Path,
     hmi_time: datetime.datetime | None = None,
     *,
-    gong_epoch: datetime.datetime | None = None,
+    boundary_epoch: datetime.datetime | None = None,
     force: bool = False,
     download_directory: Path | None = None,
 ) -> list[Path]:
@@ -290,7 +289,7 @@ def create_images(
     hmi_time : datetime.datetime, optional
         Datetime for the HMI data, which lags AIA. Only used for "images";
         defaults to ``requested_time``.
-    gong_epoch : datetime.datetime, optional
+    boundary_epoch : datetime.datetime, optional
         Boundary-map timestamp for a PFSS run. A matching persisted epoch skips
         regeneration, including after a container restart.
     force : bool, optional
@@ -316,11 +315,11 @@ def create_images(
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
     if not force:
-        if image_type == "pfss" and gong_epoch is not None:
+        if image_type == "pfss" and boundary_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
             is_current = (
                 latest_record is not None
-                and latest_record.gong_epoch == gong_epoch
+                and latest_record.boundary_epoch == boundary_epoch
                 and latest_record.updated_at > requested_time - datetime.timedelta(minutes=10)
             )
         else:
@@ -350,7 +349,7 @@ def _run_job(
     requested_time: datetime.datetime,
     root_save_directory: Path | None,
     hmi_time: datetime.datetime | None = None,
-    gong_epoch: datetime.datetime | None = None,
+    boundary_epoch: datetime.datetime | None = None,
     *,
     force: bool = False,
     update_mostrecent: bool = True,
@@ -370,7 +369,7 @@ def _run_job(
         Root output directory; defaults to the configured one.
     hmi_time : datetime.datetime, optional
         Datetime for the HMI data, only used by the "images" type.
-    gong_epoch : datetime.datetime, optional
+    boundary_epoch : datetime.datetime, optional
         Boundary-map timestamp to persist after a successful PFSS upload.
     force : bool, optional
         Regenerate even when the database record says the images are
@@ -406,7 +405,7 @@ def _run_job(
                 requested_time,
                 save_directory,
                 hmi_time=hmi_time,
-                gong_epoch=gong_epoch,
+                boundary_epoch=boundary_epoch,
                 force=force,
                 download_directory=download_directory,
             )
@@ -430,7 +429,7 @@ def _run_job(
                     image_type,
                     str(requested_time.date()),
                     updated_at=str(requested_time),
-                    gong_epoch=gong_epoch,
+                    boundary_epoch=boundary_epoch,
                 )
             else:
                 write_or_update_record(session, image_type, str(requested_time.date()), updated_at=str(requested_time))
@@ -493,18 +492,18 @@ def pfss_job(
     Job to create the matched-time PFSS overlay images.
 
     Scheduled runs use the newest matched-data anchor; explicit runs use
-    the requested time. Both persist the GONG epoch only after
+    the requested time. Both persist the HMI boundary epoch only after
     successful upload.
     """
     logger.info("Running PFSS job to create field line overlay images")
     is_live = requested_time is None
     requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
-    gong_epoch = find_nearest_gong_time(requested_time)
+    boundary_epoch = find_hmi_synoptic_time(requested_time)
     _run_job(
         ["pfss"],
         requested_time,
         root_save_directory,
-        gong_epoch=gong_epoch,
+        boundary_epoch=boundary_epoch,
         force=force,
         update_mostrecent=is_live,
         download_directory=download_directory,

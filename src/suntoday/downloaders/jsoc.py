@@ -9,9 +9,11 @@ plain requests are used throughout.
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import pandas as pd
 import requests
+from astropy.io import fits
 from astropy.time import Time
 from parfive import Results
 from requests.auth import HTTPBasicAuth
@@ -20,17 +22,21 @@ from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader, format_download_errors
-from suntoday.downloaders.gong import find_latest_gong_time
 
 __all__ = [
     "fetch_aia_fits",
     "fetch_aia_timeseries",
     "fetch_hmi_fits",
+    "fetch_hmi_synoptic_fits",
+    "find_hmi_synoptic_time",
     "find_latest_jsoc_times",
     "find_latest_pfss_time",
     "get_aia_urls",
     "get_hmi_urls",
 ]
+
+HMI_SYNOPTIC_SERIES = "hmi.Mrdailysynframe_720s_nrt"
+_SYNOPTIC_KEYS = "T_REC,T_OBS,CAR_ROT,CARRTIME,CRVAL1,CRVAL2,CRPIX1,CRPIX2,CDELT1,CDELT2,CTYPE1,CTYPE2,CUNIT1,CUNIT2"
 
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
@@ -85,7 +91,7 @@ def _parse_jsoc_time(value: str) -> datetime:
     return parsed.astimezone(UTC)
 
 
-def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
+def _get_urls(query: str, keywords: str, segment: str | None = None, *, public: bool = False) -> dict:
     """
     For a given query, keywords and segment query the JSOC.
 
@@ -97,6 +103,8 @@ def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
         Keywords to return.
     segment : str, optional
         Segment to return.
+    public : bool, optional
+        Query the public JSOC server without test-series authentication.
 
     Returns
     -------
@@ -113,7 +121,7 @@ def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
         If the JSOC response has missing required keys.
     """
     settings = Settings()
-    auth = _jsoc_auth(settings)
+    auth = None if public else _jsoc_auth(settings)
     params = {
         "ds": query,
         "op": "rs_list",
@@ -121,7 +129,8 @@ def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
     }
     if segment is not None:
         params["seg"] = segment
-    response = requests.get(settings.jsoc_info_url, params=params, auth=auth, timeout=60)
+    url = f"{settings.jsoc_base_url}/cgi-bin/ajax/jsoc_info" if public else settings.jsoc_info_url
+    response = requests.get(url, params=params, auth=auth, timeout=60)
     if response.status_code != 200:
         msg = f"JSOC request for {query!r} failed with {response.status_code} and {response.text}."
         raise OSError(msg)
@@ -300,19 +309,107 @@ def find_latest_pfss_time() -> datetime:
     """
     Find the anchor time for the PFSS job.
 
-    The PFSS images must all carry the same timestamp as the field lines,
-    so the anchor is the minimum of the latest AIA, HMI, and GONG times.
+    Use the newest common AIA/HMI disk time. The preceding HMI synchronic
+    boundary has its own timestamp, displayed separately on the images.
 
     Returns
     -------
     datetime.datetime
-        The newest time every PFSS data source has data for.
+        The newest common SDO image time.
     """
     aia_time, hmi_time = find_latest_jsoc_times()
-    gong_time = find_latest_gong_time()
-    anchor = min(aia_time, hmi_time, gong_time)
-    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time}, GONG {gong_time})")
+    anchor = min(aia_time, hmi_time)
+    logger.info(f"PFSS anchor time: {anchor} (AIA {aia_time}, HMI {hmi_time})")
     return anchor
+
+
+def _get_hmi_synoptic_record(requested_time: datetime) -> tuple[dict, str]:
+    """
+    Select the newest available HMI radial boundary at or before a time.
+
+    A two-day window tolerates a missed daily update without silently using
+    an arbitrarily old boundary. NRT currently supplies hourly records.
+
+    Returns
+    -------
+    tuple of dict and str
+        Record metadata and raw FITS segment path.
+
+    Raises
+    ------
+    DataNotReadyError
+        No downloadable boundary exists in the search window.
+    """
+    start = _format_jsoc_time(requested_time - timedelta(days=2))
+    end = _format_jsoc_time(requested_time)
+    response = _get_urls(f"{HMI_SYNOPTIC_SERIES}[{start}-{end}]", _SYNOPTIC_KEYS, "data", public=True)
+    keywords = {item["name"]: item["values"] for item in response["keywords"]}
+    segments = {item["name"]: item["values"] for item in response["segments"]}
+    records = [
+        ({key: values[index] for key, values in keywords.items()}, path)
+        for index, path in enumerate(segments["data"])
+        if path.startswith("/") and _parse_jsoc_time(keywords["T_REC"][index]) <= _parse_jsoc_time(end)
+    ]
+    if not records:
+        msg = f"No available HMI synchronic map in the two days before {requested_time}."
+        raise DataNotReadyError(msg)
+    return max(records, key=lambda record: _parse_jsoc_time(record[0]["T_REC"]))
+
+
+def find_hmi_synoptic_time(requested_time: datetime) -> datetime:
+    """
+    Return the selected HMI boundary record time in UTC.
+    """
+    metadata, _ = _get_hmi_synoptic_record(requested_time)
+    return _parse_jsoc_time(metadata["T_REC"])
+
+
+def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> Path:
+    """
+    Download the preceding HMI radial synchronic map with its JSOC metadata.
+
+    Direct JSOC segments contain only the image array, so copy the record's
+    coordinate and time keywords into the FITS header before publishing it
+    to the local cache.
+
+    Parameters
+    ----------
+    requested_time : datetime.datetime
+        Latest acceptable boundary record time.
+    save_directory : pathlib.Path
+        Local FITS cache directory.
+
+    Returns
+    -------
+    pathlib.Path
+        Downloaded FITS file with its original JSOC coordinate metadata.
+
+    Raises
+    ------
+    OSError
+        The FITS download fails.
+    """
+    metadata, segment = _get_hmi_synoptic_record(requested_time)
+    epoch = _parse_jsoc_time(metadata["T_REC"])
+    destination = save_directory / f"{epoch:%Y%m%d_%H%M%S}_synoptic.fits"
+    if destination.exists():
+        return destination
+    save_directory.mkdir(parents=True, exist_ok=True)
+    with TemporaryDirectory(dir=save_directory) as staging:
+        downloader = create_downloader()
+        downloader.enqueue_file(f"{Settings().jsoc_base_url}{segment}", path=Path(staging), filename=destination.name)
+        files = downloader.download()
+        if files.errors:
+            msg = f"Failed to download:\n{format_download_errors(files.errors)}"
+            raise OSError(msg)
+        downloaded = Path(files[0])
+        with fits.open(downloaded, mode="update", memmap=False) as hdul:
+            header = hdul[0].header
+            for key, value in metadata.items():
+                header[key] = float(value) if key.startswith(("CR", "CD", "CAR")) else value
+            header["BUNIT"] = "G"
+        downloaded.replace(destination)
+    return destination
 
 
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:

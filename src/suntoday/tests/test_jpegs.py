@@ -18,14 +18,14 @@ from suntoday.jpegs import (
     create_sdo_images,
     save_figures,
 )
-from suntoday.maps import create_aia_map, create_gong_map, create_hmi_map
+from suntoday.maps import create_aia_map, create_hmi_map, create_hmi_synoptic_map
 from suntoday.pfss import trace_field_lines
 from suntoday.tests.conftest import mpl_svg_compare
 
 
 @pytest.fixture(scope="module")
-def pfss_field_lines(gong_test_file):
-    return trace_field_lines(create_gong_map(gong_test_file))
+def pfss_field_lines(hmi_synoptic_test_file):
+    return trace_field_lines(create_hmi_synoptic_map(hmi_synoptic_test_file))
 
 
 @pytest.mark.parametrize("wavelength", AIA_WAVELENGTHS)
@@ -103,8 +103,8 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     _, fig = create_figure_from_map(hmi_map)
     _draw_field_lines(fig.axes[0], hmi_map, pfss_field_lines)
     assert {line.get_color() for line in fig.axes[0].lines} == {"magenta", "cyan", "white"}
-    assert fig.axes[0].texts[-2].get_text().startswith("GONG")
-    assert fig.axes[0].texts[-2].get_text().endswith("2026-08-07 00:44:00")
+    assert fig.axes[0].texts[-2].get_text().startswith("HMI synoptic")
+    assert fig.axes[0].texts[-2].get_text().endswith("2026-07-17 20:59:31")
     assert fig.axes[0].texts[-1].get_text() == "PFSS: magenta=open (+), cyan=open (-), white=closed"
     return fig
 
@@ -118,8 +118,8 @@ def test_draw_field_lines_without_connectivity(hmi_blos_test_file, pfss_field_li
     _draw_field_lines(fig.axes[0], hmi_map, field_lines)
 
     assert {line.get_color() for line in fig.axes[0].lines} == {"white"}
-    assert fig.axes[0].texts[-2].get_text().startswith("GONG")
-    assert fig.axes[0].texts[-2].get_text().endswith("2026-08-07 00:44:00")
+    assert fig.axes[0].texts[-2].get_text().startswith("HMI synoptic")
+    assert fig.axes[0].texts[-2].get_text().endswith("2026-07-17 20:59:31")
 
 
 def test_save_figures_from_maps_aia(tmpdir) -> None:
@@ -259,7 +259,7 @@ def test_create_pfss_images_uses_field_lines(
 ) -> None:
     aia_files = [tmp_path / "171", tmp_path / "193"]
     hmi_file = tmp_path / "magnetogram"
-    gong_file = tmp_path / "gong"
+    synoptic_file = tmp_path / "synoptic"
     aia_map = mocker.sentinel.aia_map
     hmi_map = mocker.Mock(measurement="magnetogram")
     field_lines = mocker.sentinel.field_lines
@@ -268,8 +268,8 @@ def test_create_pfss_images_uses_field_lines(
     mocker.patch("suntoday.jpegs.RGB_COMBINATIONS", [])
     mocker.patch("suntoday.jpegs.fetch_aia_fits", return_value=aia_files)
     mocker.patch("suntoday.jpegs.fetch_hmi_fits", return_value=[hmi_file])
-    mocker.patch("suntoday.jpegs.fetch_gong_fits", return_value=gong_file)
-    boundary = mocker.patch("suntoday.jpegs.create_gong_map").return_value
+    mocker.patch("suntoday.jpegs.fetch_hmi_synoptic_fits", return_value=synoptic_file)
+    boundary = mocker.patch("suntoday.jpegs.create_hmi_synoptic_map").return_value
     trace = mocker.patch("suntoday.jpegs.trace_field_lines", return_value=field_lines)
     mocker.patch("suntoday.jpegs.create_aia_map", return_value=aia_map)
     mocker.patch("suntoday.jpegs.create_hmi_map", return_value=hmi_map)
