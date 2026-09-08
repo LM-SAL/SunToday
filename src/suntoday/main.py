@@ -11,6 +11,7 @@ import datetime
 import functools
 import multiprocessing
 import os
+import signal
 import tempfile
 import time
 import traceback
@@ -44,7 +45,7 @@ if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
     )
 
 
-def _job_entrypoint(job_func, error_connection) -> None:
+def _job_entrypoint(job_func, error_connection, download_directory: Path) -> None:
     """
     Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
     instead of crashing, so it never reaches Sentry; the staleness alert pages
@@ -55,8 +56,16 @@ def _job_entrypoint(job_func, error_connection) -> None:
     SystemExit
         With ``os.EX_TEMPFAIL`` when the upstream data is not ready.
     """
+
+    # The parent's timeout terminate() must unwind the job so the database
+    # session closes and atomic_save staging files on the NFS share are
+    # unlinked; SIGTERM's default action skips both.
+    def _exit_on_sigterm(signum, _frame) -> None:
+        raise SystemExit(128 + signum)
+
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     try:
-        job_func()
+        job_func(download_directory=download_directory)
     except DataNotReadyError as e:
         logger.warning(f"Job {job_func.__name__} skipped, data not ready: {e}")
         raise SystemExit(os.EX_TEMPFAIL) from None
@@ -82,22 +91,32 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     dying job (OOM kill, segfault) also cannot take the scheduler loop
     down. Tracebacks from ordinary child exceptions are sent back over a
     pipe so the parent can include them in the scheduled-job log.
+
+    The FITS download directory is owned by this process, not the child:
+    a SIGKILLed or OOM-killed child never runs its own cleanup, and a
+    few such leaks would fill the ``/tmp`` tmpfs and break every later
+    job.
     """
     timeout = _PFSS_JOB_TIMEOUT_SECONDS if image_types == ("pfss",) else _MAIN_JOB_TIMEOUT_SECONDS
     context = multiprocessing.get_context("spawn")
     parent_connection, child_connection = context.Pipe(duplex=False)
     try:  # ruff:ignore[too-many-statements-in-try-clause]
-        process = context.Process(target=_job_entrypoint, args=(job_func, child_connection), name=job_func.__name__)
-        process.start()
-        process.join(timeout)
-        timed_out = process.is_alive()
-        if timed_out:
-            process.terminate()
-            process.join(_PROCESS_STOP_GRACE_SECONDS)
-            if process.is_alive():
-                process.kill()
-                process.join()
-        child_traceback = parent_connection.recv() if parent_connection.poll() else None
+        with tempfile.TemporaryDirectory() as download_directory:
+            process = context.Process(
+                target=_job_entrypoint,
+                args=(job_func, child_connection, Path(download_directory)),
+                name=job_func.__name__,
+            )
+            process.start()
+            process.join(timeout)
+            timed_out = process.is_alive()
+            if timed_out:
+                process.terminate()
+                process.join(_PROCESS_STOP_GRACE_SECONDS)
+                if process.is_alive():
+                    process.kill()
+                    process.join()
+            child_traceback = parent_connection.recv() if parent_connection.poll() else None
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
     except Exception as e:  # ruff:ignore[blind-except]

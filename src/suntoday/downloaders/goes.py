@@ -3,6 +3,7 @@ Provides GOES XRS downloaders: the SWPC NRT JSON for recent times and the NOAA
 NCEI science archive for historical backfills.
 """
 
+import tempfile
 import time
 from datetime import UTC, datetime, timedelta
 
@@ -70,11 +71,14 @@ def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> 
         raise DataNotReadyError(msg)
     satellite = max(satellite_numbers)
     results = [response[response["SatelliteNumber"] == satellite] for response in results]
-    files = Fido.fetch(*results)
-    if not files:
-        msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
-        raise DataNotReadyError(msg)
-    data = TimeSeries(files, concatenate=True).to_dataframe()
+    # Explicit path: the default is sunpy's per-user cache, which would grow
+    # with every backfill in a long-lived container.
+    with tempfile.TemporaryDirectory() as download_directory:
+        files = Fido.fetch(*results, path=f"{download_directory}/{{file}}")
+        if not files:
+            msg = f"No GOES XRS archive data found between {start_time} and {end_time}"
+            raise DataNotReadyError(msg)
+        data = TimeSeries(files, concatenate=True).to_dataframe()
     data.index = data.index.tz_localize("UTC")
     goes_df = pd.concat(
         pd.DataFrame({"satellite": satellite, "flux": data[column], "energy": energy})

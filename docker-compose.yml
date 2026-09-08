@@ -26,6 +26,12 @@ services:
     volumes:
       # The left side is the host path, the right side is the container path
       - ${SUNTODAY_HOST_SAVE_DIRECTORY:-./images}:/app/images:Z
+    # FITS downloads, sunpy/astropy caches and matplotlib caches all live in
+    # /tmp. RAM-backed and reset on restart so nothing a killed job leaves
+    # behind can grow the container's writable layer. One job's working set
+    # is ~150 MB; the cap is a ceiling, not a reservation.
+    tmpfs:
+      - /tmp:size=512m
     depends_on:
       db:
         condition: service_healthy
