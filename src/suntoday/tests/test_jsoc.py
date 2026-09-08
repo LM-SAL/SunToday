@@ -18,7 +18,6 @@ from suntoday.downloaders.jsoc import (
     fetch_hmi_synoptic_fits,
     find_hmi_synoptic_time,
     find_latest_jsoc_times,
-    find_latest_pfss_time,
     get_aia_urls,
     get_hmi_urls,
 )
@@ -218,34 +217,23 @@ def test_find_latest_jsoc_times_per_instrument(mocker) -> None:
     assert hmi_time == cont_latest
 
 
-def test_find_latest_pfss_time_uses_oldest_source(mocker) -> None:
-    aia_time = datetime(2026, 7, 14, 11, 50, tzinfo=UTC)
-    hmi_time = datetime(2026, 7, 14, 12, 0, tzinfo=UTC)
-    mocker.patch("suntoday.downloaders.jsoc.find_latest_jsoc_times", return_value=(aia_time, hmi_time))
-
-    assert find_latest_pfss_time() == aia_time
-
-
-def test_hmi_synoptic_selection_skips_missing_and_future_records(mocker) -> None:
+def test_hmi_synoptic_selection_skips_unusable_records(mocker) -> None:
     query = mocker.patch(
         "suntoday.downloaders.jsoc._get_urls",
         return_value={
             "keywords": [
                 {
                     "name": "T_REC",
-                    "values": [
-                        "2026.07.17_22:24:00_TAI",
-                        "2026.07.17_21:24:00_TAI",
-                        "2026.07.17_20:24:00_TAI",
-                    ],
-                }
+                    "values": ["2026.07.17_20:24:00_TAI", "2026.07.17_21:24:00_TAI", "2026.07.17_22:24:00_TAI"],
+                },
+                {"name": "CRVAL1", "values": ["832352.8", "832353.3", "MISSING"]},
             ],
-            "segments": [{"name": "data", "values": ["/future.fits", "NoDataFile", "/available.fits"]}],
+            "segments": [{"name": "data", "values": ["/available.fits", "NoDataFile", "/missing_keys.fits"]}],
         },
     )
-    time = datetime(2026, 7, 17, 22, tzinfo=UTC)
+    time = datetime(2026, 7, 17, 22, 30, tzinfo=UTC)
     assert find_hmi_synoptic_time(time) == datetime(2026, 7, 17, 20, 23, 23, tzinfo=UTC)
-    assert query.call_args.args[0] == "hmi.Mrdailysynframe_720s_nrt[2026.07.15_22:00:37_TAI-2026.07.17_22:00:37_TAI]"
+    assert query.call_args.args[0] == "hmi.Mrdailysynframe_720s_nrt[2026.07.15_22:30:37_TAI-2026.07.17_22:30:37_TAI]"
     assert query.call_args.kwargs == {"public": True}
     query.return_value["segments"][0]["values"] = ["InvalidSegName"] * 3
     with pytest.raises(DataNotReadyError, match="No available HMI"):

@@ -9,7 +9,6 @@ plain requests are used throughout.
 
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
-from tempfile import TemporaryDirectory
 
 import pandas as pd
 import requests
@@ -22,6 +21,7 @@ from suntoday import DataNotReadyError, logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader, format_download_errors
+from suntoday.utils import atomic_save
 
 __all__ = [
     "fetch_aia_fits",
@@ -36,7 +36,7 @@ __all__ = [
 ]
 
 HMI_SYNOPTIC_SERIES = "hmi.Mrdailysynframe_720s_nrt"
-_SYNOPTIC_KEYS = "T_REC,T_OBS,CAR_ROT,CARRTIME,CRVAL1,CRVAL2,CRPIX1,CRPIX2,CDELT1,CDELT2,CTYPE1,CTYPE2,CUNIT1,CUNIT2"
+_SYNOPTIC_KEYS = "T_REC,T_OBS,CRVAL1,CRVAL2,CRPIX1,CRPIX2,CDELT1"
 
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
@@ -309,7 +309,7 @@ def find_latest_pfss_time() -> datetime:
     """
     Find the anchor time for the PFSS job.
 
-    Use the newest common AIA/HMI disk time. The preceding HMI synchronic
+    Use the newest common AIA/HMI disk time. The preceding HMI synoptic
     boundary has its own timestamp, displayed separately on the images.
 
     Returns
@@ -345,13 +345,14 @@ def _get_hmi_synoptic_record(requested_time: datetime) -> tuple[dict, str]:
     response = _get_urls(f"{HMI_SYNOPTIC_SERIES}[{start}-{end}]", _SYNOPTIC_KEYS, "data", public=True)
     keywords = {item["name"]: item["values"] for item in response["keywords"]}
     segments = {item["name"]: item["values"] for item in response["segments"]}
+    # Records without a data file or with MISSING keywords are unusable.
     records = [
-        ({key: values[index] for key, values in keywords.items()}, path)
-        for index, path in enumerate(segments["data"])
-        if path.startswith("/") and _parse_jsoc_time(keywords["T_REC"][index]) <= _parse_jsoc_time(end)
+        (metadata, path)
+        for metadata, path in zip(pd.DataFrame(keywords).to_dict("records"), segments["data"], strict=True)
+        if path.startswith("/") and "MISSING" not in metadata.values()
     ]
     if not records:
-        msg = f"No available HMI synchronic map in the two days before {requested_time}."
+        msg = f"No available HMI synoptic frame in the two days before {requested_time}."
         raise DataNotReadyError(msg)
     return max(records, key=lambda record: _parse_jsoc_time(record[0]["T_REC"]))
 
@@ -366,7 +367,7 @@ def find_hmi_synoptic_time(requested_time: datetime) -> datetime:
 
 def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> Path:
     """
-    Download the preceding HMI radial synchronic map with its JSOC metadata.
+    Download the preceding HMI radial synoptic frame with its JSOC metadata.
 
     Direct JSOC segments contain only the image array, so copy the record's
     coordinate and time keywords into the FITS header before publishing it
@@ -395,20 +396,17 @@ def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> P
     if destination.exists():
         return destination
     save_directory.mkdir(parents=True, exist_ok=True)
-    with TemporaryDirectory(dir=save_directory) as staging:
+    with atomic_save(destination) as staging:
         downloader = create_downloader()
-        downloader.enqueue_file(f"{Settings().jsoc_base_url}{segment}", path=Path(staging), filename=destination.name)
+        downloader.enqueue_file(f"{Settings().jsoc_base_url}{segment}", path=save_directory, filename=staging.name)
         files = downloader.download()
         if files.errors:
             msg = f"Failed to download:\n{format_download_errors(files.errors)}"
             raise OSError(msg)
-        downloaded = Path(files[0])
-        with fits.open(downloaded, mode="update", memmap=False) as hdul:
-            header = hdul[0].header
+        with fits.open(staging, mode="update", memmap=False) as hdul:
             for key, value in metadata.items():
-                header[key] = float(value) if key.startswith(("CR", "CD", "CAR")) else value
-            header["BUNIT"] = "G"
-        downloaded.replace(destination)
+                hdul[0].header[key] = value if key.startswith("T_") else float(value)
+            hdul[0].header["BUNIT"] = "G"
     return destination
 
 

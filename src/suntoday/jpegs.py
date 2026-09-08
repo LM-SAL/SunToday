@@ -287,19 +287,15 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
     pixel_x = np.asarray(pixel_x, dtype=float)
     pixel_y = np.asarray(pixel_y, dtype=float)
     pixel_x[occulted] = np.nan
-    metadata = field_lines.info.meta or {}
-    polarity = metadata.get("polarity")
-    if polarity is None:
-        ax.plot(pixel_x, pixel_y, color=FIELD_LINE_COLORS[0], **FIELD_LINE_KWARGS)
-    else:
-        for sign, color in FIELD_LINE_COLORS.items():
-            if np.any(polarity == sign):
-                ax.plot(
-                    np.where(polarity == sign, pixel_x, np.nan),
-                    np.where(polarity == sign, pixel_y, np.nan),
-                    color=color,
-                    **FIELD_LINE_KWARGS,
-                )
+    polarity = field_lines.info.meta["polarity"]
+    for sign, color in FIELD_LINE_COLORS.items():
+        if np.any(polarity == sign):
+            ax.plot(
+                np.where(polarity == sign, pixel_x, np.nan),
+                np.where(polarity == sign, pixel_y, np.nan),
+                color=color,
+                **FIELD_LINE_KWARGS,
+            )
     # Pad so the datetime column lines up with the monospace labels already on the axes.
     date_starts = [
         match.start()
@@ -310,8 +306,7 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
     _draw_label(
         ax,
         len(ax.texts),
-        f"{metadata.get('boundary_source', 'HMI synoptic'):<{prefix_width}} - "
-        f"{metadata.get('boundary_date', field_lines.obstime).strftime('%Y-%m-%d %H:%M:%S')}",
+        f"{'HMI synoptic':<{prefix_width}} - {field_lines.info.meta['boundary_date'].strftime('%Y-%m-%d %H:%M:%S')}",
     )
     _draw_label(ax, len(ax.texts), "PFSS: magenta=open (+), cyan=open (-), white=closed")
     # The off-limb line points would otherwise autoscale the axes outwards.
@@ -550,7 +545,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     pfss : bool, optional
         Create the matched-time PFSS variants instead of the regular
         products: every JPEG is saved twice (``pfssnolines`` base and
-        ``pfss`` field line overlay from an HMI radial synchronic map) and no
+        ``pfss`` field line overlay from an HMI radial synoptic frame) and no
         planning FITS files are written. The latest boundary preceding
         ``requested_time`` is used and its date is labeled separately. Leave
         ``hmi_time`` unset so the SDO image timestamps match.

@@ -41,7 +41,6 @@ def test_hmi_synoptic_coordinates_and_disk_alignment(hmi_synoptic_test_file, hmi
     np.testing.assert_array_equal(boundary.data, fits.getdata(hmi_synoptic_test_file))
     assert boundary.date.utc.isot == "2026-07-17T20:59:31.000"
     assert boundary.reference_date == boundary.date
-    assert boundary.meta["boundary_source"] == "HMI synoptic"
     assert boundary.reference_pixel.x.value == pytest.approx((boundary.data.shape[1] - 1) / 2)
     assert boundary.reference_coordinate.lon.deg == pytest.approx(326.750003)
     assert boundary.scale.axis1.value == pytest.approx(0.1)

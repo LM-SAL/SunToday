@@ -24,7 +24,7 @@ from suntoday.downloaders.jsoc import fetch_aia_fits, fetch_hmi_fits, fetch_hmi_
 
 TEST_DATA_DIRECTORY = Path(__file__).resolve().parent.parent / "src" / "suntoday" / "data" / "test"
 
-# The SDO images share an anchor; use the preceding HMI synchronic map.
+# The SDO images share an anchor; use the preceding HMI synoptic frame.
 timestamp = find_latest_pfss_time()
 previous = set(TEST_DATA_DIRECTORY.glob("*.fits"))
 
@@ -36,7 +36,7 @@ fetched = {Path(file) for file in fetch_aia_fits(timestamp, save_directory=TEST_
 print(f"Fetching HMI FITS files {timestamp}...")
 fetched |= {Path(file) for file in fetch_hmi_fits(timestamp, save_directory=TEST_DATA_DIRECTORY)}
 
-print(f"Fetching HMI synchronic FITS file {timestamp}...")
+print(f"Fetching HMI synoptic FITS file {timestamp}...")
 fetched.add(fetch_hmi_synoptic_fits(timestamp, save_directory=TEST_DATA_DIRECTORY))
 
 for path in sorted(fetched):

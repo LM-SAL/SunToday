@@ -7,7 +7,7 @@ For eyeballing a scaling or layout change without waiting on a JSOC query:
 
 Reads ``src/suntoday/data/test`` and writes the JPEG products into
 ``rendered_products/`` at the repo root, exactly as ``create_sdo_images``
-would: the full/small/thumb set per product, and - when the HMI synchronic test file
+would: the full/small/thumb set per product, and - when the HMI synoptic test file
 is present - the ``pfssnolines``/``pfss`` pair per product instead of the
 plain one, matching a ``pfss=True`` run.
 """
@@ -49,7 +49,7 @@ if synoptic := find("synoptic"):
     print("tracing PFSS field lines")
     field_lines = trace_field_lines(create_hmi_synoptic_map(synoptic))
 else:
-    print("skipping PFSS variants - no HMI synchronic file")
+    print("skipping PFSS variants - no HMI synoptic file")
 
 
 def write(name_and_figure, amap):

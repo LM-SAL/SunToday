@@ -15,7 +15,7 @@ from aiapy.calibrate.utils import get_correction_table
 from astropy.io import fits
 from matplotlib import colors
 from sunpy.coordinates import get_earth
-from sunpy.map import coordinate_is_on_solar_disk
+from sunpy.map import coordinate_is_on_solar_disk, get_observer_meta
 from sunpy.time import parse_time
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
@@ -61,7 +61,7 @@ def create_aia_map(file: Path) -> smap.GenericMap:
 
 def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
     """
-    Normalize an HMI NRT radial synchronic map to Carrington CEA coordinates.
+    Normalize an HMI NRT radial synoptic frame to Carrington CEA coordinates.
 
     JSOC's daily product uses Carrington *time*, which increases opposite
     to longitude, and sine latitude. Convert both axes to FITS-WCS degrees
@@ -78,26 +78,19 @@ def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
     sunpy.map.GenericMap
         Radial boundary with corrected WCS and its original observation time.
     """
-    with fits.open(file, memmap=False) as hdul:
-        data, header = hdul[0].data, hdul[0].header.copy()
+    data, header = fits.getdata(file, header=True, memmap=False)
     center = (data.shape[1] + 1) / 2
     header["CRVAL1"] = (-header["CRVAL1"] - (center - header["CRPIX1"]) * header["CDELT1"]) % 360
     header["CRPIX1"] = center
     header["CDELT1"] = -header["CDELT1"]
-    # jsoc_info rounds CDELT2; use the exact full-Sun sine-latitude spacing.
+    # Full-Sun sine-latitude grid: exact CEA spacing rather than JSOC's rounded value.
     header["CDELT2"] = np.rad2deg(2 / data.shape[0])
     header["CTYPE1"], header["CTYPE2"] = "CRLN-CEA", "CRLT-CEA"
     header["CUNIT1"] = header["CUNIT2"] = "deg"
     date = parse_time(header["T_OBS"]).utc
-    header["DATE-OBS"] = header["DATE-AVG"] = date.isot
-    header["TIMESYS"] = "UTC"
-    earth = get_earth(date)
-    header["HGLN_OBS"] = 0.0
-    header["HGLT_OBS"] = earth.lat.to_value("deg")
-    header["DSUN_OBS"] = earth.radius.to_value("m")
-    boundary_map = smap.GenericMap(data, header)
-    boundary_map.meta["boundary_source"] = "HMI synoptic"
-    return boundary_map
+    header["DATE-OBS"] = date.isot
+    header.update(get_observer_meta(get_earth(date)))
+    return smap.GenericMap(data, header)
 
 
 def create_hmi_map(file: Path) -> smap.GenericMap:

@@ -21,7 +21,7 @@ This includes:
   - 171 - B_LOS
   - B_LOS
   - Continuum
-- PFSS variants of every JPEG above, using the preceding HMI radial synchronic map (`hmi.Mrdailysynframe_720s_nrt`), with its observation date labeled separately and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`). Open field lines are magenta for positive polarity and cyan for negative polarity; closed lines are white.
+- PFSS variants of every JPEG above, using the preceding HMI radial synoptic frame (`hmi.Mrdailysynframe_720s_nrt`), with its observation date labeled separately and produced by a separate scheduled job: each is saved with the field line overlay (`*pfss`) and without (`*pfssnolines`). Open field lines are magenta for positive polarity and cyan for negative polarity; closed lines are white.
 - Planning FITS files for every AIA image channel and the HMI B_LOS and continuum. AIA 4500 is FITS-only and is
   written only when its hourly frame falls inside the query window.
 - The combination of the AIA lightcurves with GOES.
