@@ -11,7 +11,7 @@ repos:
             "--remove-unused-variable",
           ]
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: "v0.16.6"
+    rev: "v0.16.10"
     hooks:
       - id: ruff-check
         args: ["--fix", "--unsafe-fixes", "--preview"]
@@ -24,7 +24,7 @@ repos:
         additional_dependencies: ["tomli>=2,<3"]
         args: ["--make-summary-multi-line", "--pre-summary-newline", "-ri"]
   - repo: https://github.com/JoC0de/pre-commit-prettier
-    rev: v3.9.6
+    rev: v3.9.9
     hooks:
       - id: prettier
         types_or: [css, scss, javascript, rst, json, yaml, toml, markdown]
@@ -45,7 +45,7 @@ repos:
         args: ["--fix=lf"]
       - id: trailing-whitespace
   - repo: https://github.com/adhtruong/mirrors-typos
-    rev: v1.50.1
+    rev: v1.50.3
     hooks:
       - id: typos
 ci:
