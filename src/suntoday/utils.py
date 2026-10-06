@@ -4,7 +4,7 @@ Utility functions for image processing and visualization.
 
 import mimetypes
 import uuid
-from collections.abc import Iterable, Iterator
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
 
@@ -23,7 +23,7 @@ __all__ = [
 
 
 @contextmanager
-def atomic_save(final_path: Path) -> Iterator[Path]:
+def atomic_save(final_path: Path) -> Generator[Path]:
     """
     Write to a sibling temp file and atomically move it into place on success.
 
