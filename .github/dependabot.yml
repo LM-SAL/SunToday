@@ -4,25 +4,43 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     exclude-paths:
       - "requirements-*"
     groups:
       all-dependencies:
         patterns:
           - "*"
+      all-dependencies-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     groups:
       all-dependencies:
+        patterns:
+          - "*"
+      all-dependencies-security:
+        applies-to: security-updates
         patterns:
           - "*"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
       interval: "monthly"
+    cooldown:
+      default-days: 7
     groups:
       all-dependencies:
+        patterns:
+          - "*"
+      all-dependencies-security:
+        applies-to: security-updates
         patterns:
           - "*"
