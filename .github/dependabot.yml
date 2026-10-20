@@ -8,6 +8,10 @@ updates:
       default-days: 7
     exclude-paths:
       - "requirements-*"
+    ignore:
+      # mplcairo 0.6.1 breaks with matplotlib 3.11; drop this once mplcairo supports it.
+      - dependency-name: "matplotlib"
+        versions: [">=3.11"]
     groups:
       all-dependencies:
         patterns:
