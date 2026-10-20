@@ -26,10 +26,6 @@ updates:
       all-dependencies:
         patterns:
           - "*"
-      all-dependencies-security:
-        applies-to: security-updates
-        patterns:
-          - "*"
   - package-ecosystem: "docker"
     directory: "/"
     schedule:
