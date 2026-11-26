@@ -8,8 +8,8 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm.session import sessionmaker
 
 from suntoday import DataNotReadyError
-from suntoday.data.test import find_test_filepath, get_test_filepath
-from suntoday.db import BASE, SDOImages, TimeSeriesImages, get_session
+from suntoday.data.test import TEST_DATA_ROOTDIR, find_test_filepath
+from suntoday.db import BASE, SDOImages, TimeSeriesImages
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"
 
@@ -47,11 +47,11 @@ def db_session(test_db):
         connection_str = f"postgresql+psycopg2://{pg_user}:@{pg_host}:{pg_port}/{pg_db}"
         engine = create_engine(connection_str, echo=False, connect_args={"options": "-c timezone=utc"})
         BASE.metadata.create_all(engine)
-        session = get_session(connection_str)
-        assert session.query(SDOImages).count() == 0  # ruff:ignore[assert]
-        assert session.query(TimeSeriesImages).count() == 0  # ruff:ignore[assert]
-        session.close()
-        yield sessionmaker(bind=engine, expire_on_commit=False)
+        session_factory = sessionmaker(bind=engine, expire_on_commit=False)
+        with session_factory() as session:
+            assert session.query(SDOImages).count() == 0  # ruff:ignore[assert]
+            assert session.query(TimeSeriesImages).count() == 0  # ruff:ignore[assert]
+        yield session_factory
 
 
 @pytest.fixture
@@ -94,14 +94,14 @@ def goes_primary_timeseries():
 
 @pytest.fixture
 def real_aia_timeseries():
-    timeseries = pd.read_csv(get_test_filepath("20260126_aia_timeseries.csv"), index_col=0, parse_dates=True)
+    timeseries = pd.read_csv(TEST_DATA_ROOTDIR / "aia_timeseries.csv", index_col=0, parse_dates=True)
     timeseries.index = pd.to_datetime(timeseries.index, format="mixed")
     return timeseries.astype({"WAVELNTH": str, "DATAMEAN": float, "EXPTIME": float})
 
 
 @pytest.fixture
 def real_goes_primary_timeseries():
-    return pd.read_csv(get_test_filepath("20260126_goes_primary_timeseries.csv"), index_col=0, parse_dates=True)
+    return pd.read_csv(TEST_DATA_ROOTDIR / "goes_primary_timeseries.csv", index_col=0, parse_dates=True)
 
 
 @pytest.fixture(scope="session")

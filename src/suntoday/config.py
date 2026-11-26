@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     # Built from the db_* components below if not set explicitly via env.
     # Password is intentionally omitted: the container DB uses trust auth.
     db_url: str = ""
+    # dpi only scales how large text and lines are drawn; the pixel sizes of
+    # the products are the *_fig_size settings and do not change with it.
     fig_dpi: int = 300
     host_save_directory: Path = Path("./images")  # Docker Compose bind source
     jsoc_base_url: str = "http://jsoc.stanford.edu"
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     jsoc_str_fmt: str = "%Y.%m.%d_%H:%M:%S_TAI"
     jsoc_user: str = ""
     log_level: str = "INFO"
-    map_fig_size: float = 4096 / fig_dpi  # pixels / dpi = inches
+    map_fig_size: int = 4096  # pixels
     resize_fig_size: int = 1024  # pixels
     s3_bucket: str = ""
     save_directory: Path = Path("./")
@@ -59,8 +61,11 @@ class Settings(BaseSettings):
     test_env: bool = False
     thumb_fig_size: int = 256  # pixels
     # 4:5 matches the legacy 1024x1280 plot, so the page layout is unchanged.
-    timeseries_fig_x_size: float = 1200 / fig_dpi  # pixels / dpi = inches
-    timeseries_fig_y_size: float = 1500 / fig_dpi  # pixels / dpi = inches
+    # Its own dpi, not fig_dpi: at 150 matplotlib's default text and line
+    # sizes are in proportion to this canvas, so the plot sets none by hand.
+    timeseries_fig_dpi: int = 150
+    timeseries_fig_x_size: int = 1200  # pixels
+    timeseries_fig_y_size: int = 1500  # pixels
 
     @model_validator(mode="after")
     def _build_db_url(self) -> "Settings":

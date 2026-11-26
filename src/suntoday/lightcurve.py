@@ -2,13 +2,10 @@
 Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
 """
 
-import matplotlib as mpl
-
-mpl.use("module://mplcairo.base")
-
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
+import matplotlib as mpl
 import matplotlib.pyplot as plt
 import pandas as pd
 from matplotlib import dates, ticker
@@ -32,14 +29,13 @@ LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "
 # wheel not nominal — frames mid-move have partially blocked flux).
 BAD_QUALITY_BITS = 0x37FC00
 
-# Style sizes (points) for the lightcurve figure.
-LABEL_FONTSIZE = 4
-TICK_FONTSIZE = 4
-Y_TICK_FONTSIZE = 3
-LEGEND_FONTSIZE = 3
-LINEWIDTH = 1
-MAJOR_TICK_SIZE = 4
-MINOR_TICK_SIZE = 2
+# Recessive hairlines: the grid is a reading aid, the curves are the data.
+GRID_COLOR = "0.85"
+# DN/s, not DN: the plotted value is DATAMEAN normalized by EXPTIME.
+AIA_Y_LABEL = "Data Mean (DN/s)"
+# W m^-2. SWPC reports this floor (as a float32, so a hair under 1e-9) when
+# the electron correction swallows the signal, and 0 for a missing sample.
+GOES_FLUX_FLOOR = 1e-9
 
 
 def _format_aia_timeseries(timeseries: pd.DataFrame) -> str:
@@ -63,10 +59,8 @@ def _hour_minute_with_date_at_midnight(x: float, _pos: int | None = None) -> str
 
 def _style_lightcurve_axis(ax: plt.Axes) -> None:
     ax.xaxis.set_major_formatter(ticker.FuncFormatter(_hour_minute_with_date_at_midnight))
-    ax.tick_params(which="major", direction="in", size=MAJOR_TICK_SIZE, labelsize=TICK_FONTSIZE)
-    ax.tick_params(which="minor", direction="in", size=MINOR_TICK_SIZE, labelsize=TICK_FONTSIZE)
-    ax.tick_params(axis="y", labelsize=Y_TICK_FONTSIZE)
-    ax.xaxis.grid(visible=True, which="major", color="black")
+    ax.tick_params(which="both", direction="in")
+    ax.grid(axis="x", color=GRID_COLOR)
 
 
 def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list[str] = AIA_WAVELENGTHS) -> None:
@@ -98,22 +92,21 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
         # into its neighbors; no upper trim — the top of the range is real
         # flare signal and QUALITY filtering already drops bad frames.
         values = values[values >= values.quantile(0.005)]
-        values = values.ewm(span=5).mean()
-        ax.plot(
-            values,
-            color=AIA_COLORS[wavelength],
-            label=f"AIA-{wavelength}" + r"$\AA$",
-            linewidth=LINEWIDTH,
-        )
-        _style_lightcurve_axis(ax)
-        ax.legend(frameon=True, framealpha=1, loc="best", fontsize=LEGEND_FONTSIZE)
-        ax.set_ylabel(r"Data Mean (DN)", size=LABEL_FONTSIZE)
-    # The per-channel ranges are narrow, so a full tick ladder is noise;
-    # min/max-only ticks show the range directly (matching the legacy plot).
-    plotted = [line.get_ydata() for line in ax.lines if len(line.get_ydata())]
-    if plotted:
-        ax.set_yticks([min(data.min() for data in plotted), max(data.max() for data in plotted)])
-        ax.yaxis.set_major_formatter(ticker.FuncFormatter(lambda value, _pos: f"{value:.4g}"))
+        ax.plot(values.ewm(span=5).mean(), color=AIA_COLORS[wavelength], label=f"AIA {wavelength} Å")
+    _style_lightcurve_axis(ax)
+    ax.set_ylabel(AIA_Y_LABEL)
+    if ax.lines:
+        # The per-channel ranges are narrow, so a full tick ladder is noise;
+        # min/max-only ticks show the range directly (matching the legacy
+        # plot). The margin keeps them clear of the neighboring panels' ticks.
+        ticks = ax.dataLim.intervaly
+        ax.set_yticks(ticks, [f"{tick:.4g}" for tick in ticks])
+        ax.margins(y=0.2)
+        ax.legend(frameon=False)
+    else:
+        # Name the gap; the default 0-1 ticks would read as real zero data.
+        ax.set_yticks([])
+        ax.text(0.5, 0.5, f"AIA {', '.join(wavelengths)} Å: no data", transform=ax.transAxes, ha="center", va="center")
 
 
 def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
@@ -128,43 +121,32 @@ def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
         `~pandas.DataFrame` containing the GOES data.
     """
     sat_number = timeseries["satellite"].iloc[0]
-    grouped_energy = timeseries.groupby(by="energy")
-    ax.plot(
-        grouped_energy.get_group("0.1-0.8nm")["flux"],
-        color="red",
-        label=f"GOES-{sat_number} 1.0-8.0" + r"$\AA$",
-        linewidth=LINEWIDTH,
-    )
-    ax.plot(
-        grouped_energy.get_group("0.05-0.4nm")["flux"],
-        color="blue",
-        label=f"GOES-{sat_number} 0.5-4.0" + r"$\AA$",
-        linewidth=LINEWIDTH,
-    )
-    ax.set_ylabel(r"Flux (Watts $\cdot$ m$^{-2}$)", size=LABEL_FONTSIZE)
-    ax.set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
+    # A floored or missing reading is not a measurement: leave a gap instead
+    # of a spike down to the bottom of the axis.
+    flux = timeseries["flux"].where(timeseries["flux"] > GOES_FLUX_FLOOR).groupby(timeseries["energy"])
+    ax.plot(flux.get_group("0.1-0.8nm"), color="red", label=f"GOES-{sat_number} 1.0-8.0 Å")
+    ax.plot(flux.get_group("0.05-0.4nm"), color="blue", label=f"GOES-{sat_number} 0.5-4.0 Å")
+    ax.set_ylabel(r"Flux (W m$^{-2}$)")
+    ax.set_xlabel("Time (UTC)")
     ax.set_yscale("log")
-    ax.set_ylim([10**-9, 10**-2])
+    ax.set_ylim([GOES_FLUX_FLOOR, 10**-2])
     ax.set_yticks([10**-8, 10**-7, 10**-6, 10**-5, 10**-4, 10**-3])
     _style_lightcurve_axis(ax)
-    ax.yaxis.set_minor_locator(ticker.LogLocator(numticks=999, subs="auto"))
-    ax_rhs = ax.twinx()
-    ax_rhs.set_yscale("log")
-    ax_rhs.set_ylabel("GOES Class", size=LABEL_FONTSIZE)
-    ax_rhs.set_ylim([10**-9, 10**-2])
-    ax_rhs.set_yticks([3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4])
-    # Other choice is [1 * 10**-8, 1 * 10**-7, 1 * 10**-6, 1 * 10**-5, 1 * 10**-4, 1 * 10**-3]p
-    for band in [3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4]:
-        ax_rhs.axhline(band, color="grey", ls="-", lw=0.4)
-    ax_rhs.set_yticklabels(["A", "B", "C", "M", "X"], fontsize=Y_TICK_FONTSIZE)
-    ax_rhs.tick_params(which="major", direction="in", size=MAJOR_TICK_SIZE, labelsize=Y_TICK_FONTSIZE)
-    ax_rhs.tick_params(which="minor", direction="in", size=0, labelright=False, labelleft=False)
-    ax.legend(frameon=True, framealpha=1, loc="best", ncol=2, fontsize=LEGEND_FONTSIZE)
+    # The decade lines are the flare class boundaries (A starts at 1e-8, X at
+    # 1e-4), so each class letter labels the band between two of them.
+    ax.grid(axis="y", color=GRID_COLOR)
+    # Must follow set_yscale: a later scale change resets the tick labels.
+    ax_rhs = ax.secondary_yaxis("right")
+    ax_rhs.set_yticks([3 * 10**-8, 3 * 10**-7, 3 * 10**-6, 3 * 10**-5, 3 * 10**-4], ["A", "B", "C", "M", "X"])
+    ax_rhs.tick_params(which="both", length=0)
+    ax_rhs.set_ylabel("GOES Class")
+    ax.legend(frameon=False, ncol=2)
 
 
 def plot_lightcurve_from_timeseries(
     goes_timeseries: pd.DataFrame,
     aia_timeseries: pd.DataFrame,
+    end_time: datetime,
 ) -> mpl.figure.Figure:
     """
     Creates the actual figure from the AIA and GOES dataframes.
@@ -175,6 +157,8 @@ def plot_lightcurve_from_timeseries(
         GOES JSON dataframe.
     aia_timeseries : pandas.DataFrame
         AIA dataframe.
+    end_time : datetime.datetime
+        End of the 24 hours the time axis spans.
 
     Returns
     -------
@@ -182,12 +166,15 @@ def plot_lightcurve_from_timeseries(
         The figure ready to be saved.
     """
     settings = Settings()
+    dpi = settings.timeseries_fig_dpi
     fig, axes = plt.subplots(
         len(LIGHTCURVE_WAVELENGTH_ORDER) + 1,
         1,
         sharex=True,
-        figsize=(settings.timeseries_fig_x_size, settings.timeseries_fig_y_size),
-        dpi=settings.fig_dpi,
+        figsize=(settings.timeseries_fig_x_size / dpi, settings.timeseries_fig_y_size / dpi),  # pixels / dpi = inches
+        dpi=dpi,
+        # GOES spans seven labeled decades, each AIA panel only its min/max.
+        height_ratios=[2] + [1] * len(LIGHTCURVE_WAVELENGTH_ORDER),
     )
     add_goes_lightcurve(axes[0], goes_timeseries)
     aia_axes = axes[1:]
@@ -195,10 +182,13 @@ def plot_lightcurve_from_timeseries(
         add_aia_lightcurve(axis, aia_timeseries, [wavelength])
     for axis in aia_axes:
         axis.set_ylabel("")
-    aia_axes[len(aia_axes) // 2].set_ylabel(r"Data Mean (DN)", size=LABEL_FONTSIZE)
+    aia_axes[len(aia_axes) // 2].set_ylabel(AIA_Y_LABEL)
     # GOES sits on top, so the bottom (AIA) axis carries the time label.
     axes[0].set_xlabel("")
-    axes[-1].set_xlabel("Time (UTC)", size=LABEL_FONTSIZE)
+    axes[-1].set_xlabel("Time (UTC)")
+    # The requested window, not the extent of the data: late or missing data
+    # then shows as a gap at the edge instead of silently shifting the axis.
+    axes[0].set_xlim(end_time - timedelta(days=1), end_time)
     fig.tight_layout(h_pad=0)
     return fig
 
@@ -228,7 +218,7 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
     logger.info("Fetching AIA and GOES timeseries for the last 24 hours")
     aia_timeseries = fetch_aia_timeseries(end_time)
     goes_timeseries = fetch_goes_timeseries(end_time)
-    fig = plot_lightcurve_from_timeseries(goes_timeseries, aia_timeseries)
+    fig = plot_lightcurve_from_timeseries(goes_timeseries, aia_timeseries, end_time)
     plot_path = save_directory / "aia_light_curves.gif"
     with atomic_save(plot_path) as tmp_path:
         # Legacy consumers expect a .gif name; the bytes are PNG (browsers

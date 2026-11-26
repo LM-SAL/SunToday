@@ -1,6 +1,7 @@
 import os
 import sys
 
+import matplotlib as mpl
 from loguru import logger
 
 __all__ = ["DataNotReadyError", "change_logging_level", "logger"]
@@ -32,3 +33,6 @@ def change_logging_level(level: str) -> None:
 
 
 change_logging_level(os.environ.get("SUNTODAY_LOG_LEVEL", "info").upper())
+# Every figure renders with mplcairo (the blend product needs its screen
+# operator). Selected once here, so no module depends on its import order.
+mpl.use("module://mplcairo.base")

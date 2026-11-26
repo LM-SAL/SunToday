@@ -1,5 +1,6 @@
 import os
 import signal
+import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
@@ -9,7 +10,16 @@ import sentry_sdk
 
 from suntoday import DataNotReadyError, logger
 from suntoday.db import PFSSImages, SDOImages, TimeSeriesImages, write_or_update_record
-from suntoday.main import _alert_if_stale, _run_job_in_subprocess, cli, create_images, main_job, pfss_job
+from suntoday.main import (
+    _alert_if_stale,
+    _exit_on_sigterm,
+    _run_job_in_subprocess,
+    cli,
+    create_images,
+    main_job,
+    pfss_job,
+)
+from suntoday.utils import atomic_save
 
 
 def test_sentry_disabled_during_tests() -> None:
@@ -33,8 +43,7 @@ def _clean_image_tables(db_session):
     session.close()
 
 
-def test_create_images_invalid_type(mocker) -> None:
-    mocker.patch("suntoday.main.serverless_function", return_value=lambda x: x)
+def test_create_images_invalid_type() -> None:
     with pytest.raises(ValueError, match="Invalid image type: invalid_type"):
         create_images("", "invalid_type", datetime.now(UTC), "")
 
@@ -44,7 +53,7 @@ def test_pfss_creation_skips_persisted_boundary_epoch(db_session, mocker, tmp_pa
     session = db_session()
     anchor = datetime(2026, 7, 20, 11, tzinfo=UTC)
     boundary_epoch = datetime(2026, 7, 20, 12, tzinfo=UTC)
-    write_or_update_record(session, "pfss", str(anchor.date()), updated_at=str(anchor), boundary_epoch=boundary_epoch)
+    write_or_update_record(session, "pfss", anchor.date(), updated_at=anchor, boundary_epoch=boundary_epoch)
     create = mocker.patch("suntoday.main.create_sdo_images")
 
     assert create_images(session, "pfss", anchor, tmp_path, boundary_epoch=boundary_epoch) == []
@@ -177,6 +186,11 @@ def _child_job_raises(**_kwargs) -> None:
     raise RuntimeError(msg)
 
 
+def _child_job_raises_oversized(**_kwargs) -> None:
+    # Far larger than any pipe buffer (64 KiB on Linux).
+    raise RuntimeError("x" * 300_000)
+
+
 def _child_job_not_ready(**_kwargs) -> None:
     msg = "JSOC still exporting"
     raise DataNotReadyError(msg)
@@ -184,6 +198,12 @@ def _child_job_not_ready(**_kwargs) -> None:
 
 def _child_job_sleeps(**_kwargs) -> None:
     time.sleep(10)
+
+
+def _child_job_mid_save(**_kwargs) -> None:
+    with atomic_save(Path(os.environ["SUNTODAY_TEST_MARKER"])) as staging:
+        staging.write_bytes(b"partial")
+        time.sleep(30)
 
 
 def _child_job_killed(download_directory: Path) -> None:
@@ -217,6 +237,19 @@ def test_run_job_in_subprocess_isolates_child_exit(mocker) -> None:
     assert not any("_child_job_not_ready exited" in message for message in messages)
 
 
+def test_run_job_in_subprocess_reads_traceback_larger_than_pipe_buffer(mocker) -> None:
+    # The child blocks sending this until the parent reads it; a parent that
+    # joined first deadlocked, so a regression shows up as this test hanging.
+    mocker.patch("suntoday.main._alert_if_stale")
+    messages = []
+    sink_id = logger.add(lambda message: messages.append(str(message)), level="WARNING")
+    try:
+        _run_job_in_subprocess(_child_job_raises_oversized, ("images",))
+    finally:
+        logger.remove(sink_id)
+    assert any("exited with code 1" in message and "Child traceback" in message for message in messages)
+
+
 def test_run_job_in_subprocess_leaves_staleness_to_child(mocker) -> None:
     alert = mocker.patch("suntoday.main._alert_if_stale")
 
@@ -246,6 +279,30 @@ def test_run_job_in_subprocess_stops_timeout(mocker) -> None:
 
     assert any("_child_job_sleeps timed out" in message for message in messages)
     alert.assert_called_once_with(image_types=("images",))
+
+
+def test_run_job_in_subprocess_stops_job_when_scheduler_is_stopped(mocker, monkeypatch, tmp_path) -> None:
+    # `docker stop` SIGTERMs the scheduler. It must unwind the running job
+    # first: an orphaned job is SIGKILLed mid-write by the container teardown
+    # and leaves its staging file on the NFS share.
+    monkeypatch.setenv("SUNTODAY_TEST_MARKER", str(tmp_path / "f0171.jpg"))
+    mocker.patch("suntoday.main._alert_if_stale")
+
+    def stop_scheduler_once_job_is_writing() -> None:
+        while not list(tmp_path.glob("*.tmp-*")):
+            time.sleep(0.05)
+        # To the main thread, where a process-directed signal lands on Linux.
+        signal.pthread_kill(threading.main_thread().ident, signal.SIGTERM)
+
+    previous_handler = signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    try:
+        threading.Thread(target=stop_scheduler_once_job_is_writing, daemon=True).start()
+        with pytest.raises(SystemExit):
+            _run_job_in_subprocess(_child_job_mid_save, ("images",))
+    finally:
+        signal.signal(signal.SIGTERM, previous_handler)
+
+    assert list(tmp_path.iterdir()) == []
 
 
 def test_run_job_in_subprocess_removes_downloads_after_kill(mocker, monkeypatch, tmp_path) -> None:
@@ -329,7 +386,7 @@ def test_main_job_records_created_types_after_upload(tmp_path, mocker) -> None:
         mocker.call([created_file], "my-bucket", tmp_path.resolve(), mostrecent_root=None),
     ]
     # Only the type that created files gets a record, and only after upload.
-    record.assert_called_once_with(session, "images", "2026-07-13", updated_at=str(requested_time))
+    record.assert_called_once_with(session, "images", requested_time.date(), updated_at=requested_time)
 
 
 def test_main_job_live_run_mirrors_mostrecent(tmp_path, mocker) -> None:
@@ -375,8 +432,8 @@ def test_pfss_job_records_boundary_epoch_after_upload(tmp_path, mocker) -> None:
     record.assert_called_once_with(
         session,
         "pfss",
-        "2026-07-13",
-        updated_at=str(requested_time),
+        requested_time.date(),
+        updated_at=requested_time,
         boundary_epoch=boundary_epoch,
     )
 
@@ -406,6 +463,21 @@ def test_create_images_skips_recent_record(mocker, tmp_path) -> None:
 
     assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path) == []
     create_sdo.assert_not_called()
+
+
+def test_create_images_currency_window_follows_cron_frequency(mocker, monkeypatch, tmp_path) -> None:
+    # Data 7 minutes newer is not worth a re-render at the default 10 minute
+    # interval, but it is at a 5 minute one.
+    requested_time = datetime(2026, 7, 13, 12, tzinfo=UTC)
+    record = mocker.Mock(updated_at=requested_time - timedelta(minutes=7))
+    mocker.patch("suntoday.main.get_record", return_value=record)
+    image_file = tmp_path / "f171.jpg"
+    create_sdo = mocker.patch("suntoday.main.create_sdo_images", return_value=[image_file])
+
+    assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path) == []
+    monkeypatch.setenv("SUNTODAY_CRON_FREQUENCY", "5")
+    assert create_images(mocker.sentinel.session, "images", requested_time, tmp_path) == [image_file]
+    create_sdo.assert_called_once()
 
 
 def test_create_images_force_overrides_recent_record(mocker, tmp_path) -> None:

@@ -1,7 +1,9 @@
 """
 Parfive downloader for the JSOC FITS files.
 
-All JSOC endpoints are plain HTTP, so there is no TLS to configure here.
+The JSOC is addressed over plain HTTP. Its HTTPS is not dependable, so
+certificate verification is deliberately off for any download that ends
+up on an HTTPS host; a tampered file would therefore not be detected.
 """
 
 from parfive import SessionConfig
@@ -27,7 +29,7 @@ def create_session(*args, **kwargs):  # ruff:ignore[unused-function-argument]
 
 def create_downloader():
     """
-    Creates a simple SSL disabled Parfive Downloader.
+    Creates a Parfive Downloader that does not verify TLS certificates.
 
     Returns
     -------

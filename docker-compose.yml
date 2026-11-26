@@ -1,8 +1,8 @@
 services:
   suntoday:
     restart: always
-    # tini as PID 1: python has no signal handler, so `stop` is instant
-    # instead of a 10 s SIGKILL.
+    # tini as PID 1 forwards `stop`'s SIGTERM to the scheduler, which stops
+    # its running job (up to 5 s) before exiting, inside the 10 s grace.
     init: true
     logging:
       driver: json-file

@@ -2,6 +2,7 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import call
 
+import matplotlib.pyplot as plt
 import pytest
 from PIL import Image
 
@@ -10,13 +11,14 @@ from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.data.test import find_test_filepath
 from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
+    _create_canvas,
     _draw_field_lines,
     _save_product,
     create_blended_figure_from_maps,
     create_figure_from_map,
     create_rgb_figure_from_maps,
     create_sdo_images,
-    save_figures,
+    save_figure,
 )
 from suntoday.maps import create_aia_map, create_hmi_map, create_hmi_synoptic_map
 from suntoday.pfss import trace_field_lines
@@ -109,12 +111,21 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     return fig
 
 
-def test_save_figures_from_maps_aia(tmpdir) -> None:
+def test_canvas_pixel_size_is_independent_of_dpi(monkeypatch) -> None:
+    # dpi only scales text and lines; the full-size JPEG stays 4096 px.
+    monkeypatch.setenv("SUNTODAY_FIG_DPI", "150")
+    fig, _ = _create_canvas()
+    assert fig.dpi == 150
+    assert fig.get_size_inches() * fig.dpi == pytest.approx([4096, 4096])
+    plt.close(fig)
+
+
+def test_save_figure_from_maps_aia(tmpdir) -> None:
     aia_304_map = create_aia_map(find_test_filepath("304"))
     aia_211_map = create_aia_map(find_test_filepath("211"))
     aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
-    saved_paths = save_figures([(wavelength, fig)], tmpdir)
+    saved_paths = save_figure(wavelength, fig, tmpdir)
     assert set(saved_paths) == {
         tmpdir / "f_304_211_171.jpg",
         tmpdir / "l_304_211_171.jpg",
@@ -229,13 +240,13 @@ def test_save_product_pfss(mocker, tmp_path) -> None:
     field_lines = mocker.sentinel.field_lines
     base = tmp_path / "base.jpg"
     overlay = tmp_path / "overlay.jpg"
-    save = mocker.patch("suntoday.jpegs.save_figures", side_effect=[[base], [overlay]])
+    save = mocker.patch("suntoday.jpegs.save_figure", side_effect=[[base], [overlay]])
     draw = mocker.patch("suntoday.jpegs._draw_field_lines")
 
     assert _save_product(("0171", fig), amap, field_lines, tmp_path) == [base, overlay]
     assert save.call_args_list == [
-        call([("0171pfssnolines", fig)], tmp_path, close=False),
-        call([("0171pfss", fig)], tmp_path),
+        call("0171pfssnolines", fig, tmp_path, close=False),
+        call("0171pfss", fig, tmp_path),
     ]
     draw.assert_called_once_with(mocker.sentinel.axes, amap, field_lines)
 

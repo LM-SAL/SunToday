@@ -5,7 +5,7 @@ Provides all the database helpers needed.
 import datetime
 
 from sqlalchemy import Column, Date, DateTime, create_engine
-from sqlalchemy.orm import Session, declarative_base, sessionmaker
+from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy_utils import create_database, database_exists
 
 from suntoday import logger
@@ -13,13 +13,7 @@ from suntoday import logger
 BASE = declarative_base()
 
 
-__all__ = ["DatabaseError", "create_db", "get_latest_record", "get_record", "get_session", "write_or_update_record"]
-
-
-class DatabaseError(Exception):
-    """
-    Base database error for this module.
-    """
+__all__ = ["create_db", "get_latest_record", "get_record", "write_or_update_record"]
 
 
 class SDOImages(BASE):
@@ -83,6 +77,17 @@ class PFSSImages(BASE):
 VALID_MODELS = {"images": SDOImages, "timeseries": TimeSeriesImages, "pfss": PFSSImages}
 
 
+def _get_model(model_type: str) -> type[SDOImages | TimeSeriesImages | PFSSImages]:
+    """
+    Look up the table class for a model type; unknown types raise ValueError.
+    """
+    model = VALID_MODELS.get(model_type)
+    if model is None:
+        msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
+        raise ValueError(msg)
+    return model
+
+
 def create_db(uri=None, *, echo: bool = False):
     """
     Create a new database at the specified URI if it doesn't exist.
@@ -113,32 +118,6 @@ def create_db(uri=None, *, echo: bool = False):
     return engine
 
 
-def get_session(uri=None, *, echo: bool = False) -> Session:
-    """
-    Create and return a new database session.
-
-    Parameters
-    ----------
-    uri : str, optional
-        The database connection URI. If not provided, it will use the default
-        configuration from the Settings class.
-    echo : bool, optional
-        If True, enables SQLAlchemy engine logging, by default False
-
-    Returns
-    -------
-    Session
-        SQLAlchemy session object connected to the database
-    """
-    from suntoday.config import Settings
-
-    settings = Settings()
-    uri = uri or settings.db_url
-    engine = create_engine(uri, echo=echo)
-    session = sessionmaker(bind=engine)
-    return session()
-
-
 def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeriesImages | PFSSImages | None:
     """
     Retrieve the last updated record from the database based on the model type.
@@ -154,22 +133,12 @@ def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeri
     -------
     Model | None
         The most recently updated record, or None if the table is empty.
-
-    Raises
-    ------
-    ValueError
-        If ``model_type`` is not one of the valid types defined in ``VALID_MODELS``.
     """
-    model = VALID_MODELS.get(model_type)
-    if model is None:
-        msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
-        raise ValueError(msg)
-    results = session.query(model).order_by(model.updated_at.desc()).first()
-    if results is None:
-        msg = f"Found zero results for model for {model_type}"
-        logger.info(msg)
-        return None
-    return results
+    model = _get_model(model_type)
+    record = session.query(model).order_by(model.updated_at.desc()).first()
+    if record is None:
+        logger.info(f"Found zero results for model for {model_type}")
+    return record
 
 
 def get_record(
@@ -192,30 +161,20 @@ def get_record(
     -------
     Model | None
         The matching record from the database or None if not found.
-
-    Raises
-    ------
-    ValueError
-        If ``model_type`` is not one of the valid types defined in ``VALID_MODELS``.
     """
-    model = VALID_MODELS.get(model_type)
-    if model is None:
-        msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
-        raise ValueError(msg)
-    results = session.query(model).filter(model.obs_date == obs_date).first()
-    if results is None:
-        msg = f"Found zero results for model for {model_type} on {obs_date}"
-        logger.info(msg)
-        return None
-    return results
+    model = _get_model(model_type)
+    record = session.query(model).filter(model.obs_date == obs_date).first()
+    if record is None:
+        logger.info(f"Found zero results for model for {model_type} on {obs_date}")
+    return record
 
 
 def write_or_update_record(
     session: Session,
     model_type: str,
-    obs_date: str,
+    obs_date: datetime.date,
     *,
-    updated_at: str,
+    updated_at: datetime.datetime,
     boundary_epoch: datetime.datetime | None = None,
 ):
     """
@@ -228,9 +187,9 @@ def write_or_update_record(
         SQLAlchemy session object.
     model_type : str
         Type of model to create; one of ``VALID_MODELS``.
-    obs_date : str
+    obs_date : datetime.date
         Observation date for the record.
-    updated_at : str
+    updated_at : datetime.datetime
         Timestamp for when the record was updated
     boundary_epoch : datetime.datetime, optional
         Boundary-map timestamp used for a PFSS render.
@@ -238,30 +197,22 @@ def write_or_update_record(
     Raises
     ------
     ValueError
-        If ``model_type`` is not valid.
+        If ``boundary_epoch`` is given for a non-PFSS record.
     """
-    model_class = VALID_MODELS.get(model_type)
-    if model_class is None:
-        msg = f"Given type: {model_type} not allowed - {VALID_MODELS.keys()}"
-        raise ValueError(msg)
+    model_class = _get_model(model_type)
     if boundary_epoch is not None and model_class is not PFSSImages:
         msg = "boundary_epoch is only valid for PFSS records"
         raise ValueError(msg)
     try:  # ruff:ignore[too-many-statements-in-try-clause]
-        existing_record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
-        if existing_record:
-            existing_record.updated_at = updated_at
-            if boundary_epoch is not None:
-                existing_record.boundary_epoch = boundary_epoch
-            session.commit()
-            logger.info(f"Updated existing {model_type} record for {obs_date} with updated_at: {updated_at}")
-        else:
-            new_record = model_class(obs_date=obs_date, updated_at=updated_at)
-            if boundary_epoch is not None:
-                new_record.boundary_epoch = boundary_epoch
-            session.add(new_record)
-            session.commit()
-            logger.info(f"Created new {model_type} record for {obs_date}")
-    except Exception as e:
+        record = session.query(model_class).filter(model_class.obs_date == obs_date).first()
+        if record is None:
+            record = model_class(obs_date=obs_date)
+            session.add(record)
+        record.updated_at = updated_at
+        if boundary_epoch is not None:
+            record.boundary_epoch = boundary_epoch
+        session.commit()
+        logger.info(f"Recorded {model_type} for {obs_date} with updated_at: {updated_at}")
+    except Exception:
         session.rollback()
-        raise e from None
+        raise

@@ -4,15 +4,10 @@ single channels, RGB composites, the HMI/AIA blend and the PFSS overlay
 variants.
 """
 
-import matplotlib as mpl
-
-mpl.use("module://mplcairo.base")
-
 import datetime
 import gc
 import re
 import tempfile
-from collections.abc import Iterable
 from pathlib import Path
 
 import astropy.units as u
@@ -53,7 +48,7 @@ __all__ = [
     "create_figure_from_map",
     "create_rgb_figure_from_maps",
     "create_sdo_images",
-    "save_figures",
+    "save_figure",
 ]
 
 TEXT_X_POS = 0.02
@@ -68,7 +63,7 @@ WAVELENGTH_FORMAT_BLEND = "{:03.0f}"
 # Space-padded variant for the on-image labels (monospace keeps the columns
 # aligned); the zero-padded formats above feed the filenames and must not change.
 WAVELENGTH_FORMAT_LABEL = "{:>4.0f}"
-HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": " HMI Continuum (AIA scale)"}
+HMI_MEASUREMENT_JPEG = {"magnetogram": "HMI BLOS", "continuum": "HMI Continuum (AIA scale)"}
 HMI_MEASUREMENT_JPEG_FILENAMES = {"magnetogram": "_HMImag", "continuum": "_HMI_cont_aiascale"}
 HMI_MEASUREMENT_FITS = {"magnetogram": "blos", "continuum": "continuum"}
 # Screen blending adds light, so a colormap with a light/gray midpoint (e.g.
@@ -154,7 +149,8 @@ def _create_canvas(projection=None) -> tuple[plt.Figure, plt.Axes]:
         The figure and its single axes.
     """
     settings = Settings()
-    fig = plt.figure(figsize=(settings.map_fig_size, settings.map_fig_size), dpi=settings.fig_dpi, frameon=False)
+    size = settings.map_fig_size / settings.fig_dpi  # pixels / dpi = inches
+    fig = plt.figure(figsize=(size, size), dpi=settings.fig_dpi, frameon=False)
     ax = fig.add_subplot(111, projection=projection)
     _full_bleed(ax)
     return fig, ax
@@ -347,7 +343,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
         WAVELENGTH_FORMAT_LABEL.format(amap.wavelength.value) if is_aia else HMI_MEASUREMENT_JPEG[amap.measurement]
     )
     if not is_aia and amap.measurement == "magnetogram":
-        wavelength += f" +-{HMI_NORM_GAUSS} G"
+        wavelength += f" ±{HMI_NORM_GAUSS} G"
     wavelength_filename = (
         WAVELENGTH_FORMAT.format(amap.wavelength.value) if is_aia else HMI_MEASUREMENT_JPEG_FILENAMES[amap.measurement]
     )
@@ -458,22 +454,21 @@ def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, p
     return "_".join(wavelength_names), fig
 
 
-def save_figures(
-    list_of_figs: Iterable[tuple[str, plt.Figure]], save_directory: Path, *, close: bool = True
-) -> list[Path]:
+def save_figure(wavelength: str, fig: plt.Figure, save_directory: Path, *, close: bool = True) -> list[Path]:
     """
-    Save figures as JPEG images.
+    Save a figure as its full, small and thumbnail JPEGs.
 
     Parameters
     ----------
-    list_of_figs : (Iterable[Tuple[str, plt.Figure]])
-        An iterable of tuples containing the wavelength and the corresponding figure.
-        Figures are closed after saving to free memory.
+    wavelength : str
+        Filename part naming the product, as the create_* functions return it.
+    fig : `plt.Figure`
+        The figure to save.
     save_directory : pathlib.Path
         The directory where the JPEG images will be saved.
     close : bool, optional
-        Close each figure after saving (the default). Pass False when the
-        figure will be saved again, e.g. for the PFSS overlay variants.
+        Close the figure after saving (the default) to free its memory. Pass
+        False when it will be saved again, e.g. for the PFSS overlay variant.
 
     Returns
     -------
@@ -481,19 +476,17 @@ def save_figures(
         Saved JPEG paths.
     """
     settings = Settings()
-    saved_paths = []
-    for wavelength, fig in list_of_figs:
-        full_path = save_directory / settings.sdo_fig_name_large.format(wavelength)
-        small_path = save_directory / settings.sdo_fig_name_small.format(wavelength)
-        thumb_path = save_directory / settings.sdo_fig_name_thumb.format(wavelength)
-        try:
-            _save_jpeg_set(fig, full_path, small_path, thumb_path, settings)
-            saved_paths.extend((full_path, small_path, thumb_path))
-        finally:
-            if close:
-                plt.close(fig)
-                gc.collect()
-    return saved_paths
+    paths = [
+        save_directory / name.format(wavelength)
+        for name in (settings.sdo_fig_name_large, settings.sdo_fig_name_small, settings.sdo_fig_name_thumb)
+    ]
+    try:
+        _save_jpeg_set(fig, *paths, settings)
+    finally:
+        if close:
+            plt.close(fig)
+            gc.collect()
+    return paths
 
 
 def _save_jpeg_set(fig: plt.Figure, full_path: Path, small_path: Path, thumb_path: Path, settings: Settings) -> None:
@@ -605,7 +598,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
             hmi_map = create_hmi_map(hmi_path)
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             if not pfss:
-                hmi_fits_name = HMI_MEASUREMENT_FITS.get(hmi_map.measurement)
+                hmi_fits_name = HMI_MEASUREMENT_FITS[hmi_map.measurement]
                 saved_paths.append(save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits"))
             saved_paths.extend(_save_product(create_figure_from_map(hmi_map), hmi_map, field_lines, save_directory))
             del hmi_map
@@ -664,8 +657,7 @@ def _save_product(
     """
     wavelength, fig = figure
     if field_lines is None:
-        return save_figures([(wavelength, fig)], save_directory)
-    saved_paths = save_figures([(wavelength + "pfssnolines", fig)], save_directory, close=False)
+        return save_figure(wavelength, fig, save_directory)
+    saved_paths = save_figure(wavelength + "pfssnolines", fig, save_directory, close=False)
     _draw_field_lines(fig.axes[0], amap, field_lines)
-    saved_paths.extend(save_figures([(wavelength + "pfss", fig)], save_directory))
-    return saved_paths
+    return saved_paths + save_figure(wavelength + "pfss", fig, save_directory)

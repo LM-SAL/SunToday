@@ -10,10 +10,63 @@ from sunpy.map import all_coordinates_from_map, coordinate_is_on_solar_disk
 from suntoday.constants import AIA_SINGLE_NORMS
 from suntoday.data.test import find_test_filepath
 from suntoday.maps import (
+    _north_up,
     create_aia_map,
     create_hmi_map,
     create_hmi_synoptic_map,
 )
+
+
+def _small_disk_map(crota2: float) -> smap.GenericMap:
+    header = {
+        "naxis1": 32,
+        "naxis2": 32,
+        "ctype1": "HPLN-TAN",
+        "ctype2": "HPLT-TAN",
+        "cunit1": "arcsec",
+        "cunit2": "arcsec",
+        "cdelt1": 60.0,
+        "cdelt2": 60.0,
+        # The exact center, so a 180 degree turn maps pixels onto pixels.
+        "crpix1": 16.5,
+        "crpix2": 16.5,
+        "crval1": 0.0,
+        "crval2": 0.0,
+        "crota2": crota2,
+        "date-obs": "2026-07-17T22:11:57",
+        "dsun_obs": 1.5e11,
+        "hgln_obs": 0.0,
+        "hglt_obs": 0.0,
+    }
+    return smap.Map(np.arange(32.0 * 32).reshape(32, 32), header)
+
+
+def test_north_up_does_not_resample_aligned_frame() -> None:
+    aligned = _small_disk_map(0.0)
+    rotated = aligned.rotate()
+
+    result = _north_up(aligned)
+
+    assert result is aligned
+    # Same header as rotate() leaves, so the planning FITS do not change.
+    assert dict(result.meta) == dict(rotated.meta)
+    assert list(result.meta) == list(rotated.meta)
+    np.testing.assert_allclose(result.data, rotated.data, atol=1e-9)
+
+
+def test_north_up_rotates_upside_down_frame() -> None:
+    # HMI is natively upside down (CROTA2 near 180); that must still be fixed.
+    upside_down = _small_disk_map(180.0)
+
+    result = _north_up(upside_down)
+
+    assert result is not upside_down
+    assert "crota2" not in result.meta
+    np.testing.assert_allclose(result.rotation_matrix, np.eye(2), atol=1e-12)
+    # The input ramps up along both axes, so turned over it ramps down.
+    center = result.data[8:-8, 8:-8]
+    assert (np.diff(center, axis=0) < 0).all()
+    assert (np.diff(center, axis=1) < 0).all()
 
 
 def test_create_aia_171_map() -> None:
@@ -84,7 +137,7 @@ def test_create_hmi_blos_map(hmi_blos_test_file) -> None:
 
 def test_hmi_row_mask_matches_full_map(hmi_blos_test_file) -> None:
     with fits.open(hmi_blos_test_file, memmap=False) as hdul:
-        expected = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        expected = smap.Map(hdul[1].data, hdul[1].header)
     expected.data[~coordinate_is_on_solar_disk(all_coordinates_from_map(expected))] = np.nan
 
     actual = create_hmi_map(hmi_blos_test_file)

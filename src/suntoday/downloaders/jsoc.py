@@ -214,28 +214,18 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
     ValueError
         If no data is returned.
     """
-    settings = Settings()
-    keyword_store = {"T_REC": [], "WAVELNTH": []}
-    segment_store = {"URL": []}
-    for query, segment in [("lm_jps.m45s_nrt[{}]", "magnetogram"), ("lm_jps.Ic_45s[{}]", "continuum")]:
-        request_query = query.format(_format_jsoc_time(requested_time))
-        json_response = _get_urls(request_query, "T_REC", segment)
-        keywords = json_response["keywords"]
-        segments = json_response["segments"]
-        if len(keywords[0]["values"]) == 0:
-            msg = f"No data found for {request_query}."
+    rows = []
+    for series, segment in [("lm_jps.m45s_nrt", "magnetogram"), ("lm_jps.Ic_45s", "continuum")]:
+        query = f"{series}[{_format_jsoc_time(requested_time)}]"
+        response = _get_urls(query, "T_REC", segment)
+        times = response["keywords"][0]["values"]
+        if not times:
+            msg = f"No data found for {query}."
             raise ValueError(msg)
-        keywords = {ad["name"]: ad["values"] for ad in keywords}
-        segments = {ad["name"]: ad["values"] for ad in segments}
-        segments[segment] = [f"{settings.jsoc_base_url}{value}" for value in segments[segment]]
-        keyword_store["T_REC"].extend(keywords["T_REC"])
-        keyword_store["WAVELNTH"].append(segment)
-        segment_store["URL"].extend(segments[segment])
-    keyword_store["T_REC"] = [_parse_jsoc_time(value) for value in keyword_store["T_REC"]]
-    hmi_urls = pd.DataFrame.from_dict(keyword_store | segment_store)
-    hmi_urls = hmi_urls.set_index("T_REC")
-    hmi_urls.index = pd.to_datetime(hmi_urls.index, format="mixed", utc=True)
-    return hmi_urls
+        # T_REC is the only keyword and the segment the only one requested.
+        url = f"{Settings().jsoc_base_url}{response['segments'][0]['values'][0]}"
+        rows.append({"T_REC": _parse_jsoc_time(times[0]), "WAVELNTH": segment, "URL": url})
+    return pd.DataFrame(rows).set_index("T_REC")
 
 
 def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime:
@@ -443,6 +433,24 @@ def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     return aia_timeseries[aia_timeseries["WAVELNTH"].isin(AIA_WAVELENGTHS)]
 
 
+def _download_fits(info: pd.DataFrame, url_column: str, save_directory: Path) -> Results:
+    """
+    Download one FITS file per row, named by its index time and ``WAVELNTH``.
+    """
+    downloader = create_downloader()
+    for idx, row in info.iterrows():
+        downloader.enqueue_file(
+            row[url_column],
+            path=save_directory,
+            filename=f"{idx.strftime('%Y%m%d_%H%M%S')}_{row['WAVELNTH']}.fits",
+        )
+    files = downloader.download()
+    if files.errors:
+        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
+        raise OSError(msg)
+    return files
+
+
 def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_directory: Path) -> Results:
     """
     Download AIA fits files for a given time.
@@ -461,26 +469,10 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_di
     -------
     parfive.Results
         Results object from parfive.Downloader.
-
-    Raises
-    ------
-    OSError
-        If parfive fails to download any files.
     """
     aia_info = get_aia_urls(requested_time, time_span=time_span)
     logger.info(f"Downloading {len(aia_info)} AIA FITS files for {requested_time}")
-    downloader = create_downloader()
-    for idx, row in aia_info.iterrows():
-        downloader.enqueue_file(
-            row["image_lev1p5"],
-            path=save_directory,
-            filename=f"{idx.strftime('%Y%m%d_%H%M%S')}_{row['WAVELNTH']}.fits",
-        )
-    files = downloader.download()
-    if files.errors:
-        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
-        raise OSError(msg)
-    return files
+    return _download_fits(aia_info, "image_lev1p5", save_directory)
 
 
 def fetch_hmi_fits(requested_time: datetime, save_directory: Path) -> Results:
@@ -498,23 +490,7 @@ def fetch_hmi_fits(requested_time: datetime, save_directory: Path) -> Results:
     -------
     parfive.Results
         Results object from parfive.Downloader.
-
-    Raises
-    ------
-    OSError
-        If parfive fails to download any files.
     """
     hmi_info = get_hmi_urls(requested_time)
     logger.info(f"Downloading {len(hmi_info)} HMI FITS files for {requested_time}")
-    downloader = create_downloader()
-    for idx, row in hmi_info.iterrows():
-        downloader.enqueue_file(
-            row["URL"],
-            path=save_directory,
-            filename=f"{idx.strftime('%Y%m%d_%H%M%S')}_{row['WAVELNTH']}.fits",
-        )
-    files = downloader.download()
-    if files.errors:
-        msg = f"Failed to download:\n{format_download_errors(files.errors)}"
-        raise OSError(msg)
-    return files
+    return _download_fits(hmi_info, "URL", save_directory)

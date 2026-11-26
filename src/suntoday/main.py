@@ -35,14 +35,23 @@ _MAIN_JOB_TIMEOUT_SECONDS = 10 * 60
 _PFSS_JOB_TIMEOUT_SECONDS = 75 * 60
 _PROCESS_STOP_GRACE_SECONDS = 5
 
-if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
-    settings = Settings()
+settings = Settings()
+# Gated on the setting, not the raw environment variable, so a .env-only or
+# lowercase SUNTODAY_TEST_ENV also keeps test runs out of the production Sentry.
+if not settings.test_env:
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
         ignore_errors=[DataNotReadyError],
         server_name=settings.sentry_server_name,
         environment=settings.sentry_environment,
     )
+
+
+def _exit_on_sigterm(signum, _frame) -> None:
+    """
+    Unwind on SIGTERM; its default action ends the process with no cleanup.
+    """
+    raise SystemExit(128 + signum)
 
 
 def _job_entrypoint(job_func, error_connection, download_directory: Path) -> None:
@@ -56,13 +65,8 @@ def _job_entrypoint(job_func, error_connection, download_directory: Path) -> Non
     SystemExit
         With ``os.EX_TEMPFAIL`` when the upstream data is not ready.
     """
-
-    # The parent's timeout terminate() must unwind the job so the database
-    # session closes and atomic_save staging files on the NFS share are
-    # unlinked; SIGTERM's default action skips both.
-    def _exit_on_sigterm(signum, _frame) -> None:
-        raise SystemExit(128 + signum)
-
+    # The parent's terminate() must unwind the job so the database session
+    # closes and atomic_save staging files on the NFS share are unlinked.
     signal.signal(signal.SIGTERM, _exit_on_sigterm)
     try:
         job_func(download_directory=download_directory)
@@ -107,16 +111,32 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
                 args=(job_func, child_connection, Path(download_directory)),
                 name=job_func.__name__,
             )
-            process.start()
-            process.join(timeout)
-            timed_out = process.is_alive()
-            if timed_out:
-                process.terminate()
-                process.join(_PROCESS_STOP_GRACE_SECONDS)
+            try:
+                process.start()
+                deadline = time.monotonic() + timeout
+                # Only the child holds the write end now, so its exit reads as
+                # EOF. Receive before joining: a traceback larger than the
+                # pipe buffer blocks the child's send until it is read, and
+                # joining first would leave the scheduler waiting forever.
+                child_connection.close()
+                child_traceback = None
+                if parent_connection.poll(timeout):
+                    # EOFError: exited without a traceback. OSError: died mid-send.
+                    with contextlib.suppress(EOFError, OSError):
+                        child_traceback = parent_connection.recv()
+                process.join(max(0, deadline - time.monotonic()))
+                timed_out = process.is_alive()
+            # Stops a timed-out job, and also the running job when the
+            # scheduler itself is stopped (SIGTERM): left alone it is orphaned
+            # and the container teardown SIGKILLs it mid-write, which leaves
+            # its staging files on the NFS share.
+            finally:
                 if process.is_alive():
-                    process.kill()
-                    process.join()
-            child_traceback = parent_connection.recv() if parent_connection.poll() else None
+                    process.terminate()
+                    process.join(_PROCESS_STOP_GRACE_SECONDS)
+                    if process.is_alive():
+                        process.kill()
+                        process.join()
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
     except Exception as e:  # ruff:ignore[blind-except]
@@ -272,10 +292,8 @@ def cli() -> None:
         except DataNotReadyError as e:
             logger.warning(f"Data not ready: {e}")
             raise SystemExit(os.EX_TEMPFAIL) from None
-    return
 
 
-@serverless_function
 def create_images(
     database_session: Session,
     image_type: str,
@@ -336,18 +354,19 @@ def create_images(
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
     if not force:
+        # Current = already rendered from data less than one scheduler
+        # interval older than this request.
+        cutoff = requested_time - datetime.timedelta(minutes=Settings().cron_frequency)
         if image_type == "pfss" and boundary_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
             is_current = (
                 latest_record is not None
                 and latest_record.boundary_epoch == boundary_epoch
-                and latest_record.updated_at > requested_time - datetime.timedelta(minutes=10)
+                and latest_record.updated_at > cutoff
             )
         else:
             latest_record = get_record(database_session, image_type, requested_time.date())
-            is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
-                minutes=10
-            )
+            is_current = latest_record is not None and latest_record.updated_at > cutoff
         if is_current:
             logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
             return []
@@ -415,9 +434,8 @@ def _run_job(
     save_directory.mkdir(parents=True, exist_ok=True)
     logger.info(f"Requested time: {requested_time}, Save directory: {save_directory}")
     engine = create_db()
-    session = None
+    session = sessionmaker(bind=engine)()
     try:
-        session = sessionmaker(bind=engine)()
         created_by_type = {}
         for image_type in image_types:
             logger.info(f"Creating {image_type}")
@@ -449,21 +467,19 @@ def _run_job(
                 write_or_update_record(
                     session,
                     image_type,
-                    str(requested_time.date()),
-                    updated_at=str(requested_time),
+                    requested_time.date(),
+                    updated_at=requested_time,
                     boundary_epoch=boundary_epoch,
                 )
             else:
-                write_or_update_record(session, image_type, str(requested_time.date()), updated_at=str(requested_time))
+                write_or_update_record(session, image_type, requested_time.date(), updated_at=requested_time)
     finally:
-        if session is not None:
-            try:
-                _alert_if_stale(session, image_types)
-            # Staleness reporting must not be able to stop the job.
-            except Exception as e:  # ruff:ignore[blind-except]
-                logger.exception(f"Error checking stale data: {e}")
-        if session is not None:
-            session.close()
+        try:
+            _alert_if_stale(session, image_types)
+        # Staleness reporting must not be able to stop the job.
+        except Exception as e:  # ruff:ignore[blind-except]
+            logger.exception(f"Error checking stale data: {e}")
+        session.close()
         engine.dispose()
 
 
@@ -569,4 +585,7 @@ def scheduled() -> None:
 
 
 if __name__ == "__main__":
+    # `docker stop` sends SIGTERM; unwinding on it is what lets a running job
+    # be stopped cleanly (see _run_job_in_subprocess) before the process ends.
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     cli()
