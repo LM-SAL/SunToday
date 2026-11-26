@@ -7,29 +7,23 @@ TEST_DATA_ROOTDIR = DATA_ROOTDIR / "test"
 
 def find_test_filepath(suffix):
     """
-    Return the full path to the stored test FITS file ending in a suffix.
+    Return the stored test FITS file whose name ends in ``_<suffix>.fits``.
 
-    Globbed rather than named so refreshing the test data with
-    ``tools/fetch_fits.py`` does not need every call site updated.
-
-    Parameters
-    ----------
-    suffix : `str`
-        Final underscore-separated part of the file name, e.g. an AIA
-        wavelength (``"171"``) or ``"magnetogram"``, ``"continuum"``,
-        ``"synoptic"``.
+    Found by suffix (an AIA wavelength such as ``"171"``, or
+    ``"magnetogram"``, ``"continuum"``, ``"synoptic"``), so refreshing the
+    data with ``tools/fetch_fits.py`` changes no call site.
 
     Returns
     -------
-    filepath : `pathlib.Path`
-        The full path to the file.
+    pathlib.Path
+        The file.
 
     Raises
     ------
     FileNotFoundError
         If no file matches.
     ValueError
-        If more than one file matches (e.g. a stale file survived a refresh).
+        If several match, e.g. a stale file survived a refresh.
     """
     matches = sorted(TEST_DATA_ROOTDIR.glob(f"*_{suffix}.fits"))
     if not matches:

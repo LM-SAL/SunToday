@@ -26,7 +26,7 @@ This includes:
   written only when its hourly frame falls inside the query window.
 - The combination of the AIA lightcurves with GOES.
 
-Future movie support will need to produce the following:
+Movies are not produced yet. They will need to cover:
 
 24-hour movies:
 
@@ -46,8 +46,8 @@ Future movie support will need to produce the following:
 
 This is set up to run in a Docker container.
 Mount points are configured by `docker-compose.yml`.
-The images are regenerated on a fixed cadence, configurable via `SUNTODAY_CRON_FREQUENCY` (minutes, default 10).
-The PFSS job runs on its own cadence, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90).
+A new run starts `SUNTODAY_CRON_FREQUENCY` minutes (default 10) after the previous one finishes.
+The PFSS job has its own interval, `SUNTODAY_PFSS_CRON_FREQUENCY` (minutes, default 90).
 PFSS backfills use the HMI archive, selecting an available boundary within the two days preceding the requested time.
 
 ## Setup
@@ -87,6 +87,12 @@ git pull
 docker compose up -d --build --remove-orphans
 docker image prune -f  # reclaim space from superseded build layers
 ```
+
+### Dependencies
+
+Every dependency is pinned. `requirements.txt` holds the direct pins, which CI tests; `requirements-full.txt` is the full lock, which Docker installs. After changing the first, regenerate the second with the command in its header, adding `--upgrade` to move the indirect dependencies too. A test fails when the two disagree.
+
+mplcairo is pinned to a commit and pycairo has no Linux wheel, so both compile from source and need the cairo headers.
 
 ### Database backup
 
@@ -145,7 +151,7 @@ docker compose run --rm suntoday --date 2026-02-04 --force
 
 ## Tests
 
-Tests run via tox, which must be installed in your Python environment.
+Tests run via tox on Python 3.14, and need the cairo headers to build mplcairo: `libcairo2-dev pkg-config` on Debian or Ubuntu, `brew install cairo pkg-config` on macOS.
 List the environments with:
 
 ```bash
@@ -163,7 +169,3 @@ codestyle
 
 For the real JPEG products (all three sizes, as the pipeline writes them) run
 `python tools/render_products.py`, which needs no network.
-
-## Future Work
-
-1. Add movies

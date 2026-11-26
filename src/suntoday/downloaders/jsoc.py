@@ -1,6 +1,6 @@
 """
-JSOC NRT downloaders: AIA and HMI FITS files, the AIA timeseries, and series
-freshness helpers.
+JSOC downloads: AIA and HMI FITS files, the AIA timeseries, and the newest time
+each series has data for.
 
 The data comes from the test series John creates on JSOC 2. The AWS VM
 is whitelisted, and DRMS cannot authenticate against that server, so
@@ -45,26 +45,7 @@ _SYNOPTIC_KEYS = "T_REC,T_OBS,CRVAL1,CRVAL2,CRPIX1,CRPIX2,CDELT1"
 
 def _jsoc_auth(settings: Settings) -> HTTPBasicAuth | None:
     """
-    Build the JSOC basic-auth from configured credentials.
-
-    Authentication is only used for the test data series (``test_env``). The
-    credentials are not shipped in the code: set ``SUNTODAY_JSOC_USER`` and
-    ``SUNTODAY_JSOC_PASSWORD`` (e.g. in your ``.env`` or CI secrets).
-
-    Parameters
-    ----------
-    settings : Settings
-        The application settings.
-
-    Returns
-    -------
-    requests.auth.HTTPBasicAuth | None
-        The auth object when ``test_env`` is set, otherwise ``None``.
-
-    Raises
-    ------
-    ValueError
-        If ``test_env`` is set but the credentials are not configured.
+    Return basic auth for the test series when ``test_env`` is set, else None.
     """
     if not settings.test_env:
         return None
@@ -97,30 +78,21 @@ def _parse_jsoc_time(value: str) -> datetime:
 
 def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
     """
-    For a given query, keywords and segment query the JSOC.
-
-    Parameters
-    ----------
-    query : str
-        Query to run.
-    keywords : str
-        Keywords to return.
-    segment : str, optional
-        Segment to return.
+    Query jsoc_info for a record set.
 
     Returns
     -------
     dict
-        Parsed JSON response from the JSOC.
+        The parsed JSON response.
 
     Raises
     ------
     OSError
-        If the network connection fails to the JSOC.
+        If the request fails.
     suntoday.DataNotReadyError
-        If the JSOC has no records for the requested time yet.
+        If the JSOC has no records for the query yet.
     ValueError
-        If the JSOC response has missing required keys.
+        If the response is malformed.
     """
     settings = Settings()
     auth = _jsoc_auth(settings)
@@ -149,28 +121,27 @@ def _get_urls(query: str, keywords: str, segment: str | None = None) -> dict:
 
 def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFrame:
     """
-    Gets the NRT AIA FITS URLS for the given time.
+    Find the newest AIA FITS file of each channel in a window after a time.
 
     Parameters
     ----------
     requested_time : datetime.datetime
-        Time wanted for the data.
+        Start of the window.
     time_span : str
-        Length of the query window, which runs forward from
-        ``requested_time``. Default is "60s"; production calls pass "180s"
-        (the `fetch_aia_fits` default) to catch 1600 and 1700, which have
-        a slower cadence than the EUV channels.
+        Length of the window. Production passes "180s" (the `fetch_aia_fits`
+        default) to catch 1600 and 1700, whose cadence is slower than the
+        EUV channels'.
 
     Returns
     -------
     pandas.DataFrame
-        One row per wavelength found in the window, newest record kept.
+        One row per wavelength with its exposure time and FITS URL, indexed
+        by observation time.
 
     Raises
     ------
     ValueError
-        If the JSOC response has no data.
-        If the JSOC response has missing wavelengths.
+        If the response has no data, or a plotted wavelength is missing.
     """
     settings = Settings()
     query = f"aia_test.lev1p5[{_format_jsoc_time(requested_time)}/{time_span}]"
@@ -201,22 +172,18 @@ def get_aia_urls(requested_time: datetime, time_span: str = "60s") -> pd.DataFra
 
 def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
     """
-    Gets the NRT (m45s and Ic_45s) HMI FITS URL for the given time.
-
-    Parameters
-    ----------
-    requested_time : datetime.datetime
-        Time wanted for the data.
+    Find the HMI magnetogram and continuum FITS files for a time.
 
     Returns
     -------
     pandas.DataFrame
-        HMI data.
+        One row per measurement (named in ``WAVELNTH``) with its ``URL``,
+        indexed by record time.
 
     Raises
     ------
     ValueError
-        If no data is returned.
+        If a series returns no data.
     """
     rows = []
     for series, segment in [("lm_jps.m45s_nrt", "magnetogram"), ("lm_jps.Ic_45s", "continuum")]:
@@ -234,31 +201,10 @@ def get_hmi_urls(requested_time: datetime) -> pd.DataFrame:
 
 def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime:
     """
-    Get the time of the newest record in a series.
-
-    Uses the DRMS ``$`` record-set specifier, which selects the last record
-    of a series, so a single cheap jsoc_info query answers "how fresh is
-    this series".
-
-    Parameters
-    ----------
-    series : str
-        Series name, e.g. ``aia_test.lev1p5``.
-    keyword : str
-        Time keyword to read, e.g. ``T_REC`` or ``DATE-OBS``.
-    segment : str
-        Segment to request (required by the jsoc_info endpoint).
-
-    Returns
-    -------
-    datetime.datetime
-        Time of the newest record, as UTC.
-
-    Raises
-    ------
-    ValueError
-        If the series returns no records.
+    Return the time of the newest record in a series, as UTC.
     """
+    # `$` selects the last record of a series, so one cheap query answers
+    # how fresh it is.
     response = _get_urls(f"{series}[$]", keyword, segment)
     keywords = {ad["name"]: ad["values"] for ad in response["keywords"]}
     values = keywords.get(keyword, [])
@@ -271,18 +217,16 @@ def _get_latest_record_time(series: str, keyword: str, segment: str) -> datetime
 
 def find_latest_jsoc_times() -> tuple[datetime, datetime]:
     """
-    Find the most recent times the AIA and HMI NRT series have data for.
+    Find the newest times the AIA and HMI series have data for.
 
-    AIA typically lags real time by only a few minutes while the HMI NRT
-    series can lag by an hour or more, so the freshest usable time is found
-    per instrument instead of holding the AIA images back to the HMI lag.
+    AIA lags real time by a few minutes and HMI by an hour or more, so each
+    instrument gets its own time instead of AIA being held back to HMI.
 
     Returns
     -------
     tuple of datetime.datetime
-        ``(aia_time, hmi_time)``: the newest available time per instrument,
-        with AIA stepped back three minutes so its forward query window
-        lands inside the data.
+        ``(aia_time, hmi_time)``. AIA is stepped back three minutes so its
+        forward query window lands inside the data.
     """
     # The AIA query window runs forward from the requested time, so step
     # back three minutes to have the full set of wavelengths land inside it.
@@ -298,15 +242,7 @@ def find_latest_jsoc_times() -> tuple[datetime, datetime]:
 
 def find_latest_pfss_time() -> datetime:
     """
-    Find the anchor time for the PFSS job.
-
-    Use the newest common AIA/HMI disk time. The preceding HMI synoptic
-    boundary has its own timestamp, displayed separately on the images.
-
-    Returns
-    -------
-    datetime.datetime
-        The newest common SDO image time.
+    Return the newest time both AIA and HMI have data for, the PFSS anchor.
     """
     aia_time, hmi_time = find_latest_jsoc_times()
     anchor = min(aia_time, hmi_time)
@@ -316,20 +252,21 @@ def find_latest_pfss_time() -> datetime:
 
 def _get_hmi_synoptic_record(requested_time: datetime) -> tuple[dict, str]:
     """
-    Select the newest available HMI radial boundary at or before a time.
+    Select the newest usable HMI radial boundary at or before a time.
 
-    A two-day window tolerates a missed daily update without silently using
-    an arbitrarily old boundary. NRT currently supplies hourly records.
+    The search goes back two days: enough to ride out a missed update
+    without quietly using a much older boundary. The NRT series currently
+    has hourly records.
 
     Returns
     -------
     tuple of dict and str
-        Record metadata and raw FITS segment path.
+        The record's keywords and the path of its FITS segment.
 
     Raises
     ------
     DataNotReadyError
-        No downloadable boundary exists in the search window.
+        If no boundary in the window can be downloaded.
     """
     start = _format_jsoc_time(requested_time - timedelta(days=2))
     end = _format_jsoc_time(requested_time)
@@ -358,28 +295,21 @@ def find_hmi_synoptic_time(requested_time: datetime) -> datetime:
 
 def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> Path:
     """
-    Download the preceding HMI radial synoptic frame with its JSOC metadata.
+    Download the HMI radial synoptic frame at or before a time.
 
-    Direct JSOC segments contain only the image array, so copy the record's
-    coordinate and time keywords into the FITS header before publishing it
-    to the local cache.
-
-    Parameters
-    ----------
-    requested_time : datetime.datetime
-        Latest acceptable boundary record time.
-    save_directory : pathlib.Path
-        Local FITS cache directory.
+    A JSOC segment holds only the image array, so the record's coordinate
+    and time keywords are written into the FITS header. A file already in
+    ``save_directory`` is reused.
 
     Returns
     -------
     pathlib.Path
-        Downloaded FITS file with its original JSOC coordinate metadata.
+        The FITS file.
 
     Raises
     ------
     OSError
-        The FITS download fails.
+        If the download fails.
     """
     metadata, segment = _get_hmi_synoptic_record(requested_time)
     epoch = _parse_jsoc_time(metadata["T_REC"])
@@ -403,17 +333,13 @@ def fetch_hmi_synoptic_fits(requested_time: datetime, save_directory: Path) -> P
 
 def fetch_aia_timeseries(end_time: datetime) -> pd.DataFrame:
     """
-    Fetches the NRT AIA data mean for the previous 24 hours.
-
-    Parameters
-    ----------
-    end_time : datetime.datetime
-        End time for the data.
+    Fetch the AIA mean brightness of every frame in the 24 hours before a time.
 
     Returns
     -------
     pandas.DataFrame
-        AIA data for the previous 24 hours.
+        ``WAVELNTH``, ``DATAMEAN``, ``QUALITY`` and ``EXPTIME``, indexed by
+        observation time.
 
     Raises
     ------
@@ -457,22 +383,7 @@ def _download_fits(info: pd.DataFrame, url_column: str, save_directory: Path) ->
 
 def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_directory: Path) -> Results:
     """
-    Download AIA fits files for a given time.
-
-    Parameters
-    ----------
-    requested_time : datetime.datetime
-        Datetime to download AIA fits files for.
-    time_span : str
-        Time span to download files for.
-        Defaults to "180s".
-    save_directory : Path
-        Directory to save the files to.
-
-    Returns
-    -------
-    parfive.Results
-        Results object from parfive.Downloader.
+    Download the AIA FITS files for the window starting at a time.
     """
     aia_info = get_aia_urls(requested_time, time_span=time_span)
     logger.info(f"Downloading {len(aia_info)} AIA FITS files for {requested_time}")
@@ -481,19 +392,7 @@ def fetch_aia_fits(requested_time: datetime, time_span: str = "180s", *, save_di
 
 def fetch_hmi_fits(requested_time: datetime, save_directory: Path) -> Results:
     """
-    Download HMI FITS files for a given time.
-
-    Parameters
-    ----------
-    requested_time : datetime.datetime
-        Datetime to download HMI FITS files for.
-    save_directory : Path
-        Directory to save the files to.
-
-    Returns
-    -------
-    parfive.Results
-        Results object from parfive.Downloader.
+    Download the HMI magnetogram and continuum FITS files for a time.
     """
     hmi_info = get_hmi_urls(requested_time)
     logger.info(f"Downloading {len(hmi_info)} HMI FITS files for {requested_time}")

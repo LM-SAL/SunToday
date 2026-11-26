@@ -1,8 +1,5 @@
 """
-Main module for the SunToday application.
-
-This module contains the main entry point for the application, as well
-as the scheduled jobs for creating JPEG images and timeseries data.
+The entry point: the scheduler, its two jobs, and the one-off ``--date`` run.
 """
 
 import argparse
@@ -71,9 +68,12 @@ def _exit_on_sigterm(signum, _frame) -> None:
 
 def _job_entrypoint(job_func, error_connection, download_directory: Path) -> None:
     """
-    Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
-    instead of crashing, so it never reaches Sentry; the staleness alert pages
-    if the lag persists.
+    Run one job in the child process.
+
+    Upstream lag (`DataNotReadyError`) is not a crash: it exits with
+    ``EX_TEMPFAIL`` and never reaches Sentry, and the staleness alert pages
+    if it persists. Any other exception goes to Sentry, and its traceback
+    to the parent.
 
     Raises
     ------
@@ -104,17 +104,15 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     """
     Run a scheduled job in a fresh spawned process.
 
-    CPython does not return freed heap to the OS, so running the heavy
-    jobs in the scheduler process ratchets its RSS up to the job peak
-    forever; a child process hands the memory back when it exits. A
-    dying job (OOM kill, segfault) also cannot take the scheduler loop
-    down. Tracebacks from ordinary child exceptions are sent back over a
-    pipe so the parent can include them in the scheduled-job log.
+    CPython does not return freed heap to the OS, so a job run in the
+    scheduler itself would hold its memory at the job's peak forever. A
+    child gives it back on exit, and cannot take the scheduler down when it
+    dies (OOM kill, segfault). Its traceback comes back over a pipe for the
+    log.
 
-    The FITS download directory is owned by this process, not the child:
-    a SIGKILLed or OOM-killed child never runs its own cleanup, and a
-    few such leaks would fill the ``/tmp`` tmpfs and break every later
-    job.
+    The FITS download directory belongs to this process: a killed child
+    cannot clean up, and a few such leaks would fill the ``/tmp`` tmpfs for
+    every later job.
     """
     timeout = _PFSS_JOB_TIMEOUT_SECONDS if image_types == ("pfss",) else _MAIN_JOB_TIMEOUT_SECONDS
     context = multiprocessing.get_context("spawn")
@@ -188,10 +186,10 @@ def _alert_if_stale(
     """
     Page once per incident when the newest data is older than the threshold.
 
-    Per-run "no data yet" skips stay silent because transient JSOC lag
-    self-heals; data that stops updating for any reason eventually
-    breaches the threshold and alerts, so nothing has to distinguish
-    "slow" from "broken" at run time.
+    A single "no data yet" skip stays silent, because JSOC lag heals
+    itself. Data that stops updating for any reason crosses the
+    threshold and alerts, so nothing has to tell "slow" from "broken" at
+    run time.
     """
     owns_session = session is None
     if owns_session:
@@ -256,8 +254,7 @@ def _build_args() -> argparse.ArgumentParser:
 
 def cli() -> None:
     """
-    Parse the CLI arguments: run a one-off main job when ``--date`` is given
-    (plus the PFSS job with ``--pfss``), otherwise start the scheduler.
+    Run the scheduler, or a one-off job when ``--date`` is given.
 
     Raises
     ------
@@ -325,48 +322,43 @@ def create_images(
     download_directory: Path | None = None,
 ) -> list[Path]:
     """
-    Create images for the requested time.
+    Create one type of product for a time, unless it is already current.
 
-    It checks if the nearest record and the observation date are within a
-    reasonable range. If not, it creates the images. The success record is
-    written by the caller (`_run_job`) only after the files are published,
-    so a failed upload is retried on the next run.
+    The success record is written by the caller (`_run_job`) only after the
+    files are published, so a failed upload is retried on the next run.
 
     Parameters
     ----------
     database_session : Session
-        The SQLAlchemy session to use for database operations.
+        Session used to look up the last render.
     image_type : str
-        The type of images to create: "images", "timeseries" or "pfss".
+        "images", "timeseries" or "pfss".
     requested_time : datetime.datetime
-        The date for which to create images.
+        Time of the data to render.
     save_directory : Path
-        The directory where the images will be saved.
+        Where the products are written.
     hmi_time : datetime.datetime, optional
-        Datetime for the HMI data, which lags AIA. Only used for "images";
+        Time for the HMI data, which lags AIA. Only used for "images";
         defaults to ``requested_time``.
     boundary_epoch : datetime.datetime, optional
-        Boundary-map timestamp for a PFSS run. A matching persisted epoch skips
-        regeneration, including after a container restart. The same epoch
-        pins the boundary download so the rendered lines and the record
-        never describe different HMI frames.
+        Boundary-map time for a PFSS run. A record with the same epoch
+        counts as current, and the same epoch pins the boundary download,
+        so the lines drawn and the record always describe one HMI frame.
     force : bool, optional
-        Regenerate even when the database record says the images are
-        already current.
+        Render even if the record says the products are current.
     download_directory : pathlib.Path, optional
-        Shared FITS download directory, passed through to
-        `~suntoday.jpegs.create_sdo_images` so consecutive jobs for the
-        same time fetch the data once.
+        FITS download directory shared by the jobs for one time, so the
+        data is fetched once.
 
     Returns
     -------
     list of pathlib.Path
-        Created files, or an empty list when creation is skipped.
+        Created files; empty when skipped.
 
     Raises
     ------
     ValueError
-        If the image_type is not "images", "timeseries" or "pfss".
+        If ``image_type`` is not one of the three types.
     """
     if image_type not in {"images", "timeseries", "pfss"}:
         msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
@@ -418,30 +410,23 @@ def _run_job(
     download_directory: Path | None = None,
 ) -> None:
     """
-    Shared job scaffolding: build the dated save directory, run the image
-    creation for each type on one database session and sync to S3.
+    Render the given product types for one time, upload them, then record them.
 
     Parameters
     ----------
     image_types : list of str
-        The `create_images` types to run, in order.
+        `create_images` types to run, in order.
     requested_time : datetime.datetime
-        The time to create images for.
+        Time of the data to render.
     root_save_directory : Path | None
-        Root output directory; defaults to the configured one.
-    hmi_time : datetime.datetime, optional
-        Datetime for the HMI data, only used by the "images" type.
-    boundary_epoch : datetime.datetime, optional
-        Boundary-map timestamp to persist after a successful PFSS upload.
-    force : bool, optional
-        Regenerate even when the database record says the images are
-        already current.
+        Output root; the dated directory is created beneath it. Defaults to
+        the configured one.
+    hmi_time, boundary_epoch, force, download_directory
+        Passed to `create_images`.
     update_mostrecent : bool, optional
-        Also mirror the files to the ``mostrecent/`` prefix. Disabled for
-        explicit ``--date`` backfills so old data never replaces the
-        latest images on the webpage.
-    download_directory : pathlib.Path, optional
-        Shared FITS download directory for `create_images`.
+        Also copy the files to the ``mostrecent/`` prefix. Off for ``--date``
+        backfills, so old data never replaces the latest images on the
+        webpage.
     """
     settings = Settings()
     requested_time = requested_time.astimezone(dt.UTC)
@@ -512,16 +497,12 @@ def main_job(
     download_directory: Path | None = None,
 ) -> None:
     """
-    Main job to create SDO Images and lightcurve images.
+    Render the SDO image products and the lightcurve.
 
-    This function is scheduled to run periodically based on the cron
-    frequency defined in the settings. It creates SDO Images and
-    lightcurve images for the requested time, or the current time if not
-    specified.
+    A scheduled run (no ``requested_time``) uses the newest time each
+    instrument has data for; an explicit time is used as given for both.
     """
     logger.info("Running main job to create SDO Images and lightcurve images")
-    # Live scheduled runs use the freshest time each instrument has data
-    # for; explicit backfill runs use the given time as-is for both.
     is_live = requested_time is None
     if requested_time is None:
         requested_time, hmi_time = find_latest_jsoc_times()
@@ -548,11 +529,11 @@ def pfss_job(
     download_directory: Path | None = None,
 ) -> None:
     """
-    Job to create the matched-time PFSS overlay images.
+    Render the PFSS field line overlays.
 
-    Scheduled runs use the newest matched-data anchor; explicit runs use
-    the requested time. Both persist the HMI boundary epoch only after
-    successful upload.
+    A scheduled run uses the newest time AIA and HMI both have data for;
+    an explicit run uses the requested time. The HMI boundary epoch is
+    recorded only after a successful upload.
     """
     logger.info("Running PFSS job to create field line overlay images")
     is_live = requested_time is None
@@ -573,7 +554,7 @@ def pfss_job(
 @serverless_function
 def scheduled() -> None:
     """
-    Main function to start the scheduled job.
+    Run both jobs now, then on their schedules, forever.
     """
     settings = Settings()
     # Dead-man's-switch: Sentry pages when check-ins stop, i.e. when the

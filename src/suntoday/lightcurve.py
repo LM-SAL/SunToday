@@ -1,5 +1,5 @@
 """
-Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
+The 24-hour AIA and GOES lightcurve figure and its data files.
 """
 
 from datetime import datetime, timedelta
@@ -69,17 +69,10 @@ def _style_lightcurve_axis(ax: plt.Axes) -> None:
 
 def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list[str] = AIA_WAVELENGTHS) -> None:
     """
-    Plots the SDO/AIA lightcurve on the given axis.
+    Plot the smoothed mean brightness of the given AIA channels on ``ax``.
 
-    Parameters
-    ----------
-    ax : matplotlib.axes
-        Axes to plot the lightcurve on.
-    timeseries : pandas.DataFrame
-        `~pandas.DataFrame` containing the AIA data.
-    wavelengths : list of str
-        Wavelengths to plot.
-        Defaults to `~suntoday.constants.AIA_WAVELENGTHS`.
+    Frames flagged in ``BAD_QUALITY_BITS`` are dropped, and an axes left
+    with nothing to plot says so.
     """
     grouped_wavelength = timeseries.groupby(by="WAVELNTH")
     for wavelength in wavelengths:
@@ -115,14 +108,7 @@ def add_aia_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame, wavelengths: list
 
 def add_goes_lightcurve(ax: plt.Axes, timeseries: pd.DataFrame) -> None:
     """
-    Plots the GOES JSON lightcurve on the given axis.
-
-    Parameters
-    ----------
-    ax : matplotlib.pyplot.Axes
-        Axes to plot the lightcurve on.
-    timeseries : pandas.DataFrame
-        `~pandas.DataFrame` containing the GOES data.
+    Plot both GOES XRS bands on ``ax``, with the flare classes on the right.
     """
     sat_number = timeseries["satellite"].iloc[0]
     # A floored or missing reading is not a measurement: leave a gap instead
@@ -153,21 +139,7 @@ def plot_lightcurve_from_timeseries(
     end_time: datetime,
 ) -> mpl.figure.Figure:
     """
-    Creates the actual figure from the AIA and GOES dataframes.
-
-    Parameters
-    ----------
-    goes_timeseries : pandas.DataFrame
-        GOES JSON dataframe.
-    aia_timeseries : pandas.DataFrame
-        AIA dataframe.
-    end_time : datetime.datetime
-        End of the 24 hours the time axis spans.
-
-    Returns
-    -------
-    `matplotlib.figure.Figure`
-        The figure ready to be saved.
+    Return the figure: GOES on top, one panel per AIA channel beneath.
     """
     settings = Settings()
     dpi = settings.timeseries_fig_dpi
@@ -199,22 +171,7 @@ def plot_lightcurve_from_timeseries(
 
 def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[Path]:
     """
-    Creates the full timeseries plot for the given datetime and saves it to the
-    given directory.
-
-    This also saves out the data used as text files.
-
-    Parameters
-    ----------
-    end_time : datetime.datetime
-        Datetime to create the plot for and the previous 24 hours.
-    save_directory : pathlib.Path
-        Save directory for the plot.
-
-    Returns
-    -------
-    list of pathlib.Path
-        Created plot and data files.
+    Fetch the 24 hours before ``end_time``; save the plot and its data.
     """
     from suntoday.downloaders.goes import fetch_goes_timeseries
     from suntoday.downloaders.jsoc import fetch_aia_timeseries
@@ -225,8 +182,8 @@ def create_lightcurve_figure(end_time: datetime, save_directory: Path) -> list[P
     fig = plot_lightcurve_from_timeseries(goes_timeseries, aia_timeseries, end_time)
     plot_path = save_directory / "aia_light_curves.gif"
     with atomic_save(plot_path) as tmp_path:
-        # Legacy consumers expect a .gif name; the bytes are PNG (browsers
-        # sniff content, and mplcairo cannot write GIF anyway).
+        # Consumers expect a .gif name; the bytes are PNG, which browsers
+        # recognize from the content.
         fig.savefig(str(tmp_path), format="png", dpi=fig.dpi)
     plt.close(fig)
     aia_path = save_directory / "aia_light_curves.txt"

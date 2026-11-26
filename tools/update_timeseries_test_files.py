@@ -1,3 +1,10 @@
+"""
+Refresh the stored timeseries test CSVs from the JSOC and SWPC, in place.
+
+Needs the test-series credentials (``SUNTODAY_JSOC_USER`` /
+``SUNTODAY_JSOC_PASSWORD``).
+"""
+
 import os
 
 os.environ["SUNTODAY_TEST_ENV"] = "True"  # Has to be set before importing anything from suntoday

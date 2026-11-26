@@ -1,7 +1,5 @@
 """
-Constants about SDO/AIA or the combinations.
-
-TODO: Probably should be config.
+The channel lists and the display recipes tuned for each product.
 """
 
 from functools import partial

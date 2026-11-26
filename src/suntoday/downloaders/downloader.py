@@ -29,11 +29,7 @@ def create_session(*args, **kwargs):  # ruff:ignore[unused-function-argument]
 
 def create_downloader():
     """
-    Creates a Parfive Downloader that does not verify TLS certificates.
-
-    Returns
-    -------
-    parfive.Downloader
+    Return a parfive Downloader that does not verify TLS certificates.
     """
     from parfive import Downloader
 

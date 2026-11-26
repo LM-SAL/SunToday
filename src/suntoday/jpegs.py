@@ -1,7 +1,9 @@
 """
-Provides all the functions needed to create the SDO JPEG products: AIA and HMI
-single channels, RGB composites, the HMI/AIA blend and the PFSS overlay
-variants.
+The SDO JPEG products: single AIA and HMI channels, RGB composites, the HMI/AIA
+blend, and the PFSS overlay variant of each.
+
+Every ``create_*_figure`` function returns the part of the filename that
+names the product, and its figure.
 """
 
 import gc
@@ -117,10 +119,8 @@ LOGO_BRIGHTNESS = 1.25
 
 def _full_bleed(ax: plt.Axes) -> None:
     """
-    Expand the axes to fill the full figure canvas.
-
-    This avoids default subplot padding so the map scales to the
-    intended pixel size instead of being surrounded by margins.
+    Make the axes fill the canvas, so the map is drawn at the output pixel size
+    with no margin.
     """
     fig = ax.figure
     fig.subplots_adjust(left=0, right=1, bottom=0, top=1)
@@ -140,17 +140,7 @@ def _add_lmsal_logo(ax: plt.Axes) -> None:
 
 def _create_canvas(projection=None) -> tuple[plt.Figure, plt.Axes]:
     """
-    Create the full-bleed square figure and axes at the output pixel size.
-
-    Parameters
-    ----------
-    projection : optional
-        Passed through to ``add_subplot``, e.g. a map or a WCS.
-
-    Returns
-    -------
-    tuple of (`plt.Figure`, `plt.Axes`)
-        The figure and its single axes.
+    Return a full-bleed square figure and axes at the output pixel size.
     """
     settings = Settings()
     size = settings.map_fig_size / settings.fig_dpi  # pixels / dpi = inches
@@ -171,18 +161,9 @@ def _finish_figure(ax: plt.Axes) -> None:
 
 def _draw_label(ax: plt.Axes, line: int, text: str, stroke: str = "black") -> None:
     """
-    Draw one monospace annotation line, counted upward from the logo line.
+    Draw one line of white monospace label text with a ``stroke`` outline.
 
-    Parameters
-    ----------
-    ax : `matplotlib.pyplot.Axes`
-        The axes to draw on.
-    line : int
-        Stacked line index; 0 sits inline with the logo.
-    text : str
-        The label text.
-    stroke : str, optional
-        Outline color around the white text.
+    ``line`` counts upward from 0, which sits level with the logo.
     """
     ax.text(
         TEXT_X_POS,
@@ -210,44 +191,30 @@ def _map_label(amap: smap.GenericMap, wavelength: str) -> str:
 
 def _rec709_luminance(rgb: np.ndarray) -> np.ndarray:
     """
-    Perceived brightness of the output image.
-
-    Uses the Rec. 709 relative-luminance weights, which match the sRGB
-    primaries the JPEGs are viewed with.
-
-    Parameters
-    ----------
-    rgb : np.ndarray
-        RGB image data in the last axis.
-
-    Returns
-    -------
-    np.ndarray
-        Relative luminance per pixel.
+    Return per-pixel BT.709 luminance, the weighting sRGB displays use.
     """
     return 0.2126 * rgb[..., 0] + 0.7152 * rgb[..., 1] + 0.0722 * rgb[..., 2]
 
 
 def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
     """
-    Roll off luminance above ``shoulder`` with a tanh curve instead of
+    Roll luminance above ``shoulder`` off with a tanh curve instead of
     clipping.
 
-    Expects unclipped stretched data (values may exceed 1). All three channels
-    are scaled by the same per-pixel ratio, so the channel balance and hue are
-    preserved; pixels below the shoulder are untouched.
+    All three channels are scaled by the same per-pixel ratio, so hue and
+    channel balance are preserved; pixels below the shoulder are untouched.
 
     Parameters
     ----------
     rgb : np.ndarray
-        RGB image data, >= 0, highlights may exceed 1.
+        Unclipped stretched RGB, >= 0; highlights may exceed 1.
     shoulder : float
         Luminance where the rolloff starts, in (0, 1).
 
     Returns
     -------
     np.ndarray
-        RGB image data compressed into the [0, 1] range.
+        RGB compressed into [0, 1].
     """
     lum = _rec709_luminance(rgb)
     out_lum = np.where(
@@ -261,21 +228,11 @@ def _tone_map_highlights(rgb: np.ndarray, shoulder: float) -> np.ndarray:
 
 def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord) -> None:
     """
-    Draw PFSS field lines over a plotted map.
+    Draw PFSS field lines, and their two label lines, over a plotted map.
 
-    The lines are converted to pixel coordinates of ``amap`` so this works
-    on both WCS axes and the plain axes used by the RGB composites. Points
-    on the far side of the Sun that the disk occults are blanked out.
-
-    Parameters
-    ----------
-    ax : `matplotlib.pyplot.Axes`
-        Axes the map is plotted on.
-    amap : `sunpy.map.GenericMap`
-        The map defining the pixel grid and the observer.
-    field_lines : `astropy.coordinates.SkyCoord`
-        NaN-separated field line polyline from
-        `suntoday.pfss.trace_field_lines`.
+    The lines are converted to pixel coordinates of ``amap``, so this
+    works on WCS axes and on the plain axes of the RGB composites alike.
+    Points hidden behind the solar disk are blanked.
     """
     rsun = amap.rsun_meters.to_value(u.m)
     with propagate_with_solar_surface(), transform_with_sun_center():
@@ -317,21 +274,7 @@ def _draw_field_lines(ax: plt.Axes, amap: smap.GenericMap, field_lines: SkyCoord
 
 def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
     """
-    Creates the final figure from the input AIA or HMI Map.
-
-    Adds the LMSAL logo, the timestamp and the wavelength/measurement label.
-
-    Parameters
-    ----------
-    amap : sunpy.map.GenericMap
-        Input Map to plot.
-
-    Returns
-    -------
-    str
-        The wavelength of the map(s). This is used as part of the filename.
-    `plt.Figure`
-        The figure object.
+    Return the filename part and labeled figure for one AIA or HMI map.
     """
     fig, ax = _create_canvas(projection=amap)
     is_aia = "AIA" in amap.instrument
@@ -358,25 +301,7 @@ def create_figure_from_map(amap: smap.GenericMap) -> tuple[str, plt.Figure]:
 
 def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.Figure]:
     """
-    Creates a RGB figure from a list of 3 maps.
-
-    Parameters
-    ----------
-    maps : `list[sunpy.map.GenericMap]`
-        List of maps to create the RGB figure from.
-
-    Returns
-    -------
-    str
-        The wavelength of the map(s).
-    `plt.Figure`
-        The figure object.
-
-    Raises
-    ------
-    ValueError
-        If not 3 maps are passed.
-        If the wavelength combination has no `suntoday.constants.RGB_RECIPES` entry.
+    Return the filename part and figure for an (R, G, B) AIA composite.
     """
     if len(maps) != 3:
         msg = "RGB figure needs exactly three maps."
@@ -417,20 +342,7 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
 
 def create_blended_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.Figure]:
     """
-    Create a blended figure from an HMI magnetogram and an AIA map.
-
-    Parameters
-    ----------
-    maps : `list[smap.GenericMap]`
-        Exactly two maps: the HMI map first, then the AIA map screened
-        on top of it.
-
-    Returns
-    -------
-    str
-        The wavelength of the map(s). This is used as part of the filename.
-    `plt.Figure`
-        The figure object.
+    Return the filename part and figure for ``[hmi, aia]`` screen-blended.
     """
     hmi_map, aia_map = maps
     fig, ax = _create_canvas(projection=hmi_map.wcs)
@@ -462,22 +374,13 @@ def save_figure(wavelength: str, fig: plt.Figure, save_directory: Path, *, close
     """
     Save a figure as its full, small and thumbnail JPEGs.
 
-    Parameters
-    ----------
-    wavelength : str
-        Filename part naming the product, as the create_* functions return it.
-    fig : `plt.Figure`
-        The figure to save.
-    save_directory : pathlib.Path
-        The directory where the JPEG images will be saved.
-    close : bool, optional
-        Close the figure after saving (the default) to free its memory. Pass
-        False when it will be saved again, e.g. for the PFSS overlay variant.
+    The figure is closed afterwards to free its memory unless ``close`` is
+    False, which the PFSS variant needs in order to save it a second time.
 
     Returns
     -------
     list of pathlib.Path
-        Saved JPEG paths.
+        The three JPEGs.
     """
     settings = Settings()
     paths = [
@@ -525,37 +428,29 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
     download_directory: Path | None = None,
 ) -> list[Path]:
     """
-    Creates the full set of SDO images for the given datetime and saves it to
-    the given directory.
-
-    Also saves the FITS files used for planning by someone.
+    Render and save every SDO product for a time, with the planning FITS files.
 
     Parameters
     ----------
     requested_time : datetime.datetime
-        Datetime to create the plot.
+        Time of the AIA data.
     save_directory : pathlib.Path
-        Save directory for the plot.
+        Where the products are written.
     hmi_time : datetime.datetime, optional
-        Datetime for the HMI data; the NRT series lags AIA by an hour or
-        more, so live runs pass its own freshest time. Defaults to
-        ``requested_time``.
+        Time of the HMI data, which lags AIA by an hour or more, so live
+        runs pass its own newest time. Defaults to ``requested_time``.
     pfss : bool, optional
-        Create the matched-time PFSS variants instead of the regular
-        products: every JPEG is saved twice (``pfssnolines`` base and
-        ``pfss`` field line overlay from an HMI radial synoptic frame) and no
-        planning FITS files are written. The latest boundary preceding
-        ``boundary_time`` is used and its date is labeled separately. Leave
-        ``hmi_time`` unset so the SDO image timestamps match.
+        Make the PFSS variants instead: every JPEG is saved as a
+        ``pfssnolines`` base and a ``pfss`` overlay, and no planning FITS
+        are written. Leave ``hmi_time`` unset so the image times match.
     boundary_time : datetime.datetime, optional
-        Latest acceptable HMI synoptic boundary record time. Pass the epoch
-        already selected by the job so the traced boundary is the one it
-        persists. Defaults to ``requested_time``.
+        Latest acceptable HMI synoptic boundary time. Pass the epoch the job
+        already chose, so the boundary traced is the one it records.
+        Defaults to ``requested_time``.
     download_directory : pathlib.Path, optional
-        Directory to download the FITS files into. Files already present
-        are not re-downloaded, so passing the same directory to the main
-        and PFSS runs of a backfill fetches the data once. Defaults to a
-        per-call temporary directory.
+        Where the FITS files are downloaded. Files already there are reused,
+        so a main and a PFSS run sharing it fetch the data once. Defaults to
+        a temporary directory.
 
     Returns
     -------
@@ -638,26 +533,7 @@ def _save_product(
     save_directory: Path,
 ) -> list[Path]:
     """
-    Save one figure product, as a pfssnolines/pfss pair when field lines are
-    given.
-
-    Parameters
-    ----------
-    figure : tuple of (str, `plt.Figure`)
-        Wavelength filename part and figure, as the create_* functions
-        return them. The figure is closed after the last save.
-    amap : `sunpy.map.GenericMap`
-        Map defining the pixel grid the figure's main axes uses.
-    field_lines : `astropy.coordinates.SkyCoord` or None
-        Field lines from `suntoday.pfss.trace_field_lines`, or None to
-        save the plain product.
-    save_directory : pathlib.Path
-        Save directory for the JPEGs.
-
-    Returns
-    -------
-    list of pathlib.Path
-        Saved JPEG paths.
+    Save a product, as a pfssnolines/pfss pair when given field lines.
     """
     wavelength, fig = figure
     if field_lines is None:

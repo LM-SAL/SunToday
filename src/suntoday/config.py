@@ -1,5 +1,5 @@
 """
-Provide full config support for the entire library.
+Every setting of the application, read from the environment.
 """
 
 from pathlib import Path
@@ -12,10 +12,10 @@ __all__ = ["Settings"]
 
 class Settings(BaseSettings):
     """
-    Default configuration.
+    The defaults.
 
-    These can be overridden using environment variables, e.g. ``export
-    SUNTODAY_SAVE_DIRECTORY="./"``, or via a .env file.
+    Override any of them with a ``SUNTODAY_`` prefixed environment
+    variable or ``.env`` entry, e.g. ``SUNTODAY_SAVE_DIRECTORY=./``.
     """
 
     model_config: SettingsConfigDict = SettingsConfigDict(
@@ -38,7 +38,10 @@ class Settings(BaseSettings):
     # dpi only scales how large text and lines are drawn; the pixel sizes of
     # the products are the *_fig_size settings and do not change with it.
     fig_dpi: int = 300
-    host_save_directory: Path = Path("./images")  # Docker Compose bind source
+    # Read by docker-compose.yml, not by the code; declared so that a .env
+    # entry for it passes validation. The same goes for log_level, which
+    # suntoday/__init__.py takes straight from the environment.
+    host_save_directory: Path = Path("./images")
     jsoc_base_url: str = "http://jsoc.stanford.edu"
     jsoc_info_url: str = "http://jsoc2.stanford.edu/cgi-bin/ajax/jsoc_info"
     # Credentials for the authenticated test data series.

@@ -1,5 +1,5 @@
 """
-Functions to create sunpy maps from FITS files.
+Build display-ready sunpy maps from the downloaded FITS files.
 """
 
 from typing import TYPE_CHECKING
@@ -44,20 +44,10 @@ def _north_up(amap: smap.GenericMap) -> smap.GenericMap:
 
 def create_aia_map(file: Path) -> smap.GenericMap:
     """
-    Creates a degradation corrected and exposure normalized AIA Map.
-
-    Since the production data is level 1.5, we do not do any further calibration.
-
-    Parameters
-    ----------
-    file : `pathlib.Path`
-        Path to the AIA FITS file.
-
-    Returns
-    -------
-    `sunpy.map.GenericMap`
-        Degradation corrected and exposure normalized AIA Map.
+    Return an AIA map in whole DN/s, corrected for instrument degradation.
     """
+    # Level 1.5 input is already registered, so only the degradation and
+    # the exposure time are left to correct.
     with fits.open(file, memmap=False) as hdul:
         aia_map = _north_up(smap.Map(hdul[1].data, hdul[1].header))
         wavelength = f"{aia_map.wavelength.value:.0f}"
@@ -77,22 +67,18 @@ def create_aia_map(file: Path) -> smap.GenericMap:
 
 def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
     """
-    Normalize an HMI NRT radial synoptic frame to Carrington CEA coordinates.
+    Return an HMI radial synoptic frame as a Carrington CEA map.
 
-    JSOC's daily product uses Carrington *time*, which increases opposite
-    to longitude, and sine latitude. Convert both axes to FITS-WCS degrees
-    without flipping or interpolating the data. Center the reference pixel
-    because the PFSS tracer assumes CRVAL1 is the longitude at map center.
-
-    Parameters
-    ----------
-    file : pathlib.Path
-        FITS file from `suntoday.downloaders.jsoc.fetch_hmi_synoptic_fits`.
+    JSOC's daily product is on Carrington *time*, which runs opposite to
+    longitude, and sine latitude. Both axes are converted to FITS-WCS
+    degrees without flipping or resampling the data, and the reference pixel
+    is centered because the PFSS tracer takes CRVAL1 as the longitude at the
+    map center.
 
     Returns
     -------
     sunpy.map.GenericMap
-        Radial boundary with corrected WCS and its original observation time.
+        The boundary map, with its original observation time.
     """
     data, header = fits.getdata(file, header=True, memmap=False)
     center = (data.shape[1] + 1) / 2
@@ -111,17 +97,7 @@ def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
 
 def create_hmi_map(file: Path) -> smap.GenericMap:
     """
-    Creates a north-up HMI map with everything off the solar disk masked.
-
-    Parameters
-    ----------
-    file : Path
-        Path to the HMI FITS file.
-
-    Returns
-    -------
-    `sunpy.map.GenericMap`
-        HMI Map.
+    Return a north-up HMI map with everything off the disk blanked.
     """
     with fits.open(file, memmap=False) as hdul:
         hmi_map = _north_up(smap.Map(hdul[1].data, hdul[1].header))

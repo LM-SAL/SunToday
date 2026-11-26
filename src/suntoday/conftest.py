@@ -16,11 +16,10 @@ os.environ["SUNTODAY_TEST_ENV"] = "True"
 
 def latest_or_skip(find_latest):
     """
-    Anchor an online test on the newest upstream record.
+    Return ``find_latest()``, skipping the test if upstream has no data.
 
-    Skips the test when the upstream archive has no data at all: an upstream
-    outage is not a code bug, and the empty-archive error paths are covered
-    by offline tests.
+    An upstream outage is not a code bug, and the empty-archive paths are
+    covered by offline tests.
 
     Returns
     -------
