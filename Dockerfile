@@ -2,11 +2,10 @@ FROM python:3.14-slim AS builder
 
 COPY --from=ghcr.io/astral-sh/uv:0.13.10 /uv /usr/local/bin/uv
 
-# pycairo ships no Linux wheel and mplcairo is pinned to a commit, so both
-# compile from source against the cairo headers; git fetches that commit.
+# pycairo ships no Linux wheel and mplcairo none for Python 3.14, so both
+# compile from source against the cairo headers.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
-    git \
     libcairo2-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*

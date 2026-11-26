@@ -3,10 +3,11 @@ astropy==8.0.3
 boto3==1.44.12
 fsspec==2026.9.0
 loguru==0.8.0
-matplotlib==3.11.2
-# Unreleased: main has the matplotlib 3.11 math text fix. Move to the next
-# mplcairo release when there is one. Compiled from source (no wheel).
-mplcairo @ git+https://github.com/matplotlib/mplcairo@913b4a1ffe41b4fca416eb90fef4611bc5a9d7f5
+# Held below 3.11: it draws every large image through a path that adds about
+# 0.5 GiB to the job's peak memory, which the 4 GB host cannot spare.
+matplotlib==3.10.9
+# No Python 3.14 wheel, so it compiles from source and needs the cairo headers.
+mplcairo==0.6.1
 numpy==2.5.5
 pandas==3.1.1
 pillow==13.0.0

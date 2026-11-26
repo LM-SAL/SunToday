@@ -92,7 +92,7 @@ docker image prune -f  # reclaim space from superseded build layers
 
 Every dependency is pinned. `requirements.txt` holds the direct pins, which CI tests; `requirements-full.txt` is the full lock, which Docker installs. After changing the first, regenerate the second with the command in its header, adding `--upgrade` to move the indirect dependencies too. A test fails when the two disagree.
 
-mplcairo is pinned to a commit and pycairo has no Linux wheel, so both compile from source and need the cairo headers.
+matplotlib is held at 3.10: 3.11 adds about 0.5 GiB to the job's peak memory, which the 4 GB host cannot spare. mplcairo has no Python 3.14 wheel and pycairo no Linux wheel, so both compile from source and need the cairo headers.
 
 ### Database backup
 

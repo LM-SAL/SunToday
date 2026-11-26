@@ -330,7 +330,10 @@ def create_rgb_figure_from_maps(maps: list[smap.GenericMap]) -> tuple[str, plt.F
         rgb *= EXPOSURE_TARGET / peak
     rgb *= RGB_BRIGHTNESS
     rgb = _tone_map_highlights(rgb, RGB_KNEE_SHOULDER)
-    ax.imshow(rgb, origin="lower")
+    # As 8-bit pixels, converted the way matplotlib would: the figure then
+    # holds 50 MB instead of the 200 MB float image until it is closed.
+    ax.imshow((rgb * 255).astype(np.uint8), origin="lower")
+    del rgb
     wavelength_names = []
     for i, (amap, color) in enumerate(zip(maps, ("red", "green", "blue"), strict=True)):
         wavelength_names.append(WAVELENGTH_FORMAT_BLEND.format(amap.wavelength.value))

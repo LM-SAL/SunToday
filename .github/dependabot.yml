@@ -8,6 +8,10 @@ updates:
       default-days: 7
     exclude-paths:
       - "requirements-*"
+    ignore:
+      # 3.11 adds about 0.5 GiB to the job's peak memory on the 4 GB host.
+      - dependency-name: "matplotlib"
+        versions: [">=3.11"]
     groups:
       all-dependencies:
         patterns:
