@@ -10,16 +10,22 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# No token permissions unless a job asks for them.
+permissions: {}
+
 jobs:
   offline:
     name: Offline unit tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the repository and its LFS files
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           lfs: true
           submodules: recursive
+          persist-credentials: false
       - name: Install cairo build deps
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
@@ -41,12 +47,15 @@ jobs:
     name: Online (remote-data) unit tests
     needs: offline
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the repository
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           lfs: false
           submodules: recursive
+          persist-credentials: false
       - name: Install cairo build deps
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python

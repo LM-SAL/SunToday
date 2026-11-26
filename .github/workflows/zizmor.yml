@@ -16,7 +16,7 @@ jobs:
   zizmor:
     runs-on: ubuntu-latest
     permissions:
-      security-events: write
+      security-events: write # upload the findings to code scanning
 
     steps:
       - name: Checkout repository
