@@ -1,7 +1,5 @@
 """
-Constants about SDO/AIA or the combinations.
-
-TODO: Probably should be config.
+The channel lists and the display recipes tuned for each product.
 """
 
 from functools import partial
@@ -44,15 +42,18 @@ AIA_SINGLE_NORMS = {
     "1700": partial(ImageNormalize, interval=AsymmetricPercentileInterval(50, 99.99), stretch=LinearStretch()),
     "193": partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True),
 }
+# Lightcurve line colors: each channel's conventional hue, stepped so that
+# vertically neighboring panels stay distinct for color-blind readers and
+# every line has at least 3:1 contrast on white.
 AIA_COLORS = {
-    "131": "blue",
-    "1600": "green",
-    "1700": "crimson",
-    "171": "gold",
-    "193": "brown",
-    "211": "purple",
-    "304": "darkorange",
-    "335": "darkblue",
+    "131": "#0097A7",
+    "1600": "olivedrab",
+    "1700": "mediumvioletred",
+    "171": "darkgoldenrod",
+    "193": "saddlebrown",
+    "211": "#7B1FA2",
+    "304": "firebrick",
+    "335": "royalblue",
     "94": "darkgreen",
 }
 AIA_WAVELENGTHS = list(AIA_COLORS.keys())

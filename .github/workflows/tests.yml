@@ -10,23 +10,29 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
   cancel-in-progress: true
 
+# No token permissions unless a job asks for them.
+permissions: {}
+
 jobs:
   offline:
     name: Offline unit tests
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the repository and its LFS files
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           lfs: true
           submodules: recursive
+          persist-credentials: false
       - name: Install cairo build deps
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          # Match the Docker runtime. mplcairo has no cp314 wheel yet.
-          python-version: "3.13"
+          # Match the Docker runtime.
+          python-version: "3.14"
       - name: Cache uv downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
@@ -41,18 +47,21 @@ jobs:
     name: Online (remote-data) unit tests
     needs: offline
     runs-on: ubuntu-latest
+    permissions:
+      contents: read # check out the repository
     steps:
       - name: Check out repository
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           lfs: false
           submodules: recursive
+          persist-credentials: false
       - name: Install cairo build deps
         run: sudo apt-get update && sudo apt-get install -y libcairo2-dev pkg-config
       - name: Set up Python
         uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
-          python-version: "3.13"
+          python-version: "3.14"
       - name: Cache uv downloads
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:

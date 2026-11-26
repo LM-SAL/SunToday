@@ -9,7 +9,7 @@ updates:
     exclude-paths:
       - "requirements-*"
     ignore:
-      # mplcairo 0.6.1 breaks with matplotlib 3.11; drop this once mplcairo supports it.
+      # 3.11 adds about 0.5 GiB to the job's peak memory on the 4 GB host.
       - dependency-name: "matplotlib"
         versions: [">=3.11"]
     groups:

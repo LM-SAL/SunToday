@@ -1,14 +1,12 @@
 """
-Main module for the SunToday application.
-
-This module contains the main entry point for the application, as well
-as the scheduled jobs for creating JPEG images and timeseries data.
+The entry point: the scheduler, its two jobs, and the one-off ``--date`` run.
 """
 
 import argparse
 import contextlib
-import datetime
+import datetime as dt
 import functools
+import logging
 import multiprocessing
 import os
 import signal
@@ -19,6 +17,7 @@ from pathlib import Path
 
 import schedule
 import sentry_sdk
+from sentry_sdk.integrations.loguru import LoguruIntegration
 from sentry_sdk.integrations.serverless import serverless_function
 from sqlalchemy.orm import Session, sessionmaker
 from sunpy.time import parse_time
@@ -35,34 +34,53 @@ _MAIN_JOB_TIMEOUT_SECONDS = 10 * 60
 _PFSS_JOB_TIMEOUT_SECONDS = 75 * 60
 _PROCESS_STOP_GRACE_SECONDS = 5
 
-if os.getenv("SUNTODAY_TEST_ENV", "False") != "True":
-    settings = Settings()
+
+def _init_sentry(settings: Settings, **options) -> None:
+    """
+    Start Sentry with the production options; ``options`` are for tests.
+    """
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
         ignore_errors=[DataNotReadyError],
         server_name=settings.sentry_server_name,
         environment=settings.sentry_environment,
+        # A job that dies abnormally is reported with logger.error, so error
+        # logs must become Sentry events; the SDK only does that when asked.
+        # level=None keeps it from also shipping every log line.
+        integrations=[LoguruIntegration(level=None, event_level=logging.ERROR)],
+        **options,
     )
+
+
+settings = Settings()
+# Test runs must stay out of the production Sentry.
+if not settings.test_env:
+    _init_sentry(settings)
+
+
+def _exit_on_sigterm(signum, _frame) -> None:
+    """
+    Unwind on SIGTERM; its default action ends the process with no cleanup.
+    """
+    raise SystemExit(128 + signum)
 
 
 def _job_entrypoint(job_func, error_connection, download_directory: Path) -> None:
     """
-    Child-process wrapper: normal processing lag exits with ``EX_TEMPFAIL``
-    instead of crashing, so it never reaches Sentry; the staleness alert pages
-    if the lag persists.
+    Run one job in the child process.
+
+    Upstream lag (`DataNotReadyError`) is not a crash: it exits with
+    ``EX_TEMPFAIL`` and never reaches Sentry, and the staleness alert pages
+    if it persists. Any other exception goes to Sentry, and its traceback
+    to the parent.
 
     Raises
     ------
     SystemExit
         With ``os.EX_TEMPFAIL`` when the upstream data is not ready.
     """
-
-    # The parent's timeout terminate() must unwind the job so the database
-    # session closes and atomic_save staging files on the NFS share are
-    # unlinked; SIGTERM's default action skips both.
-    def _exit_on_sigterm(signum, _frame) -> None:
-        raise SystemExit(128 + signum)
-
+    # The parent's terminate() must unwind the job so the database session
+    # closes and atomic_save staging files on the NFS share are unlinked.
     signal.signal(signal.SIGTERM, _exit_on_sigterm)
     try:
         job_func(download_directory=download_directory)
@@ -85,17 +103,15 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
     """
     Run a scheduled job in a fresh spawned process.
 
-    CPython does not return freed heap to the OS, so running the heavy
-    jobs in the scheduler process ratchets its RSS up to the job peak
-    forever; a child process hands the memory back when it exits. A
-    dying job (OOM kill, segfault) also cannot take the scheduler loop
-    down. Tracebacks from ordinary child exceptions are sent back over a
-    pipe so the parent can include them in the scheduled-job log.
+    CPython does not return freed heap to the OS, so a job run in the
+    scheduler itself would hold its memory at the job's peak forever. A
+    child gives it back on exit, and cannot take the scheduler down when it
+    dies (OOM kill, segfault). Its traceback comes back over a pipe for the
+    log.
 
-    The FITS download directory is owned by this process, not the child:
-    a SIGKILLed or OOM-killed child never runs its own cleanup, and a
-    few such leaks would fill the ``/tmp`` tmpfs and break every later
-    job.
+    The FITS download directory belongs to this process: a killed child
+    cannot clean up, and a few such leaks would fill the ``/tmp`` tmpfs for
+    every later job.
     """
     timeout = _PFSS_JOB_TIMEOUT_SECONDS if image_types == ("pfss",) else _MAIN_JOB_TIMEOUT_SECONDS
     context = multiprocessing.get_context("spawn")
@@ -107,16 +123,32 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
                 args=(job_func, child_connection, Path(download_directory)),
                 name=job_func.__name__,
             )
-            process.start()
-            process.join(timeout)
-            timed_out = process.is_alive()
-            if timed_out:
-                process.terminate()
-                process.join(_PROCESS_STOP_GRACE_SECONDS)
+            try:
+                process.start()
+                deadline = time.monotonic() + timeout
+                # Only the child holds the write end now, so its exit reads as
+                # EOF. Receive before joining: a traceback larger than the
+                # pipe buffer blocks the child's send until it is read, and
+                # joining first would leave the scheduler waiting forever.
+                child_connection.close()
+                child_traceback = None
+                if parent_connection.poll(timeout):
+                    # EOFError: exited without a traceback. OSError: died mid-send.
+                    with contextlib.suppress(EOFError, OSError):
+                        child_traceback = parent_connection.recv()
+                process.join(max(0, deadline - time.monotonic()))
+                timed_out = process.is_alive()
+            # Also reached when the scheduler itself is stopped (SIGTERM). An
+            # orphaned job would be SIGKILLed mid-write by the container
+            # teardown, leaving its staging files on the NFS share; one that
+            # cannot unwind within the grace period still can.
+            finally:
                 if process.is_alive():
-                    process.kill()
-                    process.join()
-            child_traceback = parent_connection.recv() if parent_connection.poll() else None
+                    process.terminate()
+                    process.join(_PROCESS_STOP_GRACE_SECONDS)
+                    if process.is_alive():
+                        process.kill()
+                        process.join()
     # Blanket catch by design: a failing scheduled job must be logged
     # and swallowed, never kill the scheduler loop.
     except Exception as e:  # ruff:ignore[blind-except]
@@ -152,10 +184,10 @@ def _alert_if_stale(
     """
     Page once per incident when the newest data is older than the threshold.
 
-    Per-run "no data yet" skips stay silent because transient JSOC lag
-    self-heals; data that stops updating for any reason eventually
-    breaches the threshold and alerts, so nothing has to distinguish
-    "slow" from "broken" at run time.
+    A single "no data yet" skip stays silent, because JSOC lag heals
+    itself. Data that stops updating for any reason crosses the
+    threshold and alerts, so nothing has to tell "slow" from "broken" at
+    run time.
     """
     owns_session = session is None
     if owns_session:
@@ -168,10 +200,10 @@ def _alert_if_stale(
             record = get_latest_record(session, image_type)
             updated_at = record.updated_at if record is not None else None
             if updated_at is not None and updated_at.tzinfo is None:
-                updated_at = updated_at.replace(tzinfo=datetime.UTC)
+                updated_at = updated_at.replace(tzinfo=dt.UTC)
             if updated_at is not None:
-                age = datetime.datetime.now(datetime.UTC) - updated_at
-                if age <= datetime.timedelta(hours=settings.stale_alert_hours):
+                age = dt.datetime.now(dt.UTC) - updated_at
+                if age <= dt.timedelta(hours=settings.stale_alert_hours):
                     continue
                 # Warning, not error: an error would be its own Sentry event
                 # with a different message every run; the static
@@ -220,8 +252,7 @@ def _build_args() -> argparse.ArgumentParser:
 
 def cli() -> None:
     """
-    Parse the CLI arguments: run a one-off main job when ``--date`` is given
-    (plus the PFSS job with ``--pfss``), otherwise start the scheduler.
+    Run the scheduler, or a one-off job when ``--date`` is given.
 
     Raises
     ------
@@ -229,6 +260,9 @@ def cli() -> None:
         With ``os.EX_TEMPFAIL`` when the archives have no data for the
         requested time.
     """
+    # `docker stop` sends SIGTERM; unwinding on it is what lets a running job
+    # be stopped cleanly (see _run_job_in_subprocess) before the process ends.
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     parser = _build_args()
     args = parser.parse_args()
     root_save_directory = Path(args.root_save_directory) if args.root_save_directory else None
@@ -245,10 +279,10 @@ def cli() -> None:
         # 24-hour lightcurve covers the requested day, not the one before.
         # Detected by parsing, not zeroed time components, so an explicit
         # midnight datetime still means midnight.
-        bare_date = datetime.date.fromisoformat(args.requested_time.strip())
-        requested_time = datetime.datetime.combine(bare_date, datetime.time(23, 57), tzinfo=datetime.UTC)
+        bare_date = dt.date.fromisoformat(args.requested_time.strip())
+        requested_time = dt.datetime.combine(bare_date, dt.time(23, 57), tzinfo=dt.UTC)
     except ValueError:
-        requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
+        requested_time = parse_time(args.requested_time).to_datetime(timezone=dt.UTC)
     # One download directory across both jobs: the PFSS pass reuses the
     # AIA/HMI FITS files the main job already fetched for the same time.
     with tempfile.TemporaryDirectory() as shared_downloads:
@@ -272,82 +306,78 @@ def cli() -> None:
         except DataNotReadyError as e:
             logger.warning(f"Data not ready: {e}")
             raise SystemExit(os.EX_TEMPFAIL) from None
-    return
 
 
-@serverless_function
 def create_images(
     database_session: Session,
     image_type: str,
-    requested_time: datetime.datetime,
+    requested_time: dt.datetime,
     save_directory: Path,
-    hmi_time: datetime.datetime | None = None,
+    hmi_time: dt.datetime | None = None,
     *,
-    boundary_epoch: datetime.datetime | None = None,
+    boundary_epoch: dt.datetime | None = None,
     force: bool = False,
     download_directory: Path | None = None,
 ) -> list[Path]:
     """
-    Create images for the requested time.
+    Create one type of product for a time, unless it is already current.
 
-    It checks if the nearest record and the observation date are within a
-    reasonable range. If not, it creates the images. The success record is
-    written by the caller (`_run_job`) only after the files are published,
-    so a failed upload is retried on the next run.
+    The success record is written by the caller (`_run_job`) only after the
+    files are published, so a failed upload is retried on the next run.
 
     Parameters
     ----------
     database_session : Session
-        The SQLAlchemy session to use for database operations.
+        Session used to look up the last render.
     image_type : str
-        The type of images to create: "images", "timeseries" or "pfss".
+        "images", "timeseries" or "pfss".
     requested_time : datetime.datetime
-        The date for which to create images.
+        Time of the data to render.
     save_directory : Path
-        The directory where the images will be saved.
+        Where the products are written.
     hmi_time : datetime.datetime, optional
-        Datetime for the HMI data, which lags AIA. Only used for "images";
+        Time for the HMI data, which lags AIA. Only used for "images";
         defaults to ``requested_time``.
     boundary_epoch : datetime.datetime, optional
-        Boundary-map timestamp for a PFSS run. A matching persisted epoch skips
-        regeneration, including after a container restart. The same epoch
-        pins the boundary download so the rendered lines and the record
-        never describe different HMI frames.
+        Boundary-map time for a PFSS run. A record with the same epoch
+        counts as current, and the same epoch pins the boundary download,
+        so the lines drawn and the record always describe one HMI frame.
     force : bool, optional
-        Regenerate even when the database record says the images are
-        already current.
+        Render even if the record says the products are current.
     download_directory : pathlib.Path, optional
-        Shared FITS download directory, passed through to
-        `~suntoday.jpegs.create_sdo_images` so consecutive jobs for the
-        same time fetch the data once.
+        FITS download directory shared by the jobs for one time, so the
+        data is fetched once.
 
     Returns
     -------
     list of pathlib.Path
-        Created files, or an empty list when creation is skipped.
+        Created files; empty when skipped.
 
     Raises
     ------
     ValueError
-        If the image_type is not "images", "timeseries" or "pfss".
+        If ``image_type`` is not one of the three types.
     """
     if image_type not in {"images", "timeseries", "pfss"}:
         msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
         raise ValueError(msg)
-    requested_time = requested_time.astimezone(datetime.UTC)
+    requested_time = requested_time.astimezone(dt.UTC)
     if not force:
+        # Current = already rendered from data less than one main-job
+        # interval older than this request. PFSS uses it too: its own runs
+        # are far further apart, so this only spares a re-render right after
+        # a restart.
+        cutoff = requested_time - dt.timedelta(minutes=Settings().cron_frequency)
         if image_type == "pfss" and boundary_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
             is_current = (
                 latest_record is not None
                 and latest_record.boundary_epoch == boundary_epoch
-                and latest_record.updated_at > requested_time - datetime.timedelta(minutes=10)
+                and latest_record.updated_at > cutoff
             )
         else:
             latest_record = get_record(database_session, image_type, requested_time.date())
-            is_current = latest_record is not None and latest_record.updated_at > requested_time - datetime.timedelta(
-                minutes=10
-            )
+            is_current = latest_record is not None and latest_record.updated_at > cutoff
         if is_current:
             logger.info(f"{image_type} for {requested_time} are already current, skipping creation.")
             return []
@@ -368,43 +398,36 @@ def create_images(
 
 def _run_job(
     image_types: list[str],
-    requested_time: datetime.datetime,
+    requested_time: dt.datetime,
     root_save_directory: Path | None,
-    hmi_time: datetime.datetime | None = None,
-    boundary_epoch: datetime.datetime | None = None,
+    hmi_time: dt.datetime | None = None,
+    boundary_epoch: dt.datetime | None = None,
     *,
     force: bool = False,
     update_mostrecent: bool = True,
     download_directory: Path | None = None,
 ) -> None:
     """
-    Shared job scaffolding: build the dated save directory, run the image
-    creation for each type on one database session and sync to S3.
+    Render the given product types for one time, upload them, then record them.
 
     Parameters
     ----------
     image_types : list of str
-        The `create_images` types to run, in order.
+        `create_images` types to run, in order.
     requested_time : datetime.datetime
-        The time to create images for.
+        Time of the data to render.
     root_save_directory : Path | None
-        Root output directory; defaults to the configured one.
-    hmi_time : datetime.datetime, optional
-        Datetime for the HMI data, only used by the "images" type.
-    boundary_epoch : datetime.datetime, optional
-        Boundary-map timestamp to persist after a successful PFSS upload.
-    force : bool, optional
-        Regenerate even when the database record says the images are
-        already current.
+        Output root; the dated directory is created beneath it. Defaults to
+        the configured one.
+    hmi_time, boundary_epoch, force, download_directory
+        Passed to `create_images`.
     update_mostrecent : bool, optional
-        Also mirror the files to the ``mostrecent/`` prefix. Disabled for
-        explicit ``--date`` backfills so old data never replaces the
-        latest images on the webpage.
-    download_directory : pathlib.Path, optional
-        Shared FITS download directory for `create_images`.
+        Also copy the files to the ``mostrecent/`` prefix. Off for ``--date``
+        backfills, so old data never replaces the latest images on the
+        webpage.
     """
     settings = Settings()
-    requested_time = requested_time.astimezone(datetime.UTC)
+    requested_time = requested_time.astimezone(dt.UTC)
     root_save_directory = Path(root_save_directory or settings.save_directory).expanduser().resolve()
     save_directory = (
         root_save_directory
@@ -415,9 +438,8 @@ def _run_job(
     save_directory.mkdir(parents=True, exist_ok=True)
     logger.info(f"Requested time: {requested_time}, Save directory: {save_directory}")
     engine = create_db()
-    session = None
+    session = sessionmaker(bind=engine)()
     try:
-        session = sessionmaker(bind=engine)()
         created_by_type = {}
         for image_type in image_types:
             logger.info(f"Creating {image_type}")
@@ -449,47 +471,41 @@ def _run_job(
                 write_or_update_record(
                     session,
                     image_type,
-                    str(requested_time.date()),
-                    updated_at=str(requested_time),
+                    requested_time.date(),
+                    updated_at=requested_time,
                     boundary_epoch=boundary_epoch,
                 )
             else:
-                write_or_update_record(session, image_type, str(requested_time.date()), updated_at=str(requested_time))
+                write_or_update_record(session, image_type, requested_time.date(), updated_at=requested_time)
     finally:
-        if session is not None:
-            try:
-                _alert_if_stale(session, image_types)
-            # Staleness reporting must not be able to stop the job.
-            except Exception as e:  # ruff:ignore[blind-except]
-                logger.exception(f"Error checking stale data: {e}")
-        if session is not None:
-            session.close()
+        try:
+            _alert_if_stale(session, image_types)
+        # Staleness reporting must not be able to stop the job.
+        except Exception as e:  # ruff:ignore[blind-except]
+            logger.exception(f"Error checking stale data: {e}")
+        session.close()
         engine.dispose()
 
 
 def main_job(
-    requested_time: datetime.datetime | None = None,
+    requested_time: dt.datetime | None = None,
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
     download_directory: Path | None = None,
 ) -> None:
     """
-    Main job to create SDO Images and lightcurve images.
+    Render the SDO image products and the lightcurve.
 
-    This function is scheduled to run periodically based on the cron
-    frequency defined in the settings. It creates SDO Images and
-    lightcurve images for the requested time, or the current time if not
-    specified.
+    A scheduled run (no ``requested_time``) uses the newest time each
+    instrument has data for; an explicit time is used as given for both.
     """
     logger.info("Running main job to create SDO Images and lightcurve images")
-    # Live scheduled runs use the freshest time each instrument has data
-    # for; explicit backfill runs use the given time as-is for both.
     is_live = requested_time is None
     if requested_time is None:
         requested_time, hmi_time = find_latest_jsoc_times()
     else:
-        requested_time = requested_time.astimezone(datetime.UTC)
+        requested_time = requested_time.astimezone(dt.UTC)
         hmi_time = None
     _run_job(
         ["images", "timeseries"],
@@ -504,22 +520,22 @@ def main_job(
 
 
 def pfss_job(
-    requested_time: datetime.datetime | None = None,
+    requested_time: dt.datetime | None = None,
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
     download_directory: Path | None = None,
 ) -> None:
     """
-    Job to create the matched-time PFSS overlay images.
+    Render the PFSS field line overlays.
 
-    Scheduled runs use the newest matched-data anchor; explicit runs use
-    the requested time. Both persist the HMI boundary epoch only after
-    successful upload.
+    A scheduled run uses the newest time AIA and HMI both have data for;
+    an explicit run uses the requested time. The HMI boundary epoch is
+    recorded only after a successful upload.
     """
     logger.info("Running PFSS job to create field line overlay images")
     is_live = requested_time is None
-    requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
+    requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(dt.UTC)
     boundary_epoch = find_hmi_synoptic_time(requested_time)
     _run_job(
         ["pfss"],
@@ -536,7 +552,7 @@ def pfss_job(
 @serverless_function
 def scheduled() -> None:
     """
-    Main function to start the scheduled job.
+    Run both jobs now, then on their schedules, forever.
     """
     settings = Settings()
     # Dead-man's-switch: Sentry pages when check-ins stop, i.e. when the

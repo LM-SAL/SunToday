@@ -16,7 +16,7 @@ from suntoday.jpegs import (
     create_figure_from_map,
     create_rgb_figure_from_maps,
     create_sdo_images,
-    save_figures,
+    save_figure,
 )
 from suntoday.maps import create_aia_map, create_hmi_map, create_hmi_synoptic_map
 from suntoday.pfss import trace_field_lines
@@ -109,27 +109,18 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     return fig
 
 
-def test_save_figures_from_maps_aia(tmpdir) -> None:
+def test_save_figure_from_maps_aia(tmp_path) -> None:
     aia_304_map = create_aia_map(find_test_filepath("304"))
     aia_211_map = create_aia_map(find_test_filepath("211"))
     aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
-    saved_paths = save_figures([(wavelength, fig)], tmpdir)
-    assert set(saved_paths) == {
-        tmpdir / "f_304_211_171.jpg",
-        tmpdir / "l_304_211_171.jpg",
-        tmpdir / "t_304_211_171.jpg",
-    }
-    assert len(tmpdir.listdir()) == 3
-    assert (tmpdir / "f_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "f_304_211_171.jpg")) as img:
-        assert img.size == (4096, 4096)
-    assert (tmpdir / "l_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "l_304_211_171.jpg")) as img:
-        assert img.size == (1024, 1024)
-    assert (tmpdir / "t_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "t_304_211_171.jpg")) as img:
-        assert img.size == (256, 256)
+    saved_paths = save_figure(wavelength, fig, tmp_path)
+    sizes = {"f_304_211_171.jpg": 4096, "l_304_211_171.jpg": 1024, "t_304_211_171.jpg": 256}
+    assert set(saved_paths) == {tmp_path / name for name in sizes}
+    assert {path.name for path in tmp_path.iterdir()} == set(sizes)
+    for name, size in sizes.items():
+        with Image.open(tmp_path / name) as img:
+            assert img.size == (size, size)
 
 
 @pytest.mark.remote_data
@@ -194,7 +185,9 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "suntoday.jpegs.create_blended_figure_from_maps",
         return_value=("blend", mocker.sentinel.figure),
     )
-    mocker.patch("suntoday.jpegs.save_fits", side_effect=lambda _map, directory, name: directory / name)
+    save_fits = mocker.patch(
+        "suntoday.jpegs.save_fits", side_effect=lambda _map, directory, name, **_kwargs: directory / name
+    )
     save_product = mocker.patch(
         "suntoday.jpegs._save_product",
         side_effect=lambda figure, _map, _lines, directory: [directory / f"{figure[0]}.jpg"],
@@ -221,6 +214,9 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
     assert [amap.label for amap in create_rgb.call_args.args[0]] == ["94", "335", "193"]
     assert [amap.label for amap in create_blend.call_args.args[0]] == ["magnetogram", "171"]
     assert all(product.args[2] is None for product in save_product.call_args_list)
+    # Only the HMI files are quantized; the integer AIA maps are stored exactly.
+    quantized = {saved.args[2] for saved in save_fits.call_args_list if saved.kwargs.get("quantize")}
+    assert quantized == {"fblos.fits", "fcontinuum.fits"}
 
 
 def test_save_product_pfss(mocker, tmp_path) -> None:
@@ -229,13 +225,13 @@ def test_save_product_pfss(mocker, tmp_path) -> None:
     field_lines = mocker.sentinel.field_lines
     base = tmp_path / "base.jpg"
     overlay = tmp_path / "overlay.jpg"
-    save = mocker.patch("suntoday.jpegs.save_figures", side_effect=[[base], [overlay]])
+    save = mocker.patch("suntoday.jpegs.save_figure", side_effect=[[base], [overlay]])
     draw = mocker.patch("suntoday.jpegs._draw_field_lines")
 
     assert _save_product(("0171", fig), amap, field_lines, tmp_path) == [base, overlay]
     assert save.call_args_list == [
-        call([("0171pfssnolines", fig)], tmp_path, close=False),
-        call([("0171pfss", fig)], tmp_path),
+        call("0171pfssnolines", fig, tmp_path, close=False),
+        call("0171pfss", fig, tmp_path),
     ]
     draw.assert_called_once_with(mocker.sentinel.axes, amap, field_lines)
 

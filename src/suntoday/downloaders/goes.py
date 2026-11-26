@@ -1,11 +1,11 @@
 """
-Provides GOES XRS downloaders: the SWPC NRT JSON for recent times and the NOAA
-NCEI science archive for historical backfills.
+GOES XRS flux: the SWPC near-real-time JSON for recent times and the NOAA NCEI
+science archive for backfills.
 """
 
 import tempfile
-import time
 from datetime import UTC, datetime, timedelta
+from time import sleep
 
 import pandas as pd
 import requests
@@ -45,7 +45,7 @@ def _read_goes_json(url: str) -> pd.DataFrame:
         except requests.RequestException as e:
             last_error = e
             if attempt < GOES_RETRIES:
-                time.sleep(GOES_RETRY_DELAY)
+                sleep(GOES_RETRY_DELAY)
         else:
             return pd.DataFrame(data)
     msg = f"Failed to fetch GOES XRS data from {url}"
@@ -91,25 +91,20 @@ def _fetch_archive_goes_timeseries(start_time: datetime, end_time: datetime) -> 
 
 def fetch_goes_timeseries(end_time: datetime) -> pd.DataFrame:
     """
-    Fetches the GOES XRS data for the 24 hours before ``end_time``.
+    Fetch the GOES XRS flux for the 24 hours before ``end_time``.
 
-    Windows the SWPC 7-day NRT JSON when it covers the requested time,
-    otherwise falls back to the NOAA NCEI science archive via `sunpy`.
-
-    Parameters
-    ----------
-    end_time : datetime.datetime
-        End of the 24 hour window (timezone aware).
+    Uses the SWPC 7-day JSON when it covers the window, and the NCEI science
+    archive (through sunpy) otherwise.
 
     Returns
     -------
     pandas.DataFrame
-        GOES XRS data for the 24 hours before ``end_time``.
+        ``satellite``, ``flux`` and ``energy``, indexed by time.
 
     Raises
     ------
     suntoday.DataNotReadyError
-        If the requested window has no GOES XRS data yet.
+        If there is no data for the window yet.
     ValueError
         If ``end_time`` is timezone-naive.
     """

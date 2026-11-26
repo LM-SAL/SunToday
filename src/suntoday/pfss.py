@@ -51,9 +51,10 @@ def trace_field_lines(boundary_map: smap.GenericMap) -> SkyCoord:
     Returns
     -------
     `astropy.coordinates.SkyCoord`
-        All traced field lines as a single Carrington polyline, with a
-        NaN-valued point separating consecutive lines so it can be drawn
-        with one matplotlib call.
+        Every traced line as one Carrington polyline, with a NaN point
+        between lines so matplotlib can draw them in one call. Its
+        ``info.meta`` holds the ``polarity`` of each point and the
+        ``boundary_date``.
     """
     boundary_map = boundary_map.resample(SOLVE_SHAPE * u.pix)
     boundary_map._data = np.nan_to_num(boundary_map.data)  # ruff:ignore[private-member-access]

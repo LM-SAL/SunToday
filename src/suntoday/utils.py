@@ -1,5 +1,5 @@
 """
-Utility functions for image processing and visualization.
+Writing the outputs: atomic saves, planning FITS files and the S3 upload.
 """
 
 import mimetypes
@@ -11,7 +11,7 @@ from pathlib import Path
 import boto3
 import numpy as np
 import sunpy.map as smap
-from astropy.io.fits import CompImageHDU
+from astropy.io import fits
 
 from suntoday import logger
 
@@ -25,19 +25,12 @@ __all__ = [
 @contextmanager
 def atomic_save(final_path: Path) -> Generator[Path]:
     """
-    Write to a sibling temp file and atomically move it into place on success.
+    Yield a temp path beside ``final_path`` and move it into place on success.
 
-    Prevents readers (e.g. the webpage) from ever seeing a half-written file,
-    and avoids leaving a corrupt file behind if writing fails mid-way. The
-    temp file lives in the same directory so ``Path.replace`` is atomic.
-
-    The temp file keeps the final extension (``f171.tmp-<unique>.jpg``) so that
-    format-from-extension writers (matplotlib, PIL, sunpy) still work.
-
-    Parameters
-    ----------
-    final_path : pathlib.Path
-        The destination path. The caller writes to the yielded temp path.
+    Readers such as the webpage never see a half-written file, and a failed
+    write leaves nothing behind. The temp file is in the same directory, so
+    the move is atomic, and it keeps the extension (``f171.tmp-<id>.jpg``)
+    for writers that choose the format from it.
 
     Yields
     ------
@@ -83,32 +76,29 @@ def sync_to_s3(
     mostrecent_root: Path | None = None,
 ) -> None:
     """
-    Upload files to an S3 bucket.
+    Upload files to S3 under keys that mirror their local layout.
 
-    Object keys are the file paths relative to ``root_save_directory``,
-    appended to any key prefix included in ``bucket``, so the bucket mirrors
-    the local layout after the key prefix.
-
-    Credentials are read by boto3 from the standard AWS environment variables
-    (``AWS_ACCESS_KEY_ID``, ``AWS_SECRET_ACCESS_KEY``, ``AWS_DEFAULT_REGION``).
+    Each key is the file's path relative to ``root_save_directory``, after
+    any prefix given in ``bucket``. boto3 reads the credentials from the
+    standard ``AWS_*`` environment variables.
 
     Parameters
     ----------
     files : iterable of pathlib.Path
         Files to upload.
     bucket : str
-        Destination bucket, optionally with a key prefix and ``s3://`` scheme,
+        Bucket name, optionally with an ``s3://`` scheme and a key prefix,
         e.g. ``s3://suntoday.lmsal.com/sdomedia/SunInTime``.
     root_save_directory : pathlib.Path
-        Root directory the object keys are made relative to.
+        Directory the keys are relative to.
     mostrecent_root : pathlib.Path, optional
-        When set, copy the uploaded objects to ``mostrecent/`` using paths
-        relative to this directory.
+        Also copy each object to ``mostrecent/``, keyed relative to this
+        directory.
 
     Raises
     ------
     ValueError
-        If a file is outside ``root_save_directory``.
+        If a file is outside ``root_save_directory`` or ``mostrecent_root``.
     """
     root_save_directory = root_save_directory.resolve()
     mostrecent_root = mostrecent_root.resolve() if mostrecent_root is not None else None
@@ -144,28 +134,27 @@ def sync_to_s3(
     logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{destinations}")
 
 
-def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Path:
+def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str, *, quantize: bool = False) -> Path:
     """
-    Save a SunPy map as a compressed FITS file.
+    Save a map as a compressed FITS file.
 
-    Parameters
-    ----------
-    amap : sunpy.map.GenericMap
-        The map to write to disk.
-    save_directory : pathlib.Path
-        Directory to write the FITS file into.
-    filename : str
-        Name of the FITS file to create.
+    With ``quantize`` the pixels are stored as quantized float32 instead of
+    as the map holds them. That is lossy, and only smaller where the noise
+    is far above one count: it halves the HMI files, while the integer AIA
+    maps are both exact and a third smaller left as they are.
 
     Returns
     -------
     pathlib.Path
-        Saved FITS path.
+        The saved file.
     """
-    # Empty and integer-only keywords are invalid in the float output.
+    # The empty keyword is invalid. BLANK is invalid for float output and
+    # names a null value that none of these maps contain.
     amap.meta.pop("", None)
     amap.meta.pop("blank", None)
+    data = amap.data.astype(np.float32) if quantize else amap.data
     with atomic_save(save_directory / filename) as tmp_path:
-        amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
-        amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
+        # Not amap.save: it writes the map's own pixels, and swapping those
+        # for the quantized copy would change what is plotted afterwards.
+        fits.HDUList([fits.PrimaryHDU(), fits.CompImageHDU(data, amap.fits_header)]).writeto(tmp_path)
     return save_directory / filename

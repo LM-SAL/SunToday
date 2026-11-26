@@ -1,13 +1,10 @@
 """
-Functions to create sunpy maps from FITS files.
+Build display-ready sunpy maps from the downloaded FITS files.
 """
-
-import matplotlib as mpl
-
-mpl.use("module://mplcairo.base")
 
 from pathlib import Path
 
+import matplotlib as mpl
 import numpy as np
 import sunpy.map as smap
 from aiapy.calibrate import correct_degradation
@@ -26,24 +23,30 @@ __all__ = ["create_aia_map", "create_hmi_map", "create_hmi_synoptic_map"]
 _HMI_MASK_ROWS = 256
 
 
+def _north_up(amap: smap.GenericMap) -> smap.GenericMap:
+    """
+    Rotate a map so solar north is up, without resampling one that already is.
+    """
+    if not np.array_equal(amap.rotation_matrix, np.eye(2)):
+        return amap.rotate()
+    # The series used here are delivered derotated (CROTA2 = 0; HMI is natively
+    # upside down, but its header says "De-rotation: ON"), and rotate()
+    # resamples regardless: about 1 s per 4096 px frame, and it blanks the
+    # neighbors of every NaN pixel. Leave the header as rotate() would, the
+    # PCi_j matrix in place of CROTA2, so the planning FITS do not change.
+    amap.meta.pop("crota2", None)
+    amap.meta.update({"pc1_1": 1.0, "pc1_2": 0.0, "pc2_1": 0.0, "pc2_2": 1.0})
+    return amap
+
+
 def create_aia_map(file: Path) -> smap.GenericMap:
     """
-    Creates a degradation corrected and exposure normalized AIA Map.
-
-    Since the production data is level 1.5, we do not do any further calibration.
-
-    Parameters
-    ----------
-    file : `pathlib.Path`
-        Path to the AIA FITS file.
-
-    Returns
-    -------
-    `sunpy.map.GenericMap`
-        Degradation corrected and exposure normalized AIA Map.
+    Return an AIA map in whole DN/s, corrected for instrument degradation.
     """
+    # Level 1.5 input is already registered, so only the degradation and
+    # the exposure time are left to correct.
     with fits.open(file, memmap=False) as hdul:
-        aia_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        aia_map = _north_up(smap.Map(hdul[1].data, hdul[1].header))
         wavelength = f"{aia_map.wavelength.value:.0f}"
         # The visible channels (e.g. 4500) have no entry in the degradation table.
         if wavelength not in AIA_FITS_ONLY_WAVELENGTHS:
@@ -61,22 +64,18 @@ def create_aia_map(file: Path) -> smap.GenericMap:
 
 def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
     """
-    Normalize an HMI NRT radial synoptic frame to Carrington CEA coordinates.
+    Return an HMI radial synoptic frame as a Carrington CEA map.
 
-    JSOC's daily product uses Carrington *time*, which increases opposite
-    to longitude, and sine latitude. Convert both axes to FITS-WCS degrees
-    without flipping or interpolating the data. Center the reference pixel
-    because the PFSS tracer assumes CRVAL1 is the longitude at map center.
-
-    Parameters
-    ----------
-    file : pathlib.Path
-        FITS file from `suntoday.downloaders.jsoc.fetch_hmi_synoptic_fits`.
+    JSOC's daily product is on Carrington *time*, which runs opposite to
+    longitude, and sine latitude. Both axes are converted to FITS-WCS
+    degrees without flipping or resampling the data, and the reference pixel
+    is centered because the PFSS tracer takes CRVAL1 as the longitude at the
+    map center.
 
     Returns
     -------
     sunpy.map.GenericMap
-        Radial boundary with corrected WCS and its original observation time.
+        The boundary map, with its original observation time.
     """
     data, header = fits.getdata(file, header=True, memmap=False)
     center = (data.shape[1] + 1) / 2
@@ -95,20 +94,10 @@ def create_hmi_synoptic_map(file: Path) -> smap.GenericMap:
 
 def create_hmi_map(file: Path) -> smap.GenericMap:
     """
-    Creates a rotated HMI map.
-
-    Parameters
-    ----------
-    file : Path
-        Path to the HMI FITS file.
-
-    Returns
-    -------
-    `sunpy.map.GenericMap`
-        HMI Map.
+    Return a north-up HMI map with everything off the disk blanked.
     """
     with fits.open(file, memmap=False) as hdul:
-        hmi_map = smap.Map(hdul[1].data, hdul[1].header).rotate()
+        hmi_map = _north_up(smap.Map(hdul[1].data, hdul[1].header))
         fill_value = np.nan if hmi_map.measurement == "magnetogram" else 0
         for start in range(0, hmi_map.data.shape[0], _HMI_MASK_ROWS):
             stop = min(start + _HMI_MASK_ROWS, hmi_map.data.shape[0])
