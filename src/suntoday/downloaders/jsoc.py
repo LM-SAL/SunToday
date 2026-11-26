@@ -8,13 +8,12 @@ plain requests are used throughout.
 """
 
 from datetime import UTC, datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pandas as pd
 import requests
 from astropy.io import fits
 from astropy.time import Time
-from parfive import Results
 from requests.auth import HTTPBasicAuth
 
 from suntoday import DataNotReadyError, logger
@@ -22,6 +21,11 @@ from suntoday.config import Settings
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, AIA_WAVELENGTHS
 from suntoday.downloaders.downloader import create_downloader, format_download_errors
 from suntoday.utils import atomic_save
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    from parfive import Results
 
 __all__ = [
     "fetch_aia_fits",

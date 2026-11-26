@@ -7,8 +7,9 @@ as the scheduled jobs for creating JPEG images and timeseries data.
 
 import argparse
 import contextlib
-import datetime
+import datetime as dt
 import functools
+import logging
 import multiprocessing
 import os
 import signal
@@ -19,6 +20,7 @@ from pathlib import Path
 
 import schedule
 import sentry_sdk
+from sentry_sdk.integrations.loguru import LoguruIntegration
 from sentry_sdk.integrations.serverless import serverless_function
 from sqlalchemy.orm import Session, sessionmaker
 from sunpy.time import parse_time
@@ -35,16 +37,29 @@ _MAIN_JOB_TIMEOUT_SECONDS = 10 * 60
 _PFSS_JOB_TIMEOUT_SECONDS = 75 * 60
 _PROCESS_STOP_GRACE_SECONDS = 5
 
-settings = Settings()
-# Gated on the setting, not the raw environment variable, so a .env-only or
-# lowercase SUNTODAY_TEST_ENV also keeps test runs out of the production Sentry.
-if not settings.test_env:
+
+def _init_sentry(settings: Settings, **options) -> None:
+    """
+    Start Sentry with the production options; ``options`` are for tests.
+    """
     sentry_sdk.init(
         dsn="https://a16063ea547141a4862651c80df74f68@o4505489018060800.ingest.sentry.io/4505489021337600",
         ignore_errors=[DataNotReadyError],
         server_name=settings.sentry_server_name,
         environment=settings.sentry_environment,
+        # A job that dies abnormally is reported with logger.error, so error
+        # logs must become Sentry events; the SDK only does that when asked.
+        # level=None keeps it from also shipping every log line.
+        integrations=[LoguruIntegration(level=None, event_level=logging.ERROR)],
+        **options,
     )
+
+
+settings = Settings()
+# Gated on the setting, not the raw environment variable, so a .env-only or
+# lowercase SUNTODAY_TEST_ENV also keeps test runs out of the production Sentry.
+if not settings.test_env:
+    _init_sentry(settings)
 
 
 def _exit_on_sigterm(signum, _frame) -> None:
@@ -189,10 +204,10 @@ def _alert_if_stale(
             record = get_latest_record(session, image_type)
             updated_at = record.updated_at if record is not None else None
             if updated_at is not None and updated_at.tzinfo is None:
-                updated_at = updated_at.replace(tzinfo=datetime.UTC)
+                updated_at = updated_at.replace(tzinfo=dt.UTC)
             if updated_at is not None:
-                age = datetime.datetime.now(datetime.UTC) - updated_at
-                if age <= datetime.timedelta(hours=settings.stale_alert_hours):
+                age = dt.datetime.now(dt.UTC) - updated_at
+                if age <= dt.timedelta(hours=settings.stale_alert_hours):
                     continue
                 # Warning, not error: an error would be its own Sentry event
                 # with a different message every run; the static
@@ -269,10 +284,10 @@ def cli() -> None:
         # 24-hour lightcurve covers the requested day, not the one before.
         # Detected by parsing, not zeroed time components, so an explicit
         # midnight datetime still means midnight.
-        bare_date = datetime.date.fromisoformat(args.requested_time.strip())
-        requested_time = datetime.datetime.combine(bare_date, datetime.time(23, 57), tzinfo=datetime.UTC)
+        bare_date = dt.date.fromisoformat(args.requested_time.strip())
+        requested_time = dt.datetime.combine(bare_date, dt.time(23, 57), tzinfo=dt.UTC)
     except ValueError:
-        requested_time = parse_time(args.requested_time).to_datetime(timezone=datetime.UTC)
+        requested_time = parse_time(args.requested_time).to_datetime(timezone=dt.UTC)
     # One download directory across both jobs: the PFSS pass reuses the
     # AIA/HMI FITS files the main job already fetched for the same time.
     with tempfile.TemporaryDirectory() as shared_downloads:
@@ -301,11 +316,11 @@ def cli() -> None:
 def create_images(
     database_session: Session,
     image_type: str,
-    requested_time: datetime.datetime,
+    requested_time: dt.datetime,
     save_directory: Path,
-    hmi_time: datetime.datetime | None = None,
+    hmi_time: dt.datetime | None = None,
     *,
-    boundary_epoch: datetime.datetime | None = None,
+    boundary_epoch: dt.datetime | None = None,
     force: bool = False,
     download_directory: Path | None = None,
 ) -> list[Path]:
@@ -356,13 +371,13 @@ def create_images(
     if image_type not in {"images", "timeseries", "pfss"}:
         msg = f"Invalid image type: {image_type}. Must be 'images', 'timeseries' or 'pfss'."
         raise ValueError(msg)
-    requested_time = requested_time.astimezone(datetime.UTC)
+    requested_time = requested_time.astimezone(dt.UTC)
     if not force:
         # Current = already rendered from data less than one main-job
         # interval older than this request. PFSS uses it too: its own runs
         # are far further apart, so this only spares a re-render right after
         # a restart.
-        cutoff = requested_time - datetime.timedelta(minutes=Settings().cron_frequency)
+        cutoff = requested_time - dt.timedelta(minutes=Settings().cron_frequency)
         if image_type == "pfss" and boundary_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
             is_current = (
@@ -393,10 +408,10 @@ def create_images(
 
 def _run_job(
     image_types: list[str],
-    requested_time: datetime.datetime,
+    requested_time: dt.datetime,
     root_save_directory: Path | None,
-    hmi_time: datetime.datetime | None = None,
-    boundary_epoch: datetime.datetime | None = None,
+    hmi_time: dt.datetime | None = None,
+    boundary_epoch: dt.datetime | None = None,
     *,
     force: bool = False,
     update_mostrecent: bool = True,
@@ -429,7 +444,7 @@ def _run_job(
         Shared FITS download directory for `create_images`.
     """
     settings = Settings()
-    requested_time = requested_time.astimezone(datetime.UTC)
+    requested_time = requested_time.astimezone(dt.UTC)
     root_save_directory = Path(root_save_directory or settings.save_directory).expanduser().resolve()
     save_directory = (
         root_save_directory
@@ -490,7 +505,7 @@ def _run_job(
 
 
 def main_job(
-    requested_time: datetime.datetime | None = None,
+    requested_time: dt.datetime | None = None,
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
@@ -511,7 +526,7 @@ def main_job(
     if requested_time is None:
         requested_time, hmi_time = find_latest_jsoc_times()
     else:
-        requested_time = requested_time.astimezone(datetime.UTC)
+        requested_time = requested_time.astimezone(dt.UTC)
         hmi_time = None
     _run_job(
         ["images", "timeseries"],
@@ -526,7 +541,7 @@ def main_job(
 
 
 def pfss_job(
-    requested_time: datetime.datetime | None = None,
+    requested_time: dt.datetime | None = None,
     root_save_directory: Path | None = None,
     *,
     force: bool = False,
@@ -541,7 +556,7 @@ def pfss_job(
     """
     logger.info("Running PFSS job to create field line overlay images")
     is_live = requested_time is None
-    requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(datetime.UTC)
+    requested_time = find_latest_pfss_time() if requested_time is None else requested_time.astimezone(dt.UTC)
     boundary_epoch = find_hmi_synoptic_time(requested_time)
     _run_job(
         ["pfss"],

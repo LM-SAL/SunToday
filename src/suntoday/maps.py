@@ -2,7 +2,7 @@
 Functions to create sunpy maps from FITS files.
 """
 
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib as mpl
 import numpy as np
@@ -17,6 +17,9 @@ from sunpy.time import parse_time
 
 from suntoday.constants import AIA_FITS_ONLY_WAVELENGTHS, HMI_NORM_GAUSS
 from suntoday.data import RESPONSE_TABLE_V10
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 __all__ = ["create_aia_map", "create_hmi_map", "create_hmi_synoptic_map"]
 

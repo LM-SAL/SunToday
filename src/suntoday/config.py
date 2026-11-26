@@ -68,7 +68,7 @@ class Settings(BaseSettings):
     timeseries_fig_y_size: int = 1500  # pixels
 
     @model_validator(mode="after")
-    def _build_db_url(self) -> "Settings":
+    def _build_db_url(self) -> Settings:
         if not self.db_url:
             self.db_url = f"postgresql+psycopg2://{self.db_user}@{self.db_host}:{self.db_port}/{self.db_name}"
         return self

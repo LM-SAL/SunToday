@@ -3,17 +3,21 @@ Generates the SDO/AIA and GOES lightcurve the previous 24 hours.
 """
 
 from datetime import datetime, timedelta
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
-import pandas as pd
 from matplotlib import dates, ticker
 
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_COLORS, AIA_WAVELENGTHS
 from suntoday.utils import atomic_save
+
+if TYPE_CHECKING:
+    from pathlib import Path
+
+    import pandas as pd
 
 __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figure", "plot_lightcurve_from_timeseries"]
 

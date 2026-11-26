@@ -1,18 +1,22 @@
+import multiprocessing
 import os
 import signal
 import threading
 import time
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
+from typing import ClassVar
 
 import pytest
 import sentry_sdk
 
 from suntoday import DataNotReadyError, logger
+from suntoday.config import Settings
 from suntoday.db import PFSSImages, SDOImages, TimeSeriesImages, write_or_update_record
 from suntoday.main import (
     _alert_if_stale,
     _exit_on_sigterm,
+    _init_sentry,
     _run_job_in_subprocess,
     cli,
     create_images,
@@ -37,6 +41,43 @@ pytestmark = pytest.mark.usefixtures("_restore_sigterm_handler")
 
 def test_sentry_disabled_during_tests() -> None:
     assert not sentry_sdk.get_client().is_active()
+
+
+class _CapturingTransport(sentry_sdk.transport.Transport):
+    """
+    Collect what would be sent to Sentry instead of sending it.
+    """
+
+    sent: ClassVar[list] = []
+
+    def capture_envelope(self, envelope) -> None:
+        self.sent.extend((item.type, (item.payload.json or {}).get("level")) for item in envelope.items)
+
+    def flush(self, timeout, callback=None) -> None:
+        pass
+
+    def kill(self) -> None:
+        pass
+
+
+def _report_what_logging_sends(connection) -> None:
+    _init_sentry(Settings(), transport=_CapturingTransport)
+    logger.warning("Job skipped: data not ready")
+    logger.error("Job exited with code -9")
+    sentry_sdk.flush()
+    connection.send(_CapturingTransport.sent)
+
+
+def test_error_logs_reach_sentry_and_warnings_do_not() -> None:
+    # A job killed for memory or by a timeout is reported with logger.error
+    # alone, and whether that becomes an alert is an SDK setting that has
+    # changed between versions. Sentry state is process-wide, hence the child.
+    context = multiprocessing.get_context("spawn")
+    parent_connection, child_connection = context.Pipe(duplex=False)
+    process = context.Process(target=_report_what_logging_sends, args=(child_connection,))
+    process.start()
+    process.join()
+    assert parent_connection.recv() == [("event", "error")]
 
 
 @pytest.fixture

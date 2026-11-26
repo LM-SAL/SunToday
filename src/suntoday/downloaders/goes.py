@@ -4,8 +4,8 @@ NCEI science archive for historical backfills.
 """
 
 import tempfile
-import time
 from datetime import UTC, datetime, timedelta
+from time import sleep
 
 import pandas as pd
 import requests
@@ -45,7 +45,7 @@ def _read_goes_json(url: str) -> pd.DataFrame:
         except requests.RequestException as e:
             last_error = e
             if attempt < GOES_RETRIES:
-                time.sleep(GOES_RETRY_DELAY)
+                sleep(GOES_RETRY_DELAY)
         else:
             return pd.DataFrame(data)
     msg = f"Failed to fetch GOES XRS data from {url}"

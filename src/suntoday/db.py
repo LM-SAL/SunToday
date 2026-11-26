@@ -2,13 +2,16 @@
 Provides all the database helpers needed.
 """
 
-import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import Column, Date, DateTime, create_engine
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy_utils import create_database, database_exists
 
 from suntoday import logger
+
+if TYPE_CHECKING:
+    import datetime as dt
 
 BASE = declarative_base()
 
@@ -142,7 +145,7 @@ def get_latest_record(session: Session, model_type: str) -> SDOImages | TimeSeri
 
 
 def get_record(
-    session: Session, model_type: str, obs_date: datetime.date
+    session: Session, model_type: str, obs_date: dt.date
 ) -> SDOImages | TimeSeriesImages | PFSSImages | None:
     """
     Retrieve a record from the database based on the model type and observation
@@ -172,10 +175,10 @@ def get_record(
 def write_or_update_record(
     session: Session,
     model_type: str,
-    obs_date: datetime.date,
+    obs_date: dt.date,
     *,
-    updated_at: datetime.datetime,
-    boundary_epoch: datetime.datetime | None = None,
+    updated_at: dt.datetime,
+    boundary_epoch: dt.datetime | None = None,
 ):
     """
     Write a new record to the database or update an existing one based on the

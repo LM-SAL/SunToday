@@ -1,11 +1,12 @@
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
-COPY --from=ghcr.io/astral-sh/uv:0.11.30 /uv /usr/local/bin/uv
+COPY --from=ghcr.io/astral-sh/uv:0.13.10 /uv /usr/local/bin/uv
 
-# pycairo ships no Linux wheel, so it builds from source against the cairo
-# headers (needed by the mplcairo rendering backend).
+# pycairo ships no Linux wheel and mplcairo is pinned to a commit, so both
+# compile from source against the cairo headers; git fetches that commit.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
+    git \
     libcairo2-dev \
     pkg-config \
     && rm -rf /var/lib/apt/lists/*
@@ -13,7 +14,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Use the image's CPython; never let uv download a managed interpreter.
 ENV UV_NO_MANAGED_PYTHON=1 UV_LINK_MODE=copy
 
-RUN uv venv --python 3.13 /opt/venv
+RUN uv venv --python 3.14 /opt/venv
 
 COPY requirements-full.txt /tmp/requirements-full.txt
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -25,7 +26,7 @@ COPY . /app
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv pip install --python /opt/venv/bin/python --no-deps /app/.
 
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Runtime shared library for pycairo/mplcairo.
 RUN apt-get update && apt-get install -y --no-install-recommends \

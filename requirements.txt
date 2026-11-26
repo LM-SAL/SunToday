@@ -1,22 +1,22 @@
 aiapy==0.12.1
-astropy==8.0.2
-boto3==1.43.118
+astropy==8.0.3
+boto3==1.44.12
 fsspec==2026.9.0
-loguru==0.7.3
-# Bug with matplotlib 3.11.0 and mplcairo
-matplotlib==3.10.9,<3.11.0
-# This is max Python 3.13 at the moment
-mplcairo==0.6.1
-numpy==2.5.4
-pandas==3.1.0
+loguru==0.8.0
+matplotlib==3.11.2
+# Unreleased: main has the matplotlib 3.11 math text fix. Move to the next
+# mplcairo release when there is one. Compiled from source (no wheel).
+mplcairo @ git+https://github.com/matplotlib/mplcairo@913b4a1ffe41b4fca416eb90fef4611bc5a9d7f5
+numpy==2.5.5
+pandas==3.1.1
 pillow==13.0.0
 psycopg2-binary==2.9.13
-pydantic-settings==2.16.1
-pydantic==2.14.1
+pydantic-settings==2.16.3
+pydantic==2.14.4
 requests==2.34.2
 schedule==1.2.2
-sentry-sdk==2.73.0
+sentry-sdk==3.0.1
 sqlalchemy-utils==0.43.0
-sqlalchemy==2.1.6
+sqlalchemy==2.1.9
 sunkit-magex==1.2.0
 sunpy[map,timeseries]==8.0.1

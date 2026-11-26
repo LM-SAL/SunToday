@@ -3,14 +3,17 @@ PFSS extrapolation and magnetic field line tracing.
 """
 
 import warnings
+from typing import TYPE_CHECKING
 
 import astropy.units as u
 import numpy as np
-import sunpy.map as smap
 from astropy.constants import R_sun
 from astropy.coordinates import SkyCoord
 from sunkit_magex import pfss as magex_pfss
 from sunkit_magex.pfss import tracing
+
+if TYPE_CHECKING:
+    import sunpy.map as smap
 
 __all__ = ["trace_field_lines"]
 

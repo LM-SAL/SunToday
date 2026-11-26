@@ -22,10 +22,10 @@ usermod -aG docker "$DOCKER_USER"
 # versions and SHA-256 digests pinned; update both from the upstream releases.
 PLUGIN_DIR=/usr/libexec/docker/cli-plugins
 mkdir -p "$PLUGIN_DIR"
-BUILDX_VERSION=v0.36.1
-BUILDX_SHA256=48af8a397ebd60178778bf63611dbcebe5f5e7a9be90eb9147b24b9587455778
-COMPOSE_VERSION=v5.4.0
-COMPOSE_SHA256=837fd1d35bf6a494f41b5b5988269a7be79de337cf1a1a6ff0e45ab51bb4e9be
+BUILDX_VERSION=v0.39.1
+BUILDX_SHA256=903090816da68f8bc1a2ff5346dd163a5adacfce4548d003c75df42cd47a9bf4
+COMPOSE_VERSION=v5.8.0
+COMPOSE_SHA256=b8840f5008c447f41fce0a57ae3adeab42c89b1eb6e6012524bcabbfb4ffbaf6
 
 if [ "$(uname -m)" != "x86_64" ]; then
     echo "Unsupported architecture: $(uname -m); this host must be x86_64" >&2

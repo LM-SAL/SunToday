@@ -4,18 +4,16 @@ single channels, RGB composites, the HMI/AIA blend and the PFSS overlay
 variants.
 """
 
-import datetime
 import gc
 import re
 import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import astropy.units as u
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
-import sunpy.map as smap
-from astropy.coordinates import SkyCoord
 from astropy.visualization import ManualInterval
 from matplotlib import colors
 from mplcairo import operator_t
@@ -42,6 +40,12 @@ from suntoday.maps import (
 )
 from suntoday.pfss import trace_field_lines
 from suntoday.utils import atomic_save, save_fits
+
+if TYPE_CHECKING:
+    import datetime as dt
+
+    import sunpy.map as smap
+    from astropy.coordinates import SkyCoord
 
 __all__ = [
     "create_blended_figure_from_maps",
@@ -512,12 +516,12 @@ def _save_jpeg_set(fig: plt.Figure, full_path: Path, small_path: Path, thumb_pat
 
 
 def create_sdo_images(  # ruff:ignore[too-many-statements]
-    requested_time: datetime.datetime,
+    requested_time: dt.datetime,
     save_directory: Path,
-    hmi_time: datetime.datetime | None = None,
+    hmi_time: dt.datetime | None = None,
     *,
     pfss: bool = False,
-    boundary_time: datetime.datetime | None = None,
+    boundary_time: dt.datetime | None = None,
     download_directory: Path | None = None,
 ) -> list[Path]:
     """
