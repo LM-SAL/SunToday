@@ -22,6 +22,19 @@ from suntoday.main import (
 from suntoday.utils import atomic_save
 
 
+@pytest.fixture
+def _restore_sigterm_handler():
+    """
+    Undo the process-wide SIGTERM handler that cli() installs.
+    """
+    previous_handler = signal.getsignal(signal.SIGTERM)
+    yield
+    signal.signal(signal.SIGTERM, previous_handler)
+
+
+pytestmark = pytest.mark.usefixtures("_restore_sigterm_handler")
+
+
 def test_sentry_disabled_during_tests() -> None:
     assert not sentry_sdk.get_client().is_active()
 
@@ -115,6 +128,7 @@ def test_cli_date_formats(value, expected, mocker) -> None:
     main_job_mock.assert_called_once_with(
         requested_time=expected, root_save_directory=None, force=False, download_directory=mocker.ANY
     )
+    assert signal.getsignal(signal.SIGTERM) is _exit_on_sigterm
 
 
 def test_cli_data_not_ready_logs_below_sentry_threshold(mocker) -> None:
@@ -294,13 +308,10 @@ def test_run_job_in_subprocess_stops_job_when_scheduler_is_stopped(mocker, monke
         # To the main thread, where a process-directed signal lands on Linux.
         signal.pthread_kill(threading.main_thread().ident, signal.SIGTERM)
 
-    previous_handler = signal.signal(signal.SIGTERM, _exit_on_sigterm)
-    try:
-        threading.Thread(target=stop_scheduler_once_job_is_writing, daemon=True).start()
-        with pytest.raises(SystemExit):
-            _run_job_in_subprocess(_child_job_mid_save, ("images",))
-    finally:
-        signal.signal(signal.SIGTERM, previous_handler)
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
+    threading.Thread(target=stop_scheduler_once_job_is_writing, daemon=True).start()
+    with pytest.raises(SystemExit):
+        _run_job_in_subprocess(_child_job_mid_save, ("images",))
 
     assert list(tmp_path.iterdir()) == []
 

@@ -11,7 +11,7 @@ from pathlib import Path
 import boto3
 import numpy as np
 import sunpy.map as smap
-from astropy.io.fits import CompImageHDU
+from astropy.io import fits
 
 from suntoday import logger
 
@@ -171,8 +171,9 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str, *, qua
     # names a null value that none of these maps contain.
     amap.meta.pop("", None)
     amap.meta.pop("blank", None)
-    if quantize:
-        amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
+    data = amap.data.astype(np.float32) if quantize else amap.data
     with atomic_save(save_directory / filename) as tmp_path:
-        amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
+        # Not amap.save: it writes the map's own pixels, and swapping those
+        # for the quantized copy would change what is plotted afterwards.
+        fits.HDUList([fits.PrimaryHDU(), fits.CompImageHDU(data, amap.fits_header)]).writeto(tmp_path)
     return save_directory / filename

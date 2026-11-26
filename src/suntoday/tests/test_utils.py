@@ -111,6 +111,8 @@ def test_save_fits_quantize_stores_float32(tmp_path, hmi_cont_test_file) -> None
 
     path = save_fits(amap, tmp_path, "fcontinuum.fits", quantize=True)
 
+    # The map itself is left alone for the figure that is drawn from it next.
+    assert amap.data.dtype == np.int32
     with fits.open(path) as hdus:
         assert hdus[1].header["BITPIX"] == -32
         # Lossy, but only by a sliver of values that run to tens of thousands.

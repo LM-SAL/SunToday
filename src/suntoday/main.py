@@ -129,7 +129,8 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
             # Stops a timed-out job, and also the running job when the
             # scheduler itself is stopped (SIGTERM): left alone it is orphaned
             # and the container teardown SIGKILLs it mid-write, which leaves
-            # its staging files on the NFS share.
+            # its staging files on the NFS share. A job that cannot unwind
+            # within the grace period is killed and can still leave one.
             finally:
                 if process.is_alive():
                     process.terminate()
@@ -249,6 +250,9 @@ def cli() -> None:
         With ``os.EX_TEMPFAIL`` when the archives have no data for the
         requested time.
     """
+    # `docker stop` sends SIGTERM; unwinding on it is what lets a running job
+    # be stopped cleanly (see _run_job_in_subprocess) before the process ends.
+    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     parser = _build_args()
     args = parser.parse_args()
     root_save_directory = Path(args.root_save_directory) if args.root_save_directory else None
@@ -354,8 +358,10 @@ def create_images(
         raise ValueError(msg)
     requested_time = requested_time.astimezone(datetime.UTC)
     if not force:
-        # Current = already rendered from data less than one scheduler
-        # interval older than this request.
+        # Current = already rendered from data less than one main-job
+        # interval older than this request. PFSS uses it too: its own runs
+        # are far further apart, so this only spares a re-render right after
+        # a restart.
         cutoff = requested_time - datetime.timedelta(minutes=Settings().cron_frequency)
         if image_type == "pfss" and boundary_epoch is not None:
             latest_record = get_latest_record(database_session, image_type)
@@ -585,7 +591,4 @@ def scheduled() -> None:
 
 
 if __name__ == "__main__":
-    # `docker stop` sends SIGTERM; unwinding on it is what lets a running job
-    # be stopped cleanly (see _run_job_in_subprocess) before the process ends.
-    signal.signal(signal.SIGTERM, _exit_on_sigterm)
     cli()

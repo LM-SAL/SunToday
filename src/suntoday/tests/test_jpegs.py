@@ -120,27 +120,18 @@ def test_canvas_pixel_size_is_independent_of_dpi(monkeypatch) -> None:
     plt.close(fig)
 
 
-def test_save_figure_from_maps_aia(tmpdir) -> None:
+def test_save_figure_from_maps_aia(tmp_path) -> None:
     aia_304_map = create_aia_map(find_test_filepath("304"))
     aia_211_map = create_aia_map(find_test_filepath("211"))
     aia_171_map = create_aia_map(find_test_filepath("171"))
     wavelength, fig = create_rgb_figure_from_maps([aia_304_map, aia_211_map, aia_171_map])
-    saved_paths = save_figure(wavelength, fig, tmpdir)
-    assert set(saved_paths) == {
-        tmpdir / "f_304_211_171.jpg",
-        tmpdir / "l_304_211_171.jpg",
-        tmpdir / "t_304_211_171.jpg",
-    }
-    assert len(tmpdir.listdir()) == 3
-    assert (tmpdir / "f_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "f_304_211_171.jpg")) as img:
-        assert img.size == (4096, 4096)
-    assert (tmpdir / "l_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "l_304_211_171.jpg")) as img:
-        assert img.size == (1024, 1024)
-    assert (tmpdir / "t_304_211_171.jpg").exists()
-    with Image.open(str(tmpdir / "t_304_211_171.jpg")) as img:
-        assert img.size == (256, 256)
+    saved_paths = save_figure(wavelength, fig, tmp_path)
+    sizes = {"f_304_211_171.jpg": 4096, "l_304_211_171.jpg": 1024, "t_304_211_171.jpg": 256}
+    assert set(saved_paths) == {tmp_path / name for name in sizes}
+    assert {path.name for path in tmp_path.iterdir()} == set(sizes)
+    for name, size in sizes.items():
+        with Image.open(tmp_path / name) as img:
+            assert img.size == (size, size)
 
 
 @pytest.mark.remote_data

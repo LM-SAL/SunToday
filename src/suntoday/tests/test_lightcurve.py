@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
@@ -145,23 +144,30 @@ def test_plot_lightcurve_from_timeseries_real(real_aia_timeseries, real_goes_pri
     )
 
 
-@pytest.mark.remote_data
-def test_create_lightcurve_figure(tmpdir) -> None:
-    datetime_now = datetime.now(UTC)
-    saved_files = create_lightcurve_figure(datetime_now, tmpdir)
-    saved_figure = tmpdir / Path("aia_light_curves.gif")
-    assert saved_figure.exists()
-    assert saved_figure.isfile()
-
-    aia_lightcurve_file = tmpdir / Path("aia_light_curves.txt")
-    goes_lightcurve_file = tmpdir / Path("goes_light_curves.txt")
+def _check_lightcurve_outputs(saved_files, directory) -> None:
+    saved_figure = directory / "aia_light_curves.gif"
+    aia_lightcurve_file = directory / "aia_light_curves.txt"
+    goes_lightcurve_file = directory / "goes_light_curves.txt"
     assert set(saved_files) == {saved_figure, aia_lightcurve_file, goes_lightcurve_file}
-    assert aia_lightcurve_file.exists()
-    assert aia_lightcurve_file.isfile()
-    assert goes_lightcurve_file.exists()
-    assert goes_lightcurve_file.isfile()
+    assert all(file.is_file() for file in saved_files)
     aia_lightcurve = pd.read_fwf(aia_lightcurve_file)
     assert list(aia_lightcurve.columns) == ["DATE_OBS", "WAVELNTH", "DATAMEAN", "EXPTIME", "QUALITY"]
     assert not aia_lightcurve.empty
     assert pd.to_datetime(aia_lightcurve["DATE_OBS"][0])
     assert pd.api.types.is_integer_dtype(aia_lightcurve["QUALITY"])
+
+
+def test_create_lightcurve_figure_writes_plot_and_data(
+    mocker, tmp_path, aia_timeseries, goes_primary_timeseries
+) -> None:
+    mocker.patch("suntoday.downloaders.jsoc.fetch_aia_timeseries", return_value=aia_timeseries)
+    mocker.patch("suntoday.downloaders.goes.fetch_goes_timeseries", return_value=goes_primary_timeseries)
+
+    saved_files = create_lightcurve_figure(aia_timeseries.index.max(), tmp_path)
+
+    _check_lightcurve_outputs(saved_files, tmp_path)
+
+
+@pytest.mark.remote_data
+def test_create_lightcurve_figure(tmp_path) -> None:
+    _check_lightcurve_outputs(create_lightcurve_figure(datetime.now(UTC), tmp_path), tmp_path)
