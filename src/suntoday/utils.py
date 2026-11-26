@@ -144,7 +144,7 @@ def sync_to_s3(
     logger.info(f"Uploaded {len(paths)} files to s3://{bucket_name}/{destinations}")
 
 
-def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Path:
+def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str, *, quantize: bool = False) -> Path:
     """
     Save a SunPy map as a compressed FITS file.
 
@@ -156,16 +156,23 @@ def save_fits(amap: smap.GenericMap, save_directory: Path, filename: str) -> Pat
         Directory to write the FITS file into.
     filename : str
         Name of the FITS file to create.
+    quantize : bool, optional
+        Store the pixels as quantized float32 instead of as the map holds
+        them. That is lossy, and only smaller where the noise is far above
+        one count: it halves the HMI files, while the integer AIA maps are
+        both exact and a third smaller left as they are.
 
     Returns
     -------
     pathlib.Path
         Saved FITS path.
     """
-    # Empty and integer-only keywords are invalid in the float output.
+    # The empty keyword is invalid. BLANK is invalid for float output and
+    # names a null value that none of these maps contain.
     amap.meta.pop("", None)
     amap.meta.pop("blank", None)
-    with atomic_save(save_directory / filename) as tmp_path:
+    if quantize:
         amap._data = amap.data.astype(np.float32)  # ruff:ignore[private-member-access]
+    with atomic_save(save_directory / filename) as tmp_path:
         amap.save(tmp_path, overwrite=True, hdu_type=CompImageHDU)
     return save_directory / filename

@@ -205,7 +205,9 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
         "suntoday.jpegs.create_blended_figure_from_maps",
         return_value=("blend", mocker.sentinel.figure),
     )
-    mocker.patch("suntoday.jpegs.save_fits", side_effect=lambda _map, directory, name: directory / name)
+    save_fits = mocker.patch(
+        "suntoday.jpegs.save_fits", side_effect=lambda _map, directory, name, **_kwargs: directory / name
+    )
     save_product = mocker.patch(
         "suntoday.jpegs._save_product",
         side_effect=lambda figure, _map, _lines, directory: [directory / f"{figure[0]}.jpg"],
@@ -232,6 +234,9 @@ def test_create_sdo_images_orchestrates_products(mocker, tmp_path) -> None:
     assert [amap.label for amap in create_rgb.call_args.args[0]] == ["94", "335", "193"]
     assert [amap.label for amap in create_blend.call_args.args[0]] == ["magnetogram", "171"]
     assert all(product.args[2] is None for product in save_product.call_args_list)
+    # Only the HMI files are quantized; the integer AIA maps are stored exactly.
+    quantized = {saved.args[2] for saved in save_fits.call_args_list if saved.kwargs.get("quantize")}
+    assert quantized == {"fblos.fits", "fcontinuum.fits"}
 
 
 def test_save_product_pfss(mocker, tmp_path) -> None:

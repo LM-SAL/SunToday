@@ -1,11 +1,12 @@
 import warnings
 
+import numpy as np
 import pytest
 from astropy.io import fits
 from astropy.io.fits.verify import VerifyWarning
 
 from suntoday.data.test import find_test_filepath
-from suntoday.maps import create_aia_map
+from suntoday.maps import create_aia_map, create_hmi_map
 from suntoday.utils import save_fits, sync_to_s3
 
 
@@ -91,3 +92,26 @@ def test_save_fits_removes_blank(tmp_path) -> None:
         path = save_fits(amap, tmp_path, "f0171.fits")
         with fits.open(path) as hdus:
             assert "BLANK" not in hdus[1].header
+
+
+def test_save_fits_stores_integer_map_exactly(tmp_path) -> None:
+    amap = create_aia_map(find_test_filepath("171"))
+    expected = amap.data.copy()
+
+    path = save_fits(amap, tmp_path, "f0171.fits")
+
+    with fits.open(path) as hdus:
+        assert hdus[1].header["BITPIX"] == 32
+        np.testing.assert_array_equal(hdus[1].data, expected)
+
+
+def test_save_fits_quantize_stores_float32(tmp_path, hmi_cont_test_file) -> None:
+    amap = create_hmi_map(hmi_cont_test_file)
+    expected = amap.data.copy()
+
+    path = save_fits(amap, tmp_path, "fcontinuum.fits", quantize=True)
+
+    with fits.open(path) as hdus:
+        assert hdus[1].header["BITPIX"] == -32
+        # Lossy, but only by a sliver of values that run to tens of thousands.
+        np.testing.assert_allclose(hdus[1].data, expected, atol=100)

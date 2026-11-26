@@ -599,7 +599,7 @@ def create_sdo_images(  # ruff:ignore[too-many-statements]
             hmi_files_by_measurement[hmi_map.measurement] = hmi_path
             if not pfss:
                 hmi_fits_name = HMI_MEASUREMENT_FITS[hmi_map.measurement]
-                saved_paths.append(save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits"))
+                saved_paths.append(save_fits(hmi_map, save_directory, f"f{hmi_fits_name}.fits", quantize=True))
             saved_paths.extend(_save_product(create_figure_from_map(hmi_map), hmi_map, field_lines, save_directory))
             del hmi_map
             gc.collect()
