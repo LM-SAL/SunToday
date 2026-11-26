@@ -5,16 +5,13 @@ Records of what was last rendered, used to skip work that is current.
 the job ran.
 """
 
-from typing import TYPE_CHECKING
+import datetime as dt
 
 from sqlalchemy import Column, Date, DateTime, create_engine
 from sqlalchemy.orm import Session, declarative_base
 from sqlalchemy_utils import create_database, database_exists
 
 from suntoday import logger
-
-if TYPE_CHECKING:
-    import datetime as dt
 
 BASE = declarative_base()
 

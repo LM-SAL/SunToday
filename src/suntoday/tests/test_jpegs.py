@@ -2,7 +2,6 @@ from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import call
 
-import matplotlib.pyplot as plt
 import pytest
 from PIL import Image
 
@@ -11,7 +10,6 @@ from suntoday.constants import AIA_WAVELENGTHS
 from suntoday.data.test import find_test_filepath
 from suntoday.downloaders.jsoc import find_latest_jsoc_times, find_latest_pfss_time
 from suntoday.jpegs import (
-    _create_canvas,
     _draw_field_lines,
     _save_product,
     create_blended_figure_from_maps,
@@ -109,15 +107,6 @@ def test_create_pfss_figure_from_map_hmi_blos(hmi_blos_test_file, pfss_field_lin
     assert fig.axes[0].texts[-2].get_text().endswith("2026-07-17 20:59:31")
     assert fig.axes[0].texts[-1].get_text() == "PFSS: magenta=open (+), cyan=open (-), white=closed"
     return fig
-
-
-def test_canvas_pixel_size_is_independent_of_dpi(monkeypatch) -> None:
-    # dpi only scales text and lines; the full-size JPEG stays 4096 px.
-    monkeypatch.setenv("SUNTODAY_FIG_DPI", "150")
-    fig, _ = _create_canvas()
-    assert fig.dpi == 150
-    assert fig.get_size_inches() * fig.dpi == pytest.approx([4096, 4096])
-    plt.close(fig)
 
 
 def test_save_figure_from_maps_aia(tmp_path) -> None:

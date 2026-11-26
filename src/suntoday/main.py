@@ -53,8 +53,7 @@ def _init_sentry(settings: Settings, **options) -> None:
 
 
 settings = Settings()
-# Gated on the setting, not the raw environment variable, so a .env-only or
-# lowercase SUNTODAY_TEST_ENV also keeps test runs out of the production Sentry.
+# Test runs must stay out of the production Sentry.
 if not settings.test_env:
     _init_sentry(settings)
 
@@ -139,11 +138,10 @@ def _run_job_in_subprocess(job_func, image_types: tuple[str, ...]) -> None:
                         child_traceback = parent_connection.recv()
                 process.join(max(0, deadline - time.monotonic()))
                 timed_out = process.is_alive()
-            # Stops a timed-out job, and also the running job when the
-            # scheduler itself is stopped (SIGTERM): left alone it is orphaned
-            # and the container teardown SIGKILLs it mid-write, which leaves
-            # its staging files on the NFS share. A job that cannot unwind
-            # within the grace period is killed and can still leave one.
+            # Also reached when the scheduler itself is stopped (SIGTERM). An
+            # orphaned job would be SIGKILLed mid-write by the container
+            # teardown, leaving its staging files on the NFS share; one that
+            # cannot unwind within the grace period still can.
             finally:
                 if process.is_alive():
                     process.terminate()

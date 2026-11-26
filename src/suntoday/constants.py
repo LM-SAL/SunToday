@@ -43,8 +43,8 @@ AIA_SINGLE_NORMS = {
     "193": partial(colors.LogNorm, vmin=65.5, vmax=3021.0, clip=True),
 }
 # Lightcurve line colors: each channel's conventional hue, stepped so that
-# vertically neighboring panels stay distinct for color-blind readers and every
-# line has at least 3:1 contrast on white (plain "gold" has 1.4:1).
+# vertically neighboring panels stay distinct for color-blind readers and
+# every line has at least 3:1 contrast on white.
 AIA_COLORS = {
     "131": "#0097A7",
     "1600": "olivedrab",

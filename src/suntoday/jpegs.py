@@ -6,16 +6,18 @@ Every ``create_*_figure`` function returns the part of the filename that
 names the product, and its figure.
 """
 
+import datetime as dt
 import gc
 import re
 import tempfile
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import astropy.units as u
 import matplotlib.patheffects as pe
 import matplotlib.pyplot as plt
 import numpy as np
+import sunpy.map as smap
+from astropy.coordinates import SkyCoord
 from astropy.visualization import ManualInterval
 from matplotlib import colors
 from mplcairo import operator_t
@@ -42,12 +44,6 @@ from suntoday.maps import (
 )
 from suntoday.pfss import trace_field_lines
 from suntoday.utils import atomic_save, save_fits
-
-if TYPE_CHECKING:
-    import datetime as dt
-
-    import sunpy.map as smap
-    from astropy.coordinates import SkyCoord
 
 __all__ = [
     "create_blended_figure_from_maps",

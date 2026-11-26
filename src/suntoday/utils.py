@@ -4,20 +4,16 @@ Writing the outputs: atomic saves, planning FITS files and the S3 upload.
 
 import mimetypes
 import uuid
+from collections.abc import Generator, Iterable
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING
 
 import boto3
 import numpy as np
+import sunpy.map as smap
 from astropy.io import fits
 
 from suntoday import logger
-
-if TYPE_CHECKING:
-    from collections.abc import Generator, Iterable
-
-    import sunpy.map as smap
 
 __all__ = [
     "atomic_save",

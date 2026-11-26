@@ -3,21 +3,17 @@ The 24-hour AIA and GOES lightcurve figure and its data files.
 """
 
 from datetime import datetime, timedelta
-from typing import TYPE_CHECKING
+from pathlib import Path
 
 import matplotlib as mpl
 import matplotlib.pyplot as plt
+import pandas as pd
 from matplotlib import dates, ticker
 
 from suntoday import logger
 from suntoday.config import Settings
 from suntoday.constants import AIA_COLORS, AIA_WAVELENGTHS
 from suntoday.utils import atomic_save
-
-if TYPE_CHECKING:
-    from pathlib import Path
-
-    import pandas as pd
 
 __all__ = ["add_aia_lightcurve", "add_goes_lightcurve", "create_lightcurve_figure", "plot_lightcurve_from_timeseries"]
 
@@ -33,7 +29,7 @@ LIGHTCURVE_WAVELENGTH_ORDER = ["131", "94", "335", "211", "193", "171", "304", "
 # wheel not nominal — frames mid-move have partially blocked flux).
 BAD_QUALITY_BITS = 0x37FC00
 
-# Recessive hairlines: the grid is a reading aid, the curves are the data.
+# Light, so the grid stays behind the curves.
 GRID_COLOR = "0.85"
 # DN/s, not DN: the plotted value is DATAMEAN normalized by EXPTIME.
 AIA_Y_LABEL = "Data Mean (DN/s)"
